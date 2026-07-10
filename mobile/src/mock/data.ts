@@ -20,7 +20,7 @@ const hoursFromNow = (h: number) => new Date(now().getTime() + h * 60 * 60 * 100
 
 export const mockJobs: JobPosting[] = [
   {
-    id: 1,
+    id: "1",
     source: "greenhouse",
     external_id: "gh-1001",
     title: "Backend Engineer, Platform",
@@ -34,7 +34,7 @@ export const mockJobs: JobPosting[] = [
     match_score: 88,
   },
   {
-    id: 2,
+    id: "2",
     source: "lever",
     external_id: "lv-2044",
     title: "Full-Stack Developer",
@@ -48,7 +48,7 @@ export const mockJobs: JobPosting[] = [
     match_score: 71,
   },
   {
-    id: 3,
+    id: "3",
     source: "generic",
     external_id: "rss-9931",
     title: "Site Reliability Engineer",
@@ -62,7 +62,7 @@ export const mockJobs: JobPosting[] = [
     match_score: 62,
   },
   {
-    id: 4,
+    id: "4",
     source: "greenhouse",
     external_id: "gh-1002",
     title: "Junior Software Engineer",
@@ -76,7 +76,7 @@ export const mockJobs: JobPosting[] = [
     match_score: 54,
   },
   {
-    id: 5,
+    id: "5",
     source: "lever",
     external_id: "lv-2050",
     title: "Staff Backend Engineer",
@@ -93,24 +93,24 @@ export const mockJobs: JobPosting[] = [
 
 export const mockApplications: ApplicationRecord[] = [
   {
-    id: 101,
-    job_posting_id: 1,
-    resume_version_id: 7,
+    id: "101",
+    job_posting_id: "1",
+    resume_version_id: "7",
     status: "applied",
     channel: "greenhouse",
     cover_letter_text:
       "Dear Northwind Systems team,\n\nI'm excited to apply for the Backend Engineer, Platform role. My background building high-throughput FastAPI services aligns closely with what you're describing...",
     submitted_at: hoursAgo(2),
     last_status_change: hoursAgo(2),
-    notes: null,
+    notes: "",
     thread_email_id: null,
     created_at: hoursAgo(3),
     job: mockJobs[0],
   },
   {
-    id: 102,
-    job_posting_id: 2,
-    resume_version_id: 7,
+    id: "102",
+    job_posting_id: "2",
+    resume_version_id: "7",
     status: "needs_review",
     channel: "generic",
     cover_letter_text: null,
@@ -122,23 +122,23 @@ export const mockApplications: ApplicationRecord[] = [
     job: mockJobs[1],
   },
   {
-    id: 103,
-    job_posting_id: 3,
-    resume_version_id: 7,
+    id: "103",
+    job_posting_id: "3",
+    resume_version_id: "7",
     status: "queued",
     channel: "generic",
     cover_letter_text: "Draft cover letter pending generation.",
     submitted_at: null,
     last_status_change: hoursAgo(19),
-    notes: null,
+    notes: "",
     thread_email_id: null,
     created_at: hoursAgo(20),
     job: mockJobs[2],
   },
   {
-    id: 104,
-    job_posting_id: 4,
-    resume_version_id: 6,
+    id: "104",
+    job_posting_id: "4",
+    resume_version_id: "6",
     status: "rejected",
     channel: "greenhouse",
     cover_letter_text:
@@ -151,9 +151,9 @@ export const mockApplications: ApplicationRecord[] = [
     job: mockJobs[3],
   },
   {
-    id: 105,
-    job_posting_id: 5,
-    resume_version_id: 7,
+    id: "105",
+    job_posting_id: "5",
+    resume_version_id: "7",
     status: "interview",
     channel: "lever",
     cover_letter_text:
@@ -169,7 +169,7 @@ export const mockApplications: ApplicationRecord[] = [
 
 export const mockReports: Report[] = [
   {
-    id: 501,
+    id: "501",
     period: "2026-07-10 (daily)",
     generated_at: hoursAgo(1),
     summary: {
@@ -186,7 +186,7 @@ export const mockReports: Report[] = [
     },
   },
   {
-    id: 500,
+    id: "500",
     period: "2026-07-09 (daily)",
     generated_at: daysAgo(1),
     summary: {
@@ -202,7 +202,7 @@ export const mockReports: Report[] = [
     },
   },
   {
-    id: 499,
+    id: "499",
     period: "2026-07-03 (weekly)",
     generated_at: daysAgo(7),
     summary: {
@@ -233,7 +233,7 @@ export const mockSettings: AutomationSettings = {
   automation_enabled: true,
   max_applications_per_day: 15,
   min_delay_between_applications_seconds: 90,
-  dry_run: true,
+  automation_dry_run: true,
   llm_provider: "ollama",
   llm_model: "llama3.2",
   blacklisted_companies: [],

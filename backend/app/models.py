@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import datetime as dt
 import enum
+import json
 import uuid
+from typing import Any
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -160,6 +162,11 @@ class Report(Base):
     period: Mapped[str] = mapped_column(String)  # e.g. "daily", "weekly"
     summary_json: Mapped[str] = mapped_column(Text)
     generated_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)
+
+    @property
+    def summary(self) -> dict[str, Any]:
+        """Parsed view of summary_json, for ReportOut (from_attributes)."""
+        return json.loads(self.summary_json)
 
 
 class SettingsKV(Base):

@@ -25,7 +25,7 @@ import { formatDateTime, titleCase } from "@/utils/format";
 
 export default function ApplicationDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const applicationId = Number(id);
+  const applicationId = id;
   const theme = useTheme();
   const navigation = useNavigation();
   const cachedApplications = useDataCacheStore((s) => s.applications);

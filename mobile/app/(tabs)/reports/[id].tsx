@@ -14,7 +14,7 @@ import { formatDateTime } from "@/utils/format";
 
 export default function ReportDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const reportId = Number(id);
+  const reportId = id;
   const theme = useTheme();
   const navigation = useNavigation();
   const cachedReports = useDataCacheStore((s) => s.reports);

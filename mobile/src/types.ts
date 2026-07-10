@@ -1,15 +1,7 @@
 /**
- * TypeScript types mirroring the backend's Pydantic schemas.
- *
- * The backend (backend/) is being built in parallel and, at the time this
- * client was written, only exposed config scaffolding (see
- * backend/app/config.py) — the actual Pydantic response models for
- * /api/jobs, /api/applications, /api/reports and /api/settings did not
- * exist yet. These types are derived from docs/ARCHITECTURE.md section 4
- * ("Data model") and section 5 ("API surface"), plus the settings fields
- * already defined in backend/app/config.py. Field names/shapes may need
- * small adjustments once the backend's real schemas land — see
- * mobile/README.md "API assumptions" for the full list of assumptions.
+ * TypeScript types mirroring the backend's Pydantic schemas
+ * (backend/app/schemas.py). IDs are UUID strings (SQLAlchemy String primary
+ * keys with a uuid4 default), not numbers.
  */
 
 // ---------------------------------------------------------------------------
@@ -27,12 +19,12 @@ export type JobSource =
   | (string & {});
 
 export interface JobPosting {
-  id: number;
+  id: string;
   source: JobSource;
   external_id: string;
   title: string;
   company: string;
-  location: string | null;
+  location: string;
   remote: boolean;
   description: string;
   url: string;
@@ -77,27 +69,28 @@ export type ApplicationChannel =
   | (string & {});
 
 export interface ApplicationRecord {
-  id: number;
-  job_posting_id: number;
-  resume_version_id: number | null;
+  id: string;
+  job_posting_id: string;
+  resume_version_id: string | null;
   status: ApplicationStatus;
   channel: ApplicationChannel;
   cover_letter_text: string | null;
   submitted_at: string | null; // ISO datetime
-  last_status_change: string | null; // ISO datetime
-  notes: string | null;
+  last_status_change: string; // ISO datetime
+  notes: string;
   thread_email_id: string | null;
   created_at: string; // ISO datetime
   /**
-   * Denormalized job info, assumed to be embedded by the backend so the
-   * list screen doesn't need N follow-up requests. Falls back to
-   * `job_posting_id` lookups against the jobs cache if absent.
+   * The backend does not embed job info on the application record (see
+   * GET /api/applications in backend/app/routers/applications.py) — only
+   * `job_posting_id`. Detail/list screens resolve this by looking the id up
+   * in the jobs cache (src/store/dataCache.ts) instead.
    */
   job?: JobPosting;
 }
 
 export interface CreateApplicationPayload {
-  job_posting_id: number;
+  job_posting_id: string;
   channel?: ApplicationChannel;
   notes?: string;
 }
@@ -123,7 +116,7 @@ export interface ReportSummary {
 }
 
 export interface Report {
-  id: number;
+  id: string;
   period: string;
   generated_at: string; // ISO datetime
   summary: ReportSummary;
@@ -137,7 +130,7 @@ export interface AutomationSettings {
   automation_enabled: boolean;
   max_applications_per_day: number;
   min_delay_between_applications_seconds: number;
-  dry_run: boolean;
+  automation_dry_run: boolean;
   /** Read-only, reported by the backend from its own LLM_PROVIDER config. */
   llm_provider: string;
   /** Read-only, reported by the backend (Ollama model name or OpenAI-compatible model). */
@@ -151,10 +144,10 @@ export interface AutomationSettings {
 
 export interface HealthResponse {
   status: "ok" | "degraded" | (string & {});
-  version?: string;
-  llm_provider?: string;
-  llm_model?: string;
-  scheduler_running?: boolean;
+  version: string;
+  llm_provider: string;
+  llm_model: string;
+  scheduler_running: boolean;
   /** ISO datetime of the next scheduled automation run, if the scheduler is running. */
-  next_scheduled_run?: string | null;
+  next_scheduled_run: string | null;
 }

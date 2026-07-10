@@ -138,60 +138,43 @@ and `android/app/build.gradle`'s `signingConfigs` once the native project has
 been generated. `expo prebuild` reads `app.json`'s `android.package`
 (`com.hunterxjob.app`) to set the applicationId.
 
-## API assumptions
+## API contract
 
-`docs/ARCHITECTURE.md` section 5 documents the endpoint list at a high level,
-but at the time this client was written `backend/app/routers/` and the
-Pydantic response schemas didn't exist yet (only `backend/app/config.py`,
-`db.py`, `auth.py` were scaffolded). To build a fully working client against
-a not-yet-finalized API, this app makes the following concrete assumptions —
-documented here so they're easy to reconcile once the backend schemas land:
+This client was originally built against assumed API shapes (the backend was
+still scaffolding when this app was first written) and has since been
+reconciled against the real backend — see `backend/app/schemas.py` and
+`backend/app/routers/`. Notable points, in case the two drift again:
 
-- `GET /api/jobs` returns `JobPosting[]` (see `src/types.ts`) with fields
-  matching the `job_posting` table described in ARCHITECTURE.md section 4.
-- `GET /api/applications` returns `ApplicationRecord[]`, each optionally
-  embedding its `job: JobPosting` (denormalized) so the list/detail screens
-  don't need N follow-up requests. If the backend does not embed the job,
-  the Applications screens fall back to showing `Job #<id>`.
-- `POST /api/applications` accepts `{ job_posting_id, channel?, notes? }` and
-  returns the created `ApplicationRecord` (used by the Job Feed's
-  apply/queue button).
-- `PATCH /api/applications/{id}` accepts a partial `{ status?, notes? }` and
-  returns the updated `ApplicationRecord` (used by the Applications detail
-  screen's status/notes editor). ARCHITECTURE.md only lists `GET/POST
-  /api/applications` explicitly but describes the endpoint group as
-  "list/create/update tracked applications" — PATCH-by-id is the natural
-  read of "update."
-- There is no documented single-item `GET /api/jobs/{id}` or `GET
-  /api/reports/{id}`. Detail screens are reached by tapping a row in an
-  already-fetched list, so the client caches the last list fetch
-  (`src/store/dataCache.ts`) and looks up by id from there, re-fetching the
-  full list as a fallback for deep links. If the backend does add single-item
-  GET endpoints later, swapping the detail screens over is a small,
-  contained change (`app/(tabs)/jobs/[id].tsx`,
-  `app/(tabs)/reports/[id].tsx`).
-- `GET /api/reports` / `GET /api/reports/latest` return `Report` objects
-  shaped as `{ id, period, generated_at, summary }`, where `summary` carries
-  the numbers the Dashboard needs (`jobs_discovered_today`,
-  `applications_submitted_today`, `applications_submitted_this_week`,
-  `pending_review_count`, `applications_blocked`, `highlights[]`, `errors[]`).
-  This is a reasonable superset of the `report.summary_json` blob described
-  in ARCHITECTURE.md section 4, inferred from what the Dashboard spec needs.
-- `GET /api/health` additionally reports `next_scheduled_run` (ISO datetime,
-  nullable) so the Dashboard can show "next scheduled run time" without a
-  separate endpoint, plus `llm_provider` / `llm_model` / `scheduler_running`.
-- `GET/PUT /api/settings` exchange an `AutomationSettings` object mirroring
-  the safety-rail fields already defined in `backend/app/config.py`
-  (`MAX_APPLICATIONS_PER_DAY`, `MIN_DELAY_BETWEEN_APPLICATIONS_SECONDS`,
-  `AUTOMATION_DRY_RUN`, `LLM_PROVIDER`, `BLACKLISTED_COMPANIES`), plus an
-  `automation_enabled` boolean toggle (referenced by the mobile spec but not
-  yet an explicit config field — treated as a `settings` key/value row per
-  ARCHITECTURE.md section 4). `llm_provider` / `llm_model` are treated as
-  backend-reported and read-only in the UI.
+- **IDs are UUID strings**, not numbers (SQLAlchemy `String` primary keys
+  with a `uuid4` default). Every `id` / `*_id` field in `src/types.ts` is
+  `string`.
+- `GET /api/applications` does **not** embed job info — only
+  `job_posting_id`. The optional `job?: JobPosting` field on
+  `ApplicationRecord` is populated client-side from the jobs cache
+  (`src/store/dataCache.ts`), not by the backend.
+- There is no single-item `GET /api/jobs/{id}` or `GET /api/reports/{id}`.
+  Detail screens look the item up in the last-fetched list
+  (`src/store/dataCache.ts`), falling back to a full re-fetch for deep links.
+  `GET /api/applications/{id}` *does* exist, but isn't currently used by the
+  detail screen since the list is already cached.
+- `Report.summary` is a parsed object (backend's `ReportOut.summary` —
+  `Report.summary_json` is parsed server-side via a model property), shaped
+  as `{ jobs_discovered_today, applications_submitted_today,
+  applications_submitted_this_week, pending_review_count,
+  applications_blocked, highlights[], errors[] }`.
+- `GET /api/settings` / `PUT /api/settings` exchange an `AutomationSettings`
+  object with `automation_enabled`, `max_applications_per_day`,
+  `min_delay_between_applications_seconds`, `automation_dry_run` (not
+  `dry_run`), `blacklisted_companies`, and read-only `llm_provider` /
+  `llm_model`. `automation_enabled` is a real, enforced setting — when off,
+  `automation_cycle` skips queued applications entirely (see
+  `backend/app/services/safety.py::can_submit_now`).
+- `GET /api/health` is unauthenticated and additionally reports
+  `scheduler_running`, `next_scheduled_run` (ISO datetime, nullable),
+  `llm_provider`, `llm_model` — used by the Dashboard's "Automation" section.
 
-All API calls are centralized in `src/api/client.ts` — if the backend's real
-field names differ, only `src/types.ts` and the mapping in `src/mock/data.ts`
-should need updates; screens consume the typed shapes, not raw JSON.
+All API calls are centralized in `src/api/client.ts`; screens consume the
+typed shapes from `src/types.ts`, not raw JSON.
 
 ## Deviations from the task spec
 

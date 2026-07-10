@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     MIN_DELAY_BETWEEN_APPLICATIONS_SECONDS: int = 90
     BLACKLISTED_COMPANIES: str = ""  # comma-separated
     AUTOMATION_DRY_RUN: bool = True
+    AUTOMATION_ENABLED: bool = True
 
     # --- Job sources ---
     GREENHOUSE_BOARD_TOKENS: str = ""  # comma-separated

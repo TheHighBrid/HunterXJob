@@ -152,7 +152,7 @@ class ReportOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
     period: str
-    summary_json: str
+    summary: dict[str, Any]
     generated_at: dt.datetime
 
 
@@ -164,7 +164,9 @@ class SettingsOut(BaseModel):
     min_delay_between_applications_seconds: int
     blacklisted_companies: list[str]
     automation_dry_run: bool
+    automation_enabled: bool
     llm_provider: str
+    llm_model: str
 
 
 class SettingsUpdate(BaseModel):
@@ -172,6 +174,7 @@ class SettingsUpdate(BaseModel):
     min_delay_between_applications_seconds: int | None = None
     blacklisted_companies: list[str] | None = None
     automation_dry_run: bool | None = None
+    automation_enabled: bool | None = None
     llm_provider: str | None = None
 
 
@@ -181,3 +184,7 @@ class SettingsUpdate(BaseModel):
 class HealthOut(BaseModel):
     status: str
     version: str
+    scheduler_running: bool
+    next_scheduled_run: dt.datetime | None
+    llm_provider: str
+    llm_model: str

@@ -18,7 +18,7 @@ import json
 import logging
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import db as db_module
@@ -33,6 +33,7 @@ from app.models import (
     ResumeVersion,
 )
 from app.services import safety
+from app.services.runtime_settings import RuntimeSettings, load_runtime_settings
 from app.services.automation.base import ApplicationAdapter
 from app.services.automation.email_adapter import EmailAdapter
 from app.services.automation.generic_playwright_adapter import GenericPlaywrightAdapter
@@ -127,8 +128,10 @@ def _resume_json_to_text(resume_json: dict) -> str:
 # --------------------------------------------------------------------------
 # automation_cycle
 # --------------------------------------------------------------------------
-def _get_adapter_for_channel(channel: str, settings: Settings, db: Session) -> ApplicationAdapter | None:
-    dry_run = settings.AUTOMATION_DRY_RUN
+def _get_adapter_for_channel(
+    channel: str, runtime: RuntimeSettings, settings: Settings, db: Session
+) -> ApplicationAdapter | None:
+    dry_run = runtime.automation_dry_run
     if channel == "greenhouse":
         return GreenhouseAdapter(dry_run=dry_run)
     if channel == "lever":
@@ -148,9 +151,19 @@ def automation_cycle() -> AutomationRun:
     run = AutomationRun(started_at=dt.datetime.utcnow())
     errors: list[str] = []
     try:
+        runtime = load_runtime_settings(db, settings)
+
         db.add(run)
         db.commit()
         db.refresh(run)
+
+        if not runtime.automation_enabled:
+            run.finished_at = dt.datetime.utcnow()
+            run.errors_json = json.dumps(["automation is disabled in settings; cycle skipped"])
+            db.add(run)
+            db.commit()
+            db.refresh(run)
+            return run
 
         profile = db.execute(select(Profile)).scalars().first()
         llm = None
@@ -164,7 +177,7 @@ def automation_cycle() -> AutomationRun:
             if job_posting is None:
                 continue
 
-            allowed, reason = safety.can_submit_now(db, settings, job_posting.company)
+            allowed, reason = safety.can_submit_now(db, runtime, job_posting.company)
             if not allowed:
                 if "blacklisted" in reason:
                     application.status = ApplicationStatus.BLOCKED.value
@@ -194,7 +207,7 @@ def automation_cycle() -> AutomationRun:
             try:
                 if not cover_letter_text and profile is not None:
                     if llm is None:
-                        llm = get_llm_provider(settings)
+                        llm = get_llm_provider(settings, provider_override=runtime.llm_provider)
                     resume_json = json.loads(resume_version.resume_json)
                     profile_dict = {
                         "full_name": profile.full_name,
@@ -219,7 +232,7 @@ def automation_cycle() -> AutomationRun:
                 db.commit()
                 continue
 
-            adapter = _get_adapter_for_channel(application.channel, settings, db)
+            adapter = _get_adapter_for_channel(application.channel, runtime, settings, db)
             if adapter is None or not getattr(adapter, "enabled", True):
                 application.status = ApplicationStatus.NEEDS_REVIEW.value
                 application.notes = (
@@ -304,29 +317,85 @@ def email_check_cycle():
 # report_generation_cycle
 # --------------------------------------------------------------------------
 def report_generation_cycle(period: str = "daily") -> Report:
+    """Write a periodic summary report.
+
+    Regardless of `period` (which controls the label and the window used for
+    `new_jobs_found`/`status_counts`), the "_today"/"_this_week" fields
+    always use fixed 24h/7d windows so the mobile dashboard's stat cards are
+    meaningful whether the latest report happens to be a daily or weekly one.
+    """
     db = db_module.SessionLocal()
     try:
-        since = dt.datetime.utcnow() - (
-            dt.timedelta(days=1) if period == "daily" else dt.timedelta(days=7)
-        )
+        now = dt.datetime.utcnow()
+        since_period = now - (dt.timedelta(days=1) if period == "daily" else dt.timedelta(days=7))
+        since_today = now - dt.timedelta(days=1)
+        since_week = now - dt.timedelta(days=7)
 
         new_jobs = db.execute(
-            select(JobPosting).where(JobPosting.discovered_at >= since)
+            select(JobPosting).where(JobPosting.discovered_at >= since_period)
         ).scalars().all()
         applications = db.execute(
-            select(Application).where(Application.last_status_change >= since)
+            select(Application).where(Application.last_status_change >= since_period)
         ).scalars().all()
 
         status_counts: dict[str, int] = {}
         for app_row in applications:
             status_counts[app_row.status] = status_counts.get(app_row.status, 0) + 1
 
+        jobs_discovered_today = db.execute(
+            select(func.count(JobPosting.id)).where(JobPosting.discovered_at >= since_today)
+        ).scalar_one()
+        applications_submitted_today = db.execute(
+            select(func.count(Application.id)).where(
+                Application.submitted_at.is_not(None), Application.submitted_at >= since_today
+            )
+        ).scalar_one()
+        applications_submitted_this_week = db.execute(
+            select(func.count(Application.id)).where(
+                Application.submitted_at.is_not(None), Application.submitted_at >= since_week
+            )
+        ).scalar_one()
+        pending_review_count = db.execute(
+            select(func.count(Application.id)).where(
+                Application.status == ApplicationStatus.NEEDS_REVIEW.value
+            )
+        ).scalar_one()
+        applications_blocked = status_counts.get(ApplicationStatus.BLOCKED.value, 0)
+
+        highlights: list[str] = []
+        submitted_in_period = [a for a in applications if a.status == ApplicationStatus.APPLIED.value]
+        for app_row in submitted_in_period[:5]:
+            job = db.get(JobPosting, app_row.job_posting_id)
+            if job:
+                highlights.append(f"Applied to {job.title} at {job.company}.")
+        needs_review_in_period = [
+            a for a in applications if a.status == ApplicationStatus.NEEDS_REVIEW.value
+        ]
+        for app_row in needs_review_in_period[:5]:
+            job = db.get(JobPosting, app_row.job_posting_id)
+            if job:
+                highlights.append(f"Flagged {job.title} at {job.company} for manual review.")
+
+        errors: list[str] = []
+        recent_runs = db.execute(
+            select(AutomationRun).where(AutomationRun.started_at >= since_period)
+        ).scalars().all()
+        for run in recent_runs:
+            errors.extend(json.loads(run.errors_json or "[]"))
+
         summary = {
             "period": period,
-            "since": since.isoformat(),
+            "since": since_period.isoformat(),
             "new_jobs_found": len(new_jobs),
             "applications_touched": len(applications),
             "status_counts": status_counts,
+            "jobs_discovered_today": jobs_discovered_today,
+            "applications_submitted_today": applications_submitted_today,
+            "applications_submitted_this_week": applications_submitted_this_week,
+            "pending_review_count": pending_review_count,
+            "applications_blocked": applications_blocked,
+            "highlights": highlights,
+            "errors": errors,
         }
 
         report = Report(period=period, summary_json=json.dumps(summary))
@@ -389,3 +458,13 @@ def stop_scheduler() -> None:
     if _scheduler is not None:
         _scheduler.shutdown(wait=False)
         _scheduler = None
+
+
+def get_scheduler_status() -> dict:
+    """Lightweight status used by GET /api/health for the mobile dashboard."""
+    if _scheduler is None or not _scheduler.running:
+        return {"running": False, "next_automation_run": None}
+
+    job = _scheduler.get_job("automation_cycle")
+    next_run = job.next_run_time.isoformat() if job and job.next_run_time else None
+    return {"running": True, "next_automation_run": next_run}

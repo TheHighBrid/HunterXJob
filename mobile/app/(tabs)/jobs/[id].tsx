@@ -15,7 +15,7 @@ import { formatDateTime } from "@/utils/format";
 
 export default function JobDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const jobId = Number(id);
+  const jobId = id;
   const theme = useTheme();
   const navigation = useNavigation();
   const cachedJobs = useDataCacheStore((s) => s.jobs);

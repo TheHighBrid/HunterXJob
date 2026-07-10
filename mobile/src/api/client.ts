@@ -121,7 +121,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  updateApplication: (id: number, patch: PatchApplicationPayload) =>
+  updateApplication: (id: string, patch: PatchApplicationPayload) =>
     request<ApplicationRecord>(`/api/applications/${id}`, {
       method: "PATCH",
       body: JSON.stringify(patch),
