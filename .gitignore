@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets / local config
+.env
+*.env.local
+
+# Databases
+*.sqlite3
+*.db
+backend/data/*.db
+
+# Node / Expo
+node_modules/
+.expo/
+.expo-shared/
+dist/
+web-build/
+
+# Android build artifacts (keep the final signed/debug APK we ship separately)
+mobile/android/.gradle/
+mobile/android/app/build/
+mobile/android/build/
+mobile/android/local.properties
+*.hprof
+
+# OS
+.DS_Store
