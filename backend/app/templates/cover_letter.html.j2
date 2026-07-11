@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Cover Letter - {{ profile.full_name }}</title>
+<style>
+  @page { size: Letter; margin: 0.9in; }
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    color: #1a1a1a;
+    font-size: 11pt;
+    line-height: 1.5;
+  }
+  .header { margin-bottom: 24px; }
+  .header .name { font-weight: bold; font-size: 13pt; }
+  .header .contact { font-size: 9.5pt; color: #333; }
+  .date { margin-bottom: 18px; }
+  .body p { margin: 0 0 12px 0; white-space: pre-line; }
+  .signoff { margin-top: 18px; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="name">{{ profile.full_name }}</div>
+    <div class="contact">
+      {{ profile.email }}{% if profile.phone %} | {{ profile.phone }}{% endif %}{% if profile.location %} | {{ profile.location }}{% endif %}
+    </div>
+  </div>
+  <div class="date">{{ today }}</div>
+  <div class="body">{{ cover_letter_text }}</div>
+</body>
+</html>
