@@ -1,8 +1,8 @@
 """Composes and sends direct-email applications via SMTP.
 
-Attaches the resume PDF (and optionally a rendered cover-letter PDF) to an
-email sent through the configured SMTP account. Only ever reports
-"submitted" if smtplib's send actually succeeds without raising.
+The environment-level ALLOW_LIVE_SUBMISSION gate cannot be overridden by the
+mobile app. While it is false, this adapter prepares no outbound connection and
+returns needs_review.
 """
 from __future__ import annotations
 
@@ -17,8 +17,9 @@ from app.services.automation.base import ApplicationAdapter, AutomationResult
 class EmailAdapter(ApplicationAdapter):
     enabled = True
 
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, dry_run: bool | None = None):
         self.settings = settings
+        self.dry_run = settings.AUTOMATION_DRY_RUN if dry_run is None else dry_run
 
     def submit(
         self,
@@ -34,6 +35,12 @@ class EmailAdapter(ApplicationAdapter):
             )
 
         s = self.settings
+        if self.dry_run or not s.ALLOW_LIVE_SUBMISSION:
+            return AutomationResult(
+                "needs_review",
+                "dry-run mode: application email prepared but not sent",
+            )
+
         if not s.SMTP_HOST or not s.SMTP_USERNAME or not s.SMTP_PASSWORD:
             return AutomationResult("failed", "SMTP is not configured (see .env SMTP_* settings)")
 
