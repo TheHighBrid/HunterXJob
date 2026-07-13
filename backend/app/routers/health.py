@@ -12,7 +12,7 @@ from app.services.scheduler import get_scheduler_status
 
 router = APIRouter(prefix="/api", tags=["health"])
 
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.1.0"
 
 
 @router.get("/health", response_model=HealthOut)
