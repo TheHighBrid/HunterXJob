@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hunterxjob-v2"
+version = "0.1.1"
+description = "Android-first local autonomous job hunting system"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "fastapi==0.115.0",
+  "uvicorn==0.30.6",
+  "sqlalchemy==2.0.35",
+  "pydantic==2.9.2",
+  "pydantic-settings==2.5.2",
+  "httpx==0.27.2",
+  "python-dotenv==1.0.1",
+  "jinja2==3.1.4",
+  "python-multipart==0.0.9",
+  "apscheduler==3.10.4"
+]
+
+[project.optional-dependencies]
+browser = ["playwright==1.47.0"]
+test = ["pytest==8.3.3"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app", "app.*"]
+exclude = ["data*", "logs*", "run*", "tests*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
