@@ -1,6 +1,10 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "hunterxjob-v2"
-version = "0.1.0"
+version = "0.1.1"
 description = "Android-first local autonomous job hunting system"
 requires-python = ">=3.12,<3.14"
 dependencies = [
@@ -19,6 +23,11 @@ dependencies = [
 [project.optional-dependencies]
 browser = ["playwright==1.47.0"]
 test = ["pytest==8.3.3"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app", "app.*"]
+exclude = ["data*", "logs*", "run*", "tests*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
