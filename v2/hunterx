@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+cd "$ROOT"
+mkdir -p data logs run
+
+cmd="${1:-help}"
+
+install_app() {
+  if ! command -v python3.12 >/dev/null 2>&1; then
+    echo "Python 3.12 is required inside Ubuntu proot."
+    exit 1
+  fi
+  python3.12 -m venv .venv
+  .venv/bin/python -m pip install --upgrade pip wheel setuptools
+  .venv/bin/pip install -e '.[test]'
+  [ -f .env ] || cp .env.example .env
+  echo "Install complete. Run: ./hunterx doctor"
+}
+
+start_app() {
+  [ -x .venv/bin/python ] || { echo "Run ./hunterx install first"; exit 1; }
+  if [ -f run/api.pid ] && kill -0 "$(cat run/api.pid)" 2>/dev/null; then
+    echo "HunterXJob v2 already running"
+    exit 0
+  fi
+  set -a; [ -f .env ] && . ./.env; set +a
+  nohup .venv/bin/python -m uvicorn app.main:app --host "${HOST:-127.0.0.1}" --port "${PORT:-8011}" > logs/api.log 2>&1 &
+  echo $! > run/api.pid
+  sleep 3
+  curl -fsS "http://${HOST:-127.0.0.1}:${PORT:-8011}/api/health" >/dev/null
+  echo "HunterXJob v2 running at http://${HOST:-127.0.0.1}:${PORT:-8011}"
+}
+
+stop_app() {
+  if [ -f run/api.pid ]; then
+    kill "$(cat run/api.pid)" 2>/dev/null || true
+    rm -f run/api.pid
+  fi
+  echo "HunterXJob v2 stopped"
+}
+
+status_app() {
+  if [ -f run/api.pid ] && kill -0 "$(cat run/api.pid)" 2>/dev/null; then
+    echo "running pid=$(cat run/api.pid)"
+  else
+    echo "stopped"
+  fi
+}
+
+doctor_app() {
+  failures=0
+  check() { if "$@" >/dev/null 2>&1; then printf '%-18s OK\n' "$1"; else printf '%-18s FAIL\n' "$1"; failures=$((failures+1)); fi; }
+  command -v python3.12 >/dev/null 2>&1 && echo "Python 3.12      OK" || { echo "Python 3.12      FAIL"; failures=$((failures+1)); }
+  [ -x .venv/bin/python ] && echo "Virtualenv       OK" || { echo "Virtualenv       FAIL"; failures=$((failures+1)); }
+  [ -f .env ] && echo "Configuration    OK" || { echo "Configuration    FAIL"; failures=$((failures+1)); }
+  mkdir -p data && touch data/.write-test && rm data/.write-test && echo "Storage          OK" || { echo "Storage          FAIL"; failures=$((failures+1)); }
+  if command -v curl >/dev/null && curl -fsS http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then echo "Local AI         OK"; else echo "Local AI         WARN (start Ollama)"; fi
+  if [ -x .venv/bin/python ]; then .venv/bin/python -m compileall -q app && echo "Python syntax    OK" || { echo "Python syntax    FAIL"; failures=$((failures+1)); }; fi
+  [ "$failures" -eq 0 ]
+}
+
+case "$cmd" in
+  install) install_app ;;
+  start) start_app ;;
+  stop) stop_app ;;
+  restart) stop_app; start_app ;;
+  status) status_app ;;
+  doctor) doctor_app ;;
+  test) .venv/bin/pytest -q ;;
+  logs) tail -n 100 -f logs/api.log ;;
+  *) echo "Usage: ./hunterx {install|start|stop|restart|status|doctor|test|logs}" ;;
+esac
