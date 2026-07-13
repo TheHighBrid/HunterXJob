@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     BLACKLISTED_COMPANIES: str = ""  # comma-separated
     AUTOMATION_DRY_RUN: bool = True
     AUTOMATION_ENABLED: bool = True
+    # Environment-only live submission gate. Runtime/mobile settings cannot
+    # bypass it. Browser and email adapters stay dry-run while this is false.
+    ALLOW_LIVE_SUBMISSION: bool = False
 
     # --- Job sources ---
     GREENHOUSE_BOARD_TOKENS: str = ""  # comma-separated
@@ -54,7 +57,24 @@ class Settings(BaseSettings):
     IMAP_PASSWORD: str = ""
     IMAP_MAILBOX: str = "INBOX"
 
-    # --- Playwright ---
+    # --- Browser runtime / Playwright ---
+    # cdp: connect to native Termux Chromium (recommended on Android)
+    # persistent: launch a persistent profile from this Python environment
+    # managed: launch an isolated Playwright browser/context
+    BROWSER_MODE: str = "cdp"
+    BROWSER_CDP_URL: str = "http://127.0.0.1:9222"
+    BROWSER_EXECUTABLE_PATH: str = ""
+    BROWSER_PROFILE_DIR: str = "./data/browser_profiles/default"
+    BROWSER_ARTIFACT_DIR: str = "./data/artifacts"
+    BROWSER_HEADLESS: bool = True
+    BROWSER_MAX_APPLICATIONS_PER_SESSION: int = 10
+    BROWSER_MAX_SESSION_MINUTES: int = 45
+    BROWSER_CONNECT_TIMEOUT_MS: int = 15_000
+    BROWSER_DEFAULT_TIMEOUT_MS: int = 30_000
+    BROWSER_NAVIGATION_TIMEOUT_MS: int = 45_000
+    BROWSER_HEALTH_TIMEOUT_SECONDS: float = 2.0
+
+    # Kept for opt-in roadmap adapters that use storageState JSON files.
     PLAYWRIGHT_STORAGE_STATE_DIR: str = "./data/storage_states"
     RENDERED_DOCS_DIR: str = "./data/rendered"
 
@@ -84,6 +104,8 @@ class Settings(BaseSettings):
 
     def ensure_dirs(self) -> None:
         Path(self.DATABASE_PATH).parent.mkdir(parents=True, exist_ok=True)
+        Path(self.BROWSER_PROFILE_DIR).mkdir(parents=True, exist_ok=True)
+        Path(self.BROWSER_ARTIFACT_DIR).mkdir(parents=True, exist_ok=True)
         Path(self.PLAYWRIGHT_STORAGE_STATE_DIR).mkdir(parents=True, exist_ok=True)
         Path(self.RENDERED_DOCS_DIR).mkdir(parents=True, exist_ok=True)
 
