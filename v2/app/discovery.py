@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import html
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Iterable
 
 import httpx
@@ -109,7 +109,7 @@ def upsert_jobs(db: Session, records: Iterable[JobRecord]) -> int:
             existing.url = record.url
             existing.description = record.description
         else:
-            db.add(Job(**record.__dict__))
+            db.add(Job(**asdict(record)))
             added += 1
     db.commit()
     return added
