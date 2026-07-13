@@ -7,30 +7,72 @@ mkdir -p data logs run
 
 cmd="${1:-help}"
 
+load_env() {
+  set -a
+  [ -f .env ] && . ./.env
+  set +a
+}
+
 install_app() {
   if ! command -v python3.12 >/dev/null 2>&1; then
     echo "Python 3.12 is required inside Ubuntu proot."
     exit 1
   fi
+
+  echo "[1/5] Creating Python 3.12 virtual environment"
+  rm -rf .venv
   python3.12 -m venv .venv
+
+  echo "[2/5] Upgrading packaging tools"
   .venv/bin/python -m pip install --upgrade pip wheel setuptools
+
+  echo "[3/5] Installing HunterXJob v2"
   .venv/bin/pip install -e '.[test]'
+
+  echo "[4/5] Creating configuration"
   [ -f .env ] || cp .env.example .env
+
+  echo "[5/5] Verifying installation"
+  .venv/bin/python -c "import app, fastapi, sqlalchemy, httpx; print('Python imports OK')"
+  .venv/bin/python -m compileall -q app
+
   echo "Install complete. Run: ./hunterx doctor"
 }
 
 start_app() {
-  [ -x .venv/bin/python ] || { echo "Run ./hunterx install first"; exit 1; }
+  [ -x .venv/bin/python ] || { echo "Installation incomplete. Run ./hunterx install"; exit 1; }
+  [ -f .env ] || { echo "Missing .env. Run ./hunterx install"; exit 1; }
+  .venv/bin/python -c "import app, uvicorn" >/dev/null 2>&1 || { echo "Installation is broken. Run ./hunterx install"; exit 1; }
+
   if [ -f run/api.pid ] && kill -0 "$(cat run/api.pid)" 2>/dev/null; then
     echo "HunterXJob v2 already running"
     exit 0
   fi
-  set -a; [ -f .env ] && . ./.env; set +a
-  nohup .venv/bin/python -m uvicorn app.main:app --host "${HOST:-127.0.0.1}" --port "${PORT:-8011}" > logs/api.log 2>&1 &
+
+  load_env
+  local host="${HOST:-127.0.0.1}"
+  local port="${PORT:-8020}"
+
+  if curl -fsS "http://${host}:${port}/api/health" >/dev/null 2>&1; then
+    echo "Port ${port} is already serving another process. Change PORT in .env or stop that process."
+    exit 1
+  fi
+
+  nohup .venv/bin/python -m uvicorn app.main:app --host "$host" --port "$port" > logs/api.log 2>&1 &
   echo $! > run/api.pid
-  sleep 3
-  curl -fsS "http://${HOST:-127.0.0.1}:${PORT:-8011}/api/health" >/dev/null
-  echo "HunterXJob v2 running at http://${HOST:-127.0.0.1}:${PORT:-8011}"
+
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if curl -fsS "http://${host}:${port}/api/health" >/dev/null 2>&1; then
+      echo "HunterXJob v2 running at http://${host}:${port}"
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "HunterXJob v2 failed to start. Last log lines:"
+  tail -n 40 logs/api.log || true
+  rm -f run/api.pid
+  exit 1
 }
 
 stop_app() {
@@ -51,13 +93,27 @@ status_app() {
 
 doctor_app() {
   failures=0
-  check() { if "$@" >/dev/null 2>&1; then printf '%-18s OK\n' "$1"; else printf '%-18s FAIL\n' "$1"; failures=$((failures+1)); fi; }
+
   command -v python3.12 >/dev/null 2>&1 && echo "Python 3.12      OK" || { echo "Python 3.12      FAIL"; failures=$((failures+1)); }
   [ -x .venv/bin/python ] && echo "Virtualenv       OK" || { echo "Virtualenv       FAIL"; failures=$((failures+1)); }
   [ -f .env ] && echo "Configuration    OK" || { echo "Configuration    FAIL"; failures=$((failures+1)); }
   mkdir -p data && touch data/.write-test && rm data/.write-test && echo "Storage          OK" || { echo "Storage          FAIL"; failures=$((failures+1)); }
-  if command -v curl >/dev/null && curl -fsS http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then echo "Local AI         OK"; else echo "Local AI         WARN (start Ollama)"; fi
-  if [ -x .venv/bin/python ]; then .venv/bin/python -m compileall -q app && echo "Python syntax    OK" || { echo "Python syntax    FAIL"; failures=$((failures+1)); }; fi
+
+  if [ -x .venv/bin/python ]; then
+    .venv/bin/python -c "import app, fastapi, sqlalchemy, httpx, uvicorn" >/dev/null 2>&1 \
+      && echo "Python packages   OK" \
+      || { echo "Python packages   FAIL"; failures=$((failures+1)); }
+    .venv/bin/python -m compileall -q app \
+      && echo "Python syntax     OK" \
+      || { echo "Python syntax     FAIL"; failures=$((failures+1)); }
+  fi
+
+  if command -v curl >/dev/null && curl -fsS http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+    echo "Local AI         OK"
+  else
+    echo "Local AI         WARN (start Ollama)"
+  fi
+
   [ "$failures" -eq 0 ]
 }
 
