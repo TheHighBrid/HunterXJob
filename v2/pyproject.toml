@@ -4,34 +4,31 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hunterxjob-v2"
-version = "0.1.0"
-description = "Zero-cost local-first autonomous job hunting system"
+version = "0.1.1"
+description = "Android-first local autonomous job hunting system"
 requires-python = ">=3.12,<3.14"
 dependencies = [
-  "fastapi>=0.115,<1",
-  "uvicorn>=0.30,<1",
-  "sqlalchemy>=2.0,<3",
-  "pydantic>=2.9,<3",
-  "pydantic-settings>=2.5,<3",
-  "httpx>=0.27,<1",
-  "apscheduler>=3.10,<4",
-  "python-dotenv>=1,<2",
-  "jinja2>=3.1,<4",
-  "python-multipart>=0.0.9,<1",
+  "fastapi==0.115.0",
+  "uvicorn==0.30.6",
+  "sqlalchemy==2.0.35",
+  "pydantic==2.9.2",
+  "pydantic-settings==2.5.2",
+  "httpx==0.27.2",
+  "python-dotenv==1.0.1",
+  "jinja2==3.1.4",
+  "python-multipart==0.0.9",
+  "apscheduler==3.10.4"
 ]
 
 [project.optional-dependencies]
-browser = ["playwright>=1.47,<2"]
-dev = ["pytest>=8,<9", "pytest-asyncio>=0.24,<1", "ruff>=0.7,<1"]
+browser = ["playwright==1.47.0"]
+test = ["pytest==8.3.3"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["app*"]
+include = ["app", "app.*"]
+exclude = ["data*", "logs*", "run*", "tests*"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
 pythonpath = ["."]
-
-[tool.ruff]
-line-length = 100
-target-version = "py312"
+testpaths = ["tests"]

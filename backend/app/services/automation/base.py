@@ -8,7 +8,7 @@ was observed, or an email send succeeded). When in doubt, return
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 AutomationStatus = Literal["submitted", "blocked", "needs_review", "failed"]
@@ -18,6 +18,7 @@ AutomationStatus = Literal["submitted", "blocked", "needs_review", "failed"]
 class AutomationResult:
     status: AutomationStatus
     detail: str = ""
+    evidence: dict[str, str] = field(default_factory=dict)
 
 
 class ApplicationAdapter(ABC):

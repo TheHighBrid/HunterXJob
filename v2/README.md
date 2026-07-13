@@ -1,68 +1,55 @@
 # HunterXJob v2
 
-HunterXJob v2 is a zero-cost, local-first, Android-compatible autonomous job hunting system.
+Android-first, zero-cost, local-first autonomous job hunting system.
 
-## Hard constraints
+## Design contract
 
-- Android 16, aarch64, non-root
-- Ubuntu through `proot-distro`
-- No paid AI APIs or hosted dependencies
-- Local AI through Ollama or llama.cpp-compatible HTTP APIs
-- SQLite persistence
-- FastAPI backend
-- PWA dashboard
-- Playwright only for application flows that require a browser
-- Explicit dry-run, review, and autonomous modes
+- Runs inside Ubuntu `proot-distro` on non-root Android.
+- Uses SQLite, FastAPI, Playwright and Ollama only.
+- No paid API is required.
+- Every pipeline stage is durable and resumable.
+- Deterministic eligibility checks run before local AI.
+- Submission defaults to `dry_run` and requires explicit configuration.
+- One command controls install, start, stop, status and diagnostics.
 
 ## Pipeline
 
-`discovered -> normalized -> eligibility_checked -> scored -> shortlisted -> materials_generated -> materials_reviewed -> ready_to_apply -> form_filled -> validated -> submitted -> confirmed`
+`discovered -> normalized -> eligible -> scored -> shortlisted -> materials_generated -> materials_reviewed -> ready_to_apply -> form_filled -> validated -> submitted -> confirmed`
 
-Every stage is persisted. A failed stage can be retried without repeating earlier work.
+Failures are recorded per stage. Retrying never discards completed work.
 
-## Architecture
+## Android quick start
 
-- `app/api`: FastAPI routes
-- `app/core`: configuration, logging, health, lifecycle
-- `app/db`: SQLite models and repositories
-- `app/discovery`: Greenhouse, Lever, Ashby, SmartRecruiters, Workable, RSS and generic feeds
-- `app/scoring`: deterministic eligibility and local-AI scoring
-- `app/materials`: resume, cover letter and answer generation with drafter/reviewer/reviser passes
-- `app/browser`: platform adapters and deterministic form execution
-- `app/workflows`: durable pipeline orchestration
-- `app/workers`: scheduler and browser workers
-- `scripts`: install, start, stop and doctor commands
-- `tests`: unit, integration and Android/proot smoke tests
+```bash
+proot-distro login ubuntu
+git clone -b hunterxjob-v2 https://github.com/TheHighBrid/HunterXJob.git
+cd HunterXJob/v2
+./hunterx install
+./hunterx doctor
+./hunterx start
+```
 
-## Operating modes
+Open `http://127.0.0.1:8011`.
 
-- `review`: generate and fill, then wait before submission
-- `dry_run`: validate and capture evidence, never submit
-- `autonomous`: submit only when every guardrail passes
+## Commands
 
-## Zero-cost stack
+```bash
+./hunterx install
+./hunterx start
+./hunterx stop
+./hunterx status
+./hunterx doctor
+./hunterx test
+```
 
-- Python 3.12
-- FastAPI
-- SQLite
-- Ollama or llama.cpp
-- Playwright + Chromium
-- React PWA
-- APScheduler
-- IMAP for status monitoring
+## Safety modes
 
-## Initial milestone
+- `review`: generates and fills, then waits.
+- `dry_run`: validates and captures artifacts, never submits.
+- `autonomous`: submits only when all gates pass.
 
-The first milestone proves the full spine:
+The default is `dry_run`.
 
-1. one-command startup
-2. health and dependency checks
-3. durable SQLite pipeline
-4. local model connectivity
-5. Greenhouse and Lever discovery
-6. deterministic eligibility scoring
-7. local material generation
-8. dry-run application execution
-9. confirmation logging
+## Current v2 foundation
 
-The legacy implementation remains untouched while v2 is built and tested on the `v2` branch.
+This branch establishes the clean runtime, durable state machine, local AI abstraction, API-first Greenhouse/Lever discovery, deterministic scoring, health checks, process supervision and tests. Platform submission adapters are intentionally isolated behind a stable interface so they can be added without destabilizing discovery, scoring or document generation.
