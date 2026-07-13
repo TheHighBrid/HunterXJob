@@ -7,10 +7,16 @@ mkdir -p data logs run
 
 cmd="${1:-help}"
 
-load_env() {
-  set -a
-  [ -f .env ] && . ./.env
-  set +a
+env_value() {
+  local key="$1"
+  local default="$2"
+  local value
+  value="$(sed -n "s/^${key}=//p" .env 2>/dev/null | tail -n 1 | tr -d '\r')"
+  value="${value%\"}"
+  value="${value#\"}"
+  value="${value%\'}"
+  value="${value#\'}"
+  printf '%s' "${value:-$default}"
 }
 
 install_app() {
@@ -49,9 +55,10 @@ start_app() {
     exit 0
   fi
 
-  load_env
-  local host="${HOST:-127.0.0.1}"
-  local port="${PORT:-8020}"
+  local host
+  local port
+  host="$(env_value HOST 127.0.0.1)"
+  port="$(env_value PORT 8020)"
 
   if curl -fsS "http://${host}:${port}/api/health" >/dev/null 2>&1; then
     echo "Port ${port} is already serving another process. Change PORT in .env or stop that process."
