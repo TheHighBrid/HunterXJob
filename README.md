@@ -51,8 +51,10 @@ Run all standard checks from the repository root:
 
 The script runs:
 
-1. `python -m compileall -q app tests` in `backend/`.
-2. `pytest -q` in `backend/`, preferring `backend/.venv/bin/python` when it has pytest installed.
-3. `npm run typecheck` in `mobile/`.
+1. Backend dependency preflight checks with actionable install hints.
+2. `python -m compileall -q app tests` in `backend/`.
+3. `pytest -q` in `backend/`, preferring `backend/.venv/bin/python` when it has pytest installed.
+4. If present, `v2/` dependency preflight checks, syntax checks, and `pytest -q`.
+5. `npm run typecheck` in `mobile/`, after verifying `node_modules` exists.
 
-If backend dependencies are not installed, create the backend virtual environment and install `requirements.txt` plus `requirements-dev.txt` first.
+The script prefers Python 3.11 for `backend/` and Python 3.12 for `v2/`, including pyenv-installed interpreters when the usual `python3.11`/`python3.12` commands are not active. If dependencies are not installed, create the relevant virtual environment and install the dependency files first.
