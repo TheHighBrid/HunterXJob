@@ -31,6 +31,7 @@ def clean_html(value: str) -> str:
     value = re.sub(r"</(?:p|li|h\d)>", "\n", value, flags=re.I)
     value = re.sub(r"<[^>]+>", " ", value)
     value = re.sub(r"[ \t]+", " ", value)
+    value = re.sub(r" *\n *", "\n", value)
     value = re.sub(r"\n\s*\n+", "\n", value)
     return value.strip()
 
