@@ -18,11 +18,22 @@ Android-first, zero-cost, local-first autonomous job hunting system.
 
 Failures are recorded per stage. Retrying never discards completed work.
 
+## Decision and truth layer
+
+The v2 pipeline now has portable, deterministic components that can be used by every source and submission adapter:
+
+- `app/decisioning.py` runs hard vetoes and an explainable six-dimension score before optional AI evaluation.
+- `app/answer_vault.py` resolves form answers with provenance and confidence gates. Sensitive answers require explicit user or policy sources.
+- `app/liveness.py` distinguishes live, expired, blocked, and ambiguous application pages.
+- Pipeline events retain the deterministic score breakdown, matched keywords, vetoes, and review flags.
+
+The source comparison and clean-room integration policy are documented in [`../docs/REFERENCE_REPO_SYNTHESIS.md`](../docs/REFERENCE_REPO_SYNTHESIS.md).
+
 ## Android quick start
 
 ```bash
 proot-distro login ubuntu
-git clone -b hunterxjob-v2 https://github.com/TheHighBrid/HunterXJob.git
+git clone https://github.com/TheHighBrid/HunterXJob.git
 cd HunterXJob/v2
 ./hunterx install
 ./hunterx doctor
@@ -52,4 +63,4 @@ The default is `dry_run`.
 
 ## Current v2 foundation
 
-This branch establishes the clean runtime, durable state machine, local AI abstraction, API-first Greenhouse/Lever discovery, deterministic scoring, health checks, process supervision and tests. Platform submission adapters are intentionally isolated behind a stable interface so they can be added without destabilizing discovery, scoring or document generation.
+This directory contains the local runtime, durable state machine, local AI abstraction, API-first Greenhouse/Lever discovery, explainable deterministic scoring, health checks, process supervision, and tests. Platform submission adapters remain isolated behind a stable interface so they can be expanded without destabilizing discovery, scoring, or document generation.
