@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.ai import LocalAI
 from app.config import Settings
+from app.decisioning import Decision, DecisionContext, JobFacts, evaluate_job
 from app.models import Application, Job, PipelineEvent, PipelineStage
 
 
@@ -16,38 +17,50 @@ class EligibilityResult:
     eligible: bool
     reason: str
     score: float
-
-
-def _contains_any(text: str, values: list[str]) -> bool:
-    haystack = text.lower()
-    return any(value.lower() in haystack for value in values)
+    report: dict[str, object] | None = None
 
 
 def deterministic_gate(job: Job, settings: Settings) -> EligibilityResult:
-    title = job.title or ""
-    location = job.location or ""
-    company = job.company or ""
-    combined = f"{title}\n{location}\n{job.description or ''}"
-
-    if _contains_any(company, settings.blacklisted_company_list):
-        return EligibilityResult(False, "blacklisted company", 0)
-    if _contains_any(title, settings.excluded_title_list):
-        return EligibilityResult(False, "excluded title", 0)
-    if _contains_any(location, settings.excluded_location_list) and not _contains_any(location, settings.target_location_list):
-        return EligibilityResult(False, "excluded location", 0)
-
-    location_score = 20 if _contains_any(location, settings.target_location_list) or job.remote else 0
-    keyword_hits = sum(1 for keyword in settings.target_keyword_list if keyword.lower() in combined.lower())
-    keyword_score = min(50, keyword_hits * 8)
-    banking_score = 15 if _contains_any(combined, ["bank", "financial", "fintech", "payments", "credit"]) else 0
-    bilingual_score = 10 if _contains_any(combined, ["bilingual", "french", "français"]) else 0
-    score = min(100, location_score + keyword_score + banking_score + bilingual_score)
-
-    if location_score == 0:
-        return EligibilityResult(False, "location not eligible", score)
-    if keyword_hits == 0:
-        return EligibilityResult(False, "no target-role overlap", score)
-    return EligibilityResult(True, "passed deterministic eligibility", score)
+    report = evaluate_job(
+        JobFacts(
+            title=job.title or "",
+            company=job.company or "",
+            location=job.location or "",
+            description=job.description or "",
+            remote=bool(job.remote),
+            url=job.url or "",
+        ),
+        DecisionContext(
+            target_locations=tuple(settings.target_location_list),
+            target_keywords=tuple(settings.target_keyword_list),
+            excluded_locations=tuple(settings.excluded_location_list),
+            excluded_titles=tuple(settings.excluded_title_list),
+            blacklisted_companies=tuple(settings.blacklisted_company_list),
+            shortlist_threshold=float(settings.min_match_score),
+        ),
+    )
+    report_payload: dict[str, object] = {
+        "decision": report.decision.value,
+        "matched_keywords": list(report.matched_keywords),
+        "review_flags": list(report.review_flags),
+        "vetoes": list(report.vetoes),
+        "dimensions": [
+            {
+                "name": dimension.name,
+                "score": dimension.score,
+                "weight": dimension.weight,
+                "weighted_points": dimension.weighted_points,
+                "evidence": list(dimension.evidence),
+            }
+            for dimension in report.dimensions
+        ],
+    }
+    return EligibilityResult(
+        eligible=report.decision is not Decision.REJECT,
+        reason=report.reason,
+        score=report.score,
+        report=report_payload,
+    )
 
 
 def transition(db: Session, job: Job, to_stage: PipelineStage, message: str, payload: dict | None = None) -> None:
@@ -80,11 +93,11 @@ def score_pending_jobs(db: Session, settings: Settings, resume_facts: str, use_a
 
         if not result.eligible:
             job.final_score = result.score
-            transition(db, job, PipelineStage.rejected, result.reason)
+            transition(db, job, PipelineStage.rejected, result.reason, result.report)
             processed += 1
             continue
 
-        transition(db, job, PipelineStage.eligible, result.reason)
+        transition(db, job, PipelineStage.eligible, result.reason, result.report)
         ai_score = None
         evaluation: dict[str, object] = {}
         if use_ai:
