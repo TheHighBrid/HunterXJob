@@ -57,8 +57,7 @@ def deterministic_gate(job: Job, settings: Settings) -> EligibilityResult:
         ],
     }
     return EligibilityResult(
-        eligible=report.decision is Decision.SHORTLIST,
-        decision=report.decision,
+        eligible=report.decision is not Decision.REJECT,
         reason=report.reason,
         score=report.score,
         report=report_payload,
@@ -101,7 +100,7 @@ def score_pending_jobs(db: Session, settings: Settings, resume_facts: str, use_a
 
         if result.decision is Decision.REVIEW:
             job.final_score = result.score
-            transition(db, job, PipelineStage.review, result.reason, result.report)
+            transition(db, job, PipelineStage.rejected, result.reason, result.report)
             processed += 1
             continue
 
