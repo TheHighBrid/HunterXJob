@@ -1,7 +1,11 @@
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import sessionmaker
+
 from app.config import Settings
+from app.db import Base
 from app.discovery import clean_html
-from app.models import Job
-from app.pipeline import deterministic_gate
+from app.models import Application, Job, PipelineStage
+from app.pipeline import deterministic_gate, score_pending_jobs
 
 
 def test_clean_html_removes_markup():
@@ -47,3 +51,35 @@ def test_accepts_relevant_canadian_job():
     result = deterministic_gate(job, settings)
     assert result.eligible is True
     assert result.score >= 60
+
+
+def test_review_job_does_not_advance_to_scoring_or_application():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+    settings = Settings(
+        target_locations="Ottawa,Remote Canada,Canada",
+        target_keywords="fraud,compliance",
+        min_match_score=10,
+    )
+
+    with session_factory() as db:
+        job = Job(
+            source="test",
+            external_id="review-1",
+            title="Director of Fraud",
+            company="Canadian Bank",
+            location="Ottawa, Canada",
+            url="https://example.test/review-1",
+            description="Lead fraud and compliance.",
+        )
+        db.add(job)
+        db.commit()
+
+        assert score_pending_jobs(db, settings, "resume facts", use_ai=False) == 1
+        db.refresh(job)
+
+        assert job.eligible is False
+        assert job.stage == PipelineStage.review.value
+        assert job.ai_score is None
+        assert db.execute(select(Application).where(Application.job_id == job.id)).scalar_one_or_none() is None
