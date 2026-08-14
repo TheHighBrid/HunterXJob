@@ -15,6 +15,7 @@ from app.models import Application, Job, PipelineEvent, PipelineStage
 @dataclass(slots=True)
 class EligibilityResult:
     eligible: bool
+    decision: Decision
     reason: str
     score: float
     report: dict[str, object] | None = None
@@ -56,7 +57,8 @@ def deterministic_gate(job: Job, settings: Settings) -> EligibilityResult:
         ],
     }
     return EligibilityResult(
-        eligible=report.decision is not Decision.REJECT,
+        eligible=report.decision is Decision.SHORTLIST,
+        decision=report.decision,
         reason=report.reason,
         score=report.score,
         report=report_payload,
@@ -91,9 +93,15 @@ def score_pending_jobs(db: Session, settings: Settings, resume_facts: str, use_a
         job.eligibility_reason = result.reason
         job.deterministic_score = result.score
 
-        if not result.eligible:
+        if result.decision is Decision.REJECT:
             job.final_score = result.score
             transition(db, job, PipelineStage.rejected, result.reason, result.report)
+            processed += 1
+            continue
+
+        if result.decision is Decision.REVIEW:
+            job.final_score = result.score
+            transition(db, job, PipelineStage.review, result.reason, result.report)
             processed += 1
             continue
 
