@@ -17,6 +17,7 @@ def utcnow() -> datetime:
 class PipelineStage(str, enum.Enum):
     discovered = "discovered"
     normalized = "normalized"
+    review = "review"
     eligible = "eligible"
     scored = "scored"
     shortlisted = "shortlisted"
