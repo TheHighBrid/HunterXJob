@@ -24,6 +24,7 @@ def init_db() -> None:
 
 
 def get_db() -> Generator[Session, None, None]:
+    init_db()
     db = SessionLocal()
     try:
         yield db

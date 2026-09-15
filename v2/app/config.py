@@ -15,8 +15,11 @@ class Settings(BaseSettings):
     database_path: str = "./data/hunterxjob-v2.db"
     application_mode: str = Field(default="dry_run", pattern="^(review|dry_run|autonomous)$")
     automation_enabled: bool = False
+    allow_live_submission: bool = False
     max_applications_per_day: int = 5
     min_match_score: int = 60
+    quiet_hours_start: str = "23:00"
+    quiet_hours_end: str = "07:00"
 
     llm_provider: str = "ollama"
     ollama_base_url: str = "http://127.0.0.1:11434"

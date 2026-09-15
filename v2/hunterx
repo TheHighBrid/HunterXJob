@@ -58,7 +58,7 @@ start_app() {
   local host
   local port
   host="$(env_value HOST 127.0.0.1)"
-  port="$(env_value PORT 8020)"
+  port="$(env_value PORT 8011)"
 
   if curl -fsS "http://${host}:${port}/api/health" >/dev/null 2>&1; then
     echo "Port ${port} is already serving another process. Change PORT in .env or stop that process."
