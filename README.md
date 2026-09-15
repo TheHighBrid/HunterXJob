@@ -1,35 +1,45 @@
 # HunterXJob
 
-HunterXJob is a self-hosted job-hunting assistant with a FastAPI backend and an Expo/React Native mobile dashboard. It discovers jobs, tracks applications, renders resumes/cover letters, and provides safe automation hooks for supported job boards.
+HunterXJob is a self-hosted job-hunting assistant. `backend/` is the original engine. `v2/` is the current local-first runtime: discover, score, prepare, dry-run apply, and stop at any unsafe boundary.
+
+Live unattended submission is intentionally locked. See [`docs/ROADMAP_STATUS.md`](docs/ROADMAP_STATUS.md).
 
 ## Repository layout
 
-- `backend/` — FastAPI application, SQLite/SQLAlchemy data model, automation services, and pytest suite.
-- `mobile/` — Expo Router mobile app for viewing jobs, applications, reports, and settings.
-- `docs/` — architecture and implementation notes.
-- `scripts/test-all.sh` — one-command local validation for backend syntax/tests and mobile type checking.
+- `v2/` — current FastAPI runtime, SQLite state machine, answer vault, form engine, adapter registry, and tests.
+- `backend/` — v1 FastAPI application, Playwright adapters, and pytest suite.
+- `mobile/` — Expo Router dashboard for jobs, applications, reports, and settings.
+- `docs/` — architecture, reference-repo policy, and roadmap status.
+- `scripts/test-all.sh` — one-command local validation for backend, v2, and mobile.
 
 ## Prerequisites
 
-- Python 3.11 for the backend.
+- Python 3.12 for `v2/`.
+- Python 3.11 for the legacy `backend/`.
 - Node.js/npm for the mobile app.
-- Chromium via Playwright if you want to run browser/PDF rendering paths locally.
+- Chromium via Playwright only if you run v1 browser/PDF paths.
 
-## Backend setup
+## Start v2
+
+```bash
+cd v2
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[test]"
+cp .env.example .env
+./hunterx doctor
+./hunterx start
+```
+
+Open `http://127.0.0.1:8011`.
+
+## Legacy backend
 
 ```bash
 cd backend
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
-python -m playwright install chromium
-```
-
-Run the API:
-
-```bash
-cd backend
-source .venv/bin/activate
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -43,18 +53,8 @@ npm run start
 
 ## Validation
 
-Run all standard checks from the repository root:
-
 ```bash
 ./scripts/test-all.sh
 ```
 
-The script runs:
-
-1. Backend dependency preflight checks with actionable install hints.
-2. `python -m compileall -q app tests` in `backend/`.
-3. `pytest -q` in `backend/`, preferring `backend/.venv/bin/python` when it has pytest installed.
-4. If present, `v2/` dependency preflight checks, syntax checks, and `pytest -q`.
-5. `npm run typecheck` in `mobile/`, after verifying `node_modules` exists.
-
-The script prefers Python 3.11 for `backend/` and Python 3.12 for `v2/`, including pyenv-installed interpreters when the usual `python3.11`/`python3.12` commands are not active. If dependencies are not installed, create the relevant virtual environment and install the dependency files first.
+The script runs backend preflight/syntax/tests, v2 preflight/syntax/tests, and mobile typecheck when `node_modules` exists.

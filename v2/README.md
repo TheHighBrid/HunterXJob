@@ -1,41 +1,37 @@
 # HunterXJob v2
 
-Android-first, zero-cost, local-first autonomous job hunting system.
+Android-first, zero-cost, local-first job hunting system with bounded autonomy.
 
 ## Design contract
 
-- Runs inside Ubuntu `proot-distro` on non-root Android.
-- Uses SQLite, FastAPI, Playwright and Ollama only.
-- No paid API is required.
+- Runs inside Ubuntu `proot-distro` on non-root Android, or any local Python 3.12.
+- Uses SQLite, FastAPI, and optional Ollama. No paid API is required.
 - Every pipeline stage is durable and resumable.
-- Deterministic eligibility checks run before local AI.
-- Submission defaults to `dry_run` and requires explicit configuration.
-- One command controls install, start, stop, status and diagnostics.
+- Deterministic eligibility runs before local AI.
+- `REVIEW` jobs never reach scoring or application creation.
+- Submission defaults to `dry_run`. Live submit stays locked until an adapter is `certified_autonomous`.
 
 ## Pipeline
 
-`discovered -> normalized -> eligible -> scored -> shortlisted -> materials_generated -> materials_reviewed -> ready_to_apply -> form_filled -> validated -> submitted -> confirmed`
+`discovered -> eligible|review|rejected -> scored -> shortlisted -> approved -> materials_generated -> ready_to_apply -> applying -> form_filled -> validated -> needs_review|submission_uncertain|submitted -> confirmed`
 
-Failures are recorded per stage. Retrying never discards completed work.
+## Safety layer
 
-## Decision and truth layer
+- Provenance-aware answer vault
+- Form-control engine with confidence and handoff reasons
+- Adapter registry with maturity levels
+- Submission evidence ledger
+- Scheduler caps, quiet hours, and kill switches
+- Global and per-platform feature flags
 
-The v2 pipeline now has portable, deterministic components that can be used by every source and submission adapter:
-
-- `app/decisioning.py` runs hard vetoes and an explainable six-dimension score before optional AI evaluation.
-- `app/answer_vault.py` resolves form answers with provenance and confidence gates. Sensitive answers require explicit user or policy sources.
-- `app/liveness.py` distinguishes live, expired, blocked, and ambiguous application pages.
-- Pipeline events retain the deterministic score breakdown, matched keywords, vetoes, and review flags.
-
-The source comparison and clean-room integration policy are documented in [`../docs/REFERENCE_REPO_SYNTHESIS.md`](../docs/REFERENCE_REPO_SYNTHESIS.md).
-
-## Android quick start
+## Quick start
 
 ```bash
-proot-distro login ubuntu
-git clone https://github.com/TheHighBrid/HunterXJob.git
 cd HunterXJob/v2
-./hunterx install
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[test]"
+cp .env.example .env
 ./hunterx doctor
 ./hunterx start
 ```
@@ -55,12 +51,23 @@ Open `http://127.0.0.1:8011`.
 
 ## Safety modes
 
-- `review`: generates and fills, then waits.
-- `dry_run`: validates and captures artifacts, never submits.
-- `autonomous`: submits only when all gates pass.
+- `review`: generate and fill, then wait.
+- `dry_run`: validate and capture artifacts, never submit.
+- `autonomous`: would submit only when every gate passes. No adapter is certified for that yet.
 
-The default is `dry_run`.
+Default is `dry_run`. `ALLOW_LIVE_SUBMISSION` and `unattended_mode` stay false.
 
-## Current v2 foundation
+## Usable now
 
-This directory contains the local runtime, durable state machine, local AI abstraction, API-first Greenhouse/Lever discovery, explainable deterministic scoring, health checks, process supervision, and tests. Platform submission adapters remain isolated behind a stable interface so they can be expanded without destabilizing discovery, scoring, or document generation.
+1. `PUT /api/resume-facts`
+2. `POST /api/answers` for explicit policies. Work authorization must be `user` or `policy`.
+3. Set Greenhouse board tokens / Lever slugs in `.env`.
+4. `POST /api/discovery/run` then `POST /api/scoring/run`.
+5. Generate materials, approve, then `POST /api/applications/{id}/apply` for a dry-run.
+6. Watch `/api/review-tasks` instead of hoping the bot guessed.
+
+## Tests
+
+```bash
+PYTHONPATH=. python -m pytest -q
+```
