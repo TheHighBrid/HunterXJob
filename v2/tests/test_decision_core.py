@@ -78,12 +78,17 @@ def test_company_name_does_not_create_role_overlap():
 
 
 def test_unicode_blacklist_and_keyword_normalization_is_not_empty():
+    description = (
+        "Analyser les dossiers de conformité, évaluer les risques financiers, documenter les contrôles, "
+        "préparer les rapports de suivi, collaborer avec les équipes opérationnelles et signaler les écarts "
+        "selon les procédures internes et les exigences réglementaires applicables."
+    )
     rejected = evaluate_job(
         JobFacts(
             title="Analyste conformité",
             company="Example",
             location="Montréal, Québec",
-            description="Conformité et risques financiers.",
+            description=description,
         ),
         DecisionContext(
             target_locations=("Montréal",),
@@ -98,7 +103,7 @@ def test_unicode_blacklist_and_keyword_normalization_is_not_empty():
             title="Analyste conformité",
             company="Société interdite",
             location="Montréal, Québec",
-            description="Conformité et risques financiers.",
+            description=description,
         ),
         DecisionContext(
             target_locations=("Montréal",),
