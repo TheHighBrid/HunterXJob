@@ -55,7 +55,7 @@ class DecisionReport:
     vetoes: tuple[str, ...] = ()
 
 
-_WORD_RE = re.compile(r"[a-z0-9+#.-]+", re.IGNORECASE)
+_WORD_RE = re.compile(r"[^\W_]+", re.UNICODE)
 
 
 def _normalize(value: str) -> str:
@@ -64,12 +64,26 @@ def _normalize(value: str) -> str:
 
 def _contains_any(value: str, candidates: Iterable[str]) -> bool:
     normalized = _normalize(value)
-    return any(_normalize(candidate) in normalized for candidate in candidates if candidate.strip())
+    if not normalized:
+        return False
+    return any(
+        normalized_candidate in normalized
+        for candidate in candidates
+        if (normalized_candidate := _normalize(candidate))
+    )
 
 
 def _keyword_matches(text: str, keywords: Iterable[str]) -> tuple[str, ...]:
     normalized = _normalize(text)
-    return tuple(dict.fromkeys(keyword for keyword in keywords if keyword.strip() and _normalize(keyword) in normalized))
+    if not normalized:
+        return ()
+    return tuple(
+        dict.fromkeys(
+            keyword
+            for keyword in keywords
+            if keyword.strip() and (normalized_keyword := _normalize(keyword)) and normalized_keyword in normalized
+        )
+    )
 
 
 def _bounded_score(value: float) -> float:
@@ -88,7 +102,8 @@ def evaluate_job(job: JobFacts, context: DecisionContext) -> DecisionReport:
     company = job.company or ""
     location = job.location or ""
     description = job.description or ""
-    combined = f"{title}\n{company}\n{location}\n{description}"
+    role_text = f"{title}\n{description}"
+    combined = f"{role_text}\n{company}\n{location}"
 
     if _contains_any(company, context.blacklisted_companies):
         return DecisionReport(Decision.REJECT, "blacklisted company", 0.0, vetoes=("blacklisted_company",))
@@ -97,13 +112,15 @@ def evaluate_job(job: JobFacts, context: DecisionContext) -> DecisionReport:
 
     excluded_location = _contains_any(location, context.excluded_locations)
     target_location = _contains_any(location, context.target_locations)
-    remote_targeted = job.remote and any("remote" in _normalize(item) for item in context.target_locations)
+    remote_targeted = job.remote and any(
+        "remote" in _normalize(item) for item in context.target_locations if _normalize(item)
+    )
     if excluded_location and not target_location:
         return DecisionReport(Decision.REJECT, "excluded location", 0.0, vetoes=("excluded_location",))
     if not target_location and not remote_targeted:
         return DecisionReport(Decision.REJECT, "location not eligible", 0.0, vetoes=("location_not_eligible",))
 
-    matched_keywords = _keyword_matches(combined, context.target_keywords)
+    matched_keywords = _keyword_matches(role_text, context.target_keywords)
     if not matched_keywords:
         return DecisionReport(Decision.REJECT, "no target-role overlap", 0.0, vetoes=("no_role_overlap",))
 
@@ -143,8 +160,16 @@ def evaluate_job(job: JobFacts, context: DecisionContext) -> DecisionReport:
         DimensionScore("evidence_quality", evidence_score, 15.0, (f"{description_words} description words",)),
     )
     total = round(sum(item.weighted_points for item in dimensions), 2)
-    decision = Decision.SHORTLIST if total >= context.shortlist_threshold and not review_flags else Decision.REVIEW
-    reason = "passed deterministic eligibility" if decision is Decision.SHORTLIST else "eligible with review flags"
+    if review_flags:
+        decision = Decision.REVIEW
+        reason = "eligible with review flags"
+    elif total >= context.shortlist_threshold:
+        decision = Decision.SHORTLIST
+        reason = "passed deterministic eligibility"
+    else:
+        decision = Decision.REVIEW
+        reason = "below shortlist threshold"
+
     return DecisionReport(
         decision=decision,
         reason=reason,
