@@ -61,6 +61,7 @@ def test_unicode_blacklist_and_keyword_normalization_is_not_empty():
 
 
 def test_threshold_only_review_has_accurate_reason():
+    # Keep the description substantive so this test isolates threshold behavior.
     report = evaluate_job(
         JobFacts(title="Fraud Analyst", company="Example", location="Ottawa", description=("Investigate transaction alerts, review fraud cases, document evidence, follow compliance procedures, "
                                                                                               "communicate findings to internal teams, and support accurate case resolution for customers.")),
