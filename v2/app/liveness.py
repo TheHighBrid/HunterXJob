@@ -36,7 +36,6 @@ _LIVE_MARKERS = (
     "apply for this job",
     "submit application",
     "apply now",
-    "job description",
 )
 
 
