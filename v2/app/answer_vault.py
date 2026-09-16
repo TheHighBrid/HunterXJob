@@ -32,6 +32,29 @@ SENSITIVE_KEYS = frozenset({
     "race_ethnicity",
 })
 
+_KEY_ALIASES = {
+    "workauthorization": "work_authorization",
+    "work-authorization": "work_authorization",
+    "sponsorshiprequired": "sponsorship",
+    "sponsorship-required": "sponsorship",
+    "citizenshipstatus": "citizenship",
+    "securityclearance": "security_clearance",
+    "desired_salary": "salary_expectation",
+    "desired-salary": "salary_expectation",
+    "desiredsalary": "salary_expectation",
+    "salary": "salary_expectation",
+    "criminalrecord": "criminal_record",
+    "veteranstatus": "veteran_status",
+    "veteran-status": "veteran_status",
+    "raceethnicity": "race_ethnicity",
+    "race-ethnicity": "race_ethnicity",
+}
+
+
+def _canonical_key(key: str) -> str:
+    normalized = key.strip().lower().replace(" ", "_")
+    return _KEY_ALIASES.get(normalized, normalized)
+
 
 @dataclass(frozen=True, slots=True)
 class AnswerRecord:
@@ -74,21 +97,30 @@ class AnswerVault:
     def put(self, record: AnswerRecord) -> None:
         if not 0.0 <= record.confidence <= 1.0:
             raise ValueError("confidence must be between 0 and 1")
-        self._records[record.key] = record
+        self._records[_canonical_key(record.key)] = record
 
     def resolve(self, request: FieldRequest) -> ResolvedAnswer:
-        record = self._records.get(request.key)
-        is_sensitive = request.sensitive if request.sensitive is not None else request.key in SENSITIVE_KEYS
+        key = _canonical_key(request.key)
+        record = self._records.get(key)
+        is_sensitive = request.sensitive if request.sensitive is not None else key in SENSITIVE_KEYS
         if record is None:
             return ResolvedAnswer(
-                key=request.key,
+                key=key,
                 status=ResolutionStatus.MISSING if request.required else ResolutionStatus.REVIEW,
                 reason="no answer stored",
             )
 
+        if record.value is None or (isinstance(record.value, str) and not record.value.strip()):
+            return ResolvedAnswer(
+                key=key,
+                status=ResolutionStatus.MISSING if request.required else ResolutionStatus.REVIEW,
+                source=record.source,
+                reason="required answer is empty" if request.required else "stored answer is empty",
+            )
+
         if is_sensitive and record.source not in {AnswerSource.USER, AnswerSource.POLICY}:
             return ResolvedAnswer(
-                key=request.key,
+                key=key,
                 status=ResolutionStatus.REVIEW,
                 source=record.source,
                 reason="sensitive answer requires explicit user or policy provenance",
@@ -97,7 +129,7 @@ class AnswerVault:
         minimum_confidence = 1.0 if is_sensitive else 0.8
         if record.confidence < minimum_confidence:
             return ResolvedAnswer(
-                key=request.key,
+                key=key,
                 status=ResolutionStatus.REVIEW,
                 source=record.source,
                 reason=f"confidence {record.confidence:.2f} is below {minimum_confidence:.2f}",
@@ -105,14 +137,14 @@ class AnswerVault:
 
         if record.source is AnswerSource.GENERATED and request.required:
             return ResolvedAnswer(
-                key=request.key,
+                key=key,
                 status=ResolutionStatus.REVIEW,
                 source=record.source,
                 reason="required fields cannot rely on generated facts",
             )
 
         return ResolvedAnswer(
-            key=request.key,
+            key=key,
             status=ResolutionStatus.RESOLVED,
             value=record.value,
             source=record.source,
@@ -120,4 +152,4 @@ class AnswerVault:
         )
 
     def resolve_many(self, requests: Iterable[FieldRequest]) -> dict[str, ResolvedAnswer]:
-        return {request.key: self.resolve(request) for request in requests}
+        return {_canonical_key(request.key): self.resolve(request) for request in requests}
