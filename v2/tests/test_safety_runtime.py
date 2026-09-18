@@ -83,6 +83,37 @@ def test_dry_run_apply_never_marks_submitted():
     assert job.stage != PipelineStage.submitted.value
 
 
+def test_live_submission_flags_do_not_claim_submission_without_adapter_execution():
+    db = _db()
+    settings = Settings(
+        automation_enabled=True,
+        application_mode="autonomous",
+        allow_live_submission=True,
+    )
+    for key, value in {
+        "first_name": "Mo",
+        "last_name": "Alem",
+        "email": "mo@example.test",
+        "phone": "555-0100",
+        "resume": "/tmp/resume.pdf",
+        "cover_letter": "Hello",
+        "work_authorization": "Authorized to work in Canada",
+    }.items():
+        upsert_answer(db, key=key, value=value, source="user", sensitive=key == "work_authorization")
+
+    job, application = _job_app(db)
+    result = execute_apply(db, settings, application.id)
+    db.refresh(application)
+    db.refresh(job)
+
+    assert result["status"] == "dry_run_complete"
+    assert result["submitted"] is False
+    assert application.stage == PipelineStage.validated.value
+    assert application.evidence[-1].kind == "dry_run"
+    assert application.evidence[-1].sufficient is False
+    assert job.stage == PipelineStage.validated.value
+
+
 def test_kill_switch_blocks_apply():
     db = _db()
     settings = Settings(automation_enabled=True)
