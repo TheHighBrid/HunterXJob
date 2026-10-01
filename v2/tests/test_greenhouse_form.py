@@ -473,11 +473,20 @@ def test_default_live_provider_fetches_via_the_api_for_discovered_jobs():
 
 def test_live_provider_refuses_platforms_without_a_real_form_fetcher():
     db = _db()
-    _job, application = _greenhouse_job(db, url="https://jobs.lever.co/acme/abc", source="lever", platform="lever")
+    _job, application = _greenhouse_job(db, url="https://careers.example.com/jobs/1", source="feed", platform="generic")
     result = execute_apply(db, Settings(automation_enabled=True), application.id)
     assert result["status"] == "needs_review"
     assert result["reason"] == "form_unavailable"
     assert "sample form" in result["detail"]
+
+
+def test_live_provider_refuses_lever_jobs_it_cannot_identify():
+    db = _db()
+    _job, application = _greenhouse_job(db, url="https://jobs.lever.co/acme/abc", source="lever", platform="lever")
+    result = execute_apply(db, Settings(automation_enabled=True), application.id)
+    assert result["status"] == "needs_review"
+    assert result["reason"] == "form_unavailable"
+    assert "Lever company and posting id" in result["detail"]
 
 
 def test_browser_verification_failure_fails_closed():

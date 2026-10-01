@@ -569,3 +569,9 @@ def fetch_greenhouse_payload(ref: GreenhouseJobRef, *, client: httpx.Client | No
 
 def fetch_greenhouse_form(ref: GreenhouseJobRef, *, client: httpx.Client | None = None, timeout: float = 20.0) -> RealForm:
     return parse_greenhouse_payload(fetch_greenhouse_payload(ref, client=client, timeout=timeout), ref)
+
+
+# Shared with the Lever and Ashby extractors so every platform classifies questions the same way.
+demographic_key = _demographic_key
+looks_like = _looks_like
+is_sensitive_field = _is_sensitive_field

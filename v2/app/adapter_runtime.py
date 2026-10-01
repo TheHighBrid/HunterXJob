@@ -29,6 +29,8 @@ def detect_platform(url: str) -> str:
         return "greenhouse"
     if "lever.co" in host:
         return "lever"
+    if host == "ashbyhq.com" or host.endswith(".ashbyhq.com"):
+        return "ashby"
     if "smartrecruiters.com" in host:
         return "smartrecruiters"
     if "myworkdayjobs.com" in host or "workday" in host:
@@ -47,7 +49,7 @@ def platform_for_job(job: Any) -> str:
     if getattr(job, "platform", None):
         return str(job.platform)
     source = (getattr(job, "source", "") or "").lower()
-    if source in {"greenhouse", "lever"}:
+    if source in {"greenhouse", "lever", "ashby"}:
         return source
     return detect_platform(getattr(job, "url", "") or "")
 
@@ -118,6 +120,11 @@ class LeverAdapter(SnapshotAdapter):
     maturity = AdapterMaturity.dry_run
 
 
+class AshbyAdapter(SnapshotAdapter):
+    name = "ashby"
+    maturity = AdapterMaturity.dry_run
+
+
 class EmailAdapter(SnapshotAdapter):
     name = "email"
     maturity = AdapterMaturity.dry_run
@@ -154,6 +161,7 @@ REGISTRY = AdapterRegistry()
 for adapter in (
     GreenhouseAdapter,
     LeverAdapter,
+    AshbyAdapter,
     EmailAdapter,
     SnapshotAdapter,
     SmartRecruitersAdapter,
@@ -166,7 +174,8 @@ for adapter in (
 
 ADAPTER_CATALOG: dict[str, AdapterInfo] = {
     "greenhouse": AdapterInfo("greenhouse", AdapterMaturity.human_reviewed_submit, feature_flag="adapter.greenhouse", notes="Dry-run certified locally; live submit stays gated."),
-    "lever": AdapterInfo("lever", AdapterMaturity.dry_run, feature_flag="adapter.lever"),
+    "lever": AdapterInfo("lever", AdapterMaturity.dry_run, feature_flag="adapter.lever", notes="Real-form dry-run from the public /apply page."),
+    "ashby": AdapterInfo("ashby", AdapterMaturity.dry_run, feature_flag="adapter.ashby", notes="Real-form dry-run from Ashby's public form API (read via GET)."),
     "email": AdapterInfo("email", AdapterMaturity.dry_run, feature_flag="adapter.email"),
     "generic": AdapterInfo("generic", AdapterMaturity.dry_run, feature_flag="adapter.generic"),
     "smartrecruiters": AdapterInfo("smartrecruiters", AdapterMaturity.detect_only, feature_flag="adapter.smartrecruiters"),

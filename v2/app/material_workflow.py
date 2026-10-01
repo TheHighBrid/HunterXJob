@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import Settings
+from app.dedup import duplicate_guard
 from app.flags import kill_switch_engaged
 from app.material_llm import LLMClient, llm_client, reword_cover_letter, reword_resume
 from app.material_store import (
@@ -127,6 +128,9 @@ def generate_for_application(db: Session, settings: Settings, application_id: st
     job = application.job
     if job.stage not in GENERATABLE_STAGES or application.stage in _LOCKED_APPLICATION_STAGES:
         raise MaterialsError(409, f"materials cannot be generated while the job is {job.stage}")
+    duplicate = duplicate_guard(db, job, "prepare")
+    if duplicate:
+        raise MaterialsError(409, duplicate)
     profile = verified_profile(db)
     missing = readiness(profile)
     if missing:

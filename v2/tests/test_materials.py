@@ -117,6 +117,18 @@ def test_guard_rejects_fabricated_cover_letter_claims(profile, addition, expecte
     assert any(expected.lower() in v.lower() for v in violations), violations
 
 
+def test_template_wording_is_not_flagged_when_a_real_posting_uses_the_same_words(profile):
+    # Real postings often say "we welcome applications", "following requirements", "this posting"...
+    # The template's own fixed phrasing is not a claim and must not block the letter.
+    job = JobContext(title=JOB.title, company=JOB.company, location=JOB.location,
+                     description=JOB.description + " We welcome every chance to discuss the following requirements "
+                     "of this posting; considering a match, you hold the keys.")
+    letter = build_cover_letter(profile, job, build_resume(profile, job))
+    assert check_cover_letter(letter, profile, job_description=job.text) == []
+    letter["paragraphs"][1]["text"] += " I am an expert in Actimize."
+    assert check_cover_letter(letter, profile, job_description=job.text)
+
+
 def test_cover_letter_names_the_job_but_claims_only_verified_facts(profile):
     text = cover_letter_text(build_cover_letter(profile, JOB, _resume(profile)))
     assert text.startswith("Dear Hiring Team at Maplebank,")

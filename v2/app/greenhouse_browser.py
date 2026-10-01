@@ -1,12 +1,17 @@
-"""Optional Playwright inspection of a hosted Greenhouse application form.
+"""Optional Playwright inspection of a hosted application form.
 
-Used to *verify* the API-derived form (and as a fallback when the API fails
-for transient reasons). The browser session is strictly read-only:
+Used to *verify* an API-derived form (Greenhouse, Lever, Ashby) and, for
+Greenhouse, as a fallback when the API fails for transient reasons. The
+browser session is strictly read-only:
 
 * every request whose method is not GET/HEAD is aborted at the network layer,
-  so no form post, upload, or analytics beacon can leave the browser;
+  so no form post, upload, or analytics beacon can leave the browser. The one
+  exception is opt-in per call (Ashby): a POST to Ashby's public GraphQL
+  endpoint whose operation is on an allowlist and whose document is a plain
+  ``query`` is re-issued as the equivalent GET (see :func:`graphql_get_rewrite`);
+  anything else, including every mutation, is still aborted;
 * the page is never clicked, typed into, or otherwise interacted with;
-* only the Greenhouse embed URL for the posting is opened.
+* only the posting's own hosted application URL is opened.
 
 Playwright is an optional dependency (``pip install -e '.[browser]'`` plus
 ``python -m playwright install chromium``). When it is missing,
@@ -15,9 +20,12 @@ Playwright is an optional dependency (``pip install -e '.[browser]'`` plus
 from __future__ import annotations
 
 import asyncio
+import json
 import re
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import parse_qs, urlencode, urlparse
 
 from app.form_engine import ControlType, FormControl
 from app.greenhouse_form import FormFetchError, GreenhouseJobRef, RealForm
@@ -75,6 +83,10 @@ _CHALLENGE_RE = re.compile(r"verify you are human|checking your browser|are you 
 _IGNORED_IDS = re.compile(r"^(?:iti-\d+__search-input|g-recaptcha-response.*)$")
 _IGNORED_NAMES = frozenset({"g-recaptcha-response", "h-captcha-response"})
 _DOM_ALIASES = {"candidate-location": "location", "country": "phone_country"}
+# Ashby prefixes radio/checkbox group names with the form id ("<uuid>_<path>").
+_FORM_ID_PREFIX = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}_(?=.)")
+GRAPHQL_REWRITE_HOST = "jobs.ashbyhq.com"
+GRAPHQL_REWRITE_PATH = "/api/non-user-graphql"
 
 
 class BrowserUnavailable(FormFetchError):
@@ -103,7 +115,7 @@ class DomField:
             return f"demographic_{ident}"
         if self.name.startswith("gdpr_"):
             return self.name
-        base = self.name or ident
+        base = _FORM_ID_PREFIX.sub("", self.name or ident)
         return base.removesuffix("[]")
 
 
@@ -197,6 +209,14 @@ def dom_control(item: DomField) -> FormControl:
     )
 
 
+def _merge_submit_boundary(form: RealForm, snapshot: DomSnapshot) -> None:
+    """A boundary already found in the fetched form (Lever/Ashby) is kept even if the render missed it."""
+    previous = form.metadata.get("submit_boundary")
+    form.metadata["submit_boundary"] = "captcha_detected" if snapshot.captcha else previous
+    if snapshot.captcha and not previous:
+        form.warnings.append("page carries a CAPTCHA at submit; a live submission would require manual handoff")
+
+
 def reconcile(form: RealForm, snapshot: DomSnapshot) -> RealForm:
     """Cross-check an API-derived form against the rendered page.
 
@@ -222,11 +242,9 @@ def reconcile(form: RealForm, snapshot: DomSnapshot) -> RealForm:
     form.metadata["dom_url"] = snapshot.url
     form.metadata["dom_only_required_fields"] = added
     form.metadata["api_fields_not_rendered"] = missing_from_page
-    form.metadata["submit_boundary"] = "captcha_detected" if snapshot.captcha else None
     if added:
         form.warnings.append(f"page requires fields absent from the API payload: {', '.join(added)}")
-    if snapshot.captcha:
-        form.warnings.append("page carries a CAPTCHA at submit; a live submission would require manual handoff")
+    _merge_submit_boundary(form, snapshot)
     if snapshot.challenge:
         form.handoff = snapshot.challenge
     return form
@@ -271,20 +289,65 @@ def form_from_dom(ref: GreenhouseJobRef, snapshot: DomSnapshot) -> RealForm:
     )
 
 
-async def _inspect(url: str, timeout_ms: int) -> dict[str, Any]:
+def _is_rewrite_endpoint(scheme: str, netloc: str, path: str) -> bool:
+    return scheme == "https" and netloc.lower() == GRAPHQL_REWRITE_HOST and path == GRAPHQL_REWRITE_PATH
+
+
+def _json_object(raw: str | None) -> dict[str, Any]:
+    try:
+        value = json.loads(raw or "")
+    except ValueError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _is_read_only_query(query: Any) -> bool:
+    if not isinstance(query, str) or not query.lstrip().startswith("query "):
+        return False
+    return re.search(r"\b(?:mutation|subscription)\b", query) is None
+
+
+def graphql_get_rewrite(method: str, url: str, post_data: str | None, allowed_ops: Collection[str]) -> str | None:
+    """The GET URL equivalent to an allowlisted, read-only GraphQL POST, or None to abort it.
+
+    Only ``POST https://jobs.ashbyhq.com/api/non-user-graphql`` qualifies, only for
+    operations in ``allowed_ops``, and only when the document is a single
+    ``query`` with no ``mutation``/``subscription`` keyword anywhere.
+    """
+    parsed = urlparse(url)
+    if method != "POST" or not allowed_ops or not _is_rewrite_endpoint(parsed.scheme, parsed.netloc, parsed.path):
+        return None
+    body = _json_object(post_data)
+    operation = body.get("operationName") or (parse_qs(parsed.query).get("op") or [""])[0]
+    query = body.get("query")
+    if operation not in allowed_ops or not _is_read_only_query(query):
+        return None
+    params = {"op": operation, "query": query, "variables": json.dumps(body.get("variables") or {}, separators=(",", ":"))}
+    return f"https://{GRAPHQL_REWRITE_HOST}{GRAPHQL_REWRITE_PATH}?{urlencode(params)}"
+
+
+async def _inspect(url: str, timeout_ms: int, graphql_ops: Collection[str] = ()) -> dict[str, Any]:
     try:
         from playwright.async_api import async_playwright
     except ImportError as exc:  # pragma: no cover - depends on optional extra
         raise BrowserUnavailable("Playwright is not installed (pip install -e '.[browser]')") from exc
 
     blocked: list[str] = []
+    rewritten: list[str] = []
 
     async def read_only(route: Any) -> None:
-        if route.request.method not in {"GET", "HEAD"}:
-            blocked.append(f"{route.request.method} {route.request.url[:120]}")
-            await route.abort()
-        else:
+        request = route.request
+        if request.method in {"GET", "HEAD"}:
             await route.continue_()
+            return
+        get_url = graphql_get_rewrite(request.method, request.url, request.post_data, graphql_ops)
+        if get_url is None:
+            blocked.append(f"{request.method} {request.url[:120]}")
+            await route.abort()
+            return
+        rewritten.append(f"{request.method}->GET {request.url[:120]}")
+        response = await route.fetch(url=get_url, method="GET", headers={"apollo-require-preflight": "true"})
+        await route.fulfill(response=response)
 
     async with async_playwright() as playwright:
         try:
@@ -302,15 +365,21 @@ async def _inspect(url: str, timeout_ms: int) -> dict[str, Any]:
         finally:
             await browser.close()
     data["blocked_requests"] = blocked
+    data["rewritten_requests"] = rewritten
     return data
 
 
-def inspect_hosted_form(ref: GreenhouseJobRef, *, timeout_ms: int = 45000) -> DomSnapshot:
-    """Load the posting's embed page read-only and return its field structure."""
+def inspect_page(url: str, *, timeout_ms: int = 45000, graphql_ops: Collection[str] = ()) -> DomSnapshot:
+    """Load a hosted application page read-only and return its field structure."""
     try:
-        data = asyncio.run(_inspect(ref.embed_url, timeout_ms))
+        data = asyncio.run(_inspect(url, timeout_ms, graphql_ops))
     except FormFetchError:
         raise
     except Exception as exc:
         raise FormFetchError("form_fetch_failed", f"browser inspection failed: {exc.__class__.__name__}: {exc}") from exc
     return DomSnapshot.from_dict(data)
+
+
+def inspect_hosted_form(ref: GreenhouseJobRef, *, timeout_ms: int = 45000) -> DomSnapshot:
+    """Load the Greenhouse embed page read-only and return its field structure."""
+    return inspect_page(ref.embed_url, timeout_ms=timeout_ms)

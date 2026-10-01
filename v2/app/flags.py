@@ -14,6 +14,7 @@ DEFAULT_FLAGS = {
     "allow_live_submission": False,
     "adapter.greenhouse": True,
     "adapter.lever": True,
+    "adapter.ashby": True,
     "adapter.email": True,
     "adapter.generic": True,
     "adapter.smartrecruiters": False,

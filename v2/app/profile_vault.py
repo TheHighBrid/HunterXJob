@@ -70,8 +70,14 @@ def _history(prefix: str, index: int, data: dict[str, Any], names: dict[str, str
     return out
 
 
+def _full_name(contact: dict[str, Any]) -> str:
+    return " ".join(str(contact.get(part) or "").strip() for part in ("first_name", "last_name")).strip()
+
+
 def profile_answers(profile: VerifiedProfile) -> dict[str, Any]:
     answers: dict[str, Any] = dict(profile.contact)
+    # Lever and Ashby ask for a single "Full name" field.
+    answers["full_name"] = _full_name(answers)
     jobs = chronological(profile.of("employment"))
     current = next((fact for fact in jobs if fact.data.get("current")), None)
     if current is not None:
