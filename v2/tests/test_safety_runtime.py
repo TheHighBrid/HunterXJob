@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+from conftest import load_sample_form
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -12,6 +13,8 @@ from app.pipeline import approve_application, execute_apply
 from app.scheduler import can_run_unattended, in_quiet_hours
 from app.state_machine import IllegalTransition, assert_transition
 from app.vault_store import upsert_answer
+
+SAMPLE_FORM = load_sample_form()
 
 
 def _db():
@@ -74,7 +77,7 @@ def test_dry_run_apply_never_marks_submitted():
         upsert_answer(db, key=key, value=value, source="user", sensitive=key == "work_authorization")
 
     job, application = _job_app(db)
-    result = execute_apply(db, settings, application.id)
+    result = execute_apply(db, settings, application.id, html=SAMPLE_FORM)
     db.refresh(application)
     db.refresh(job)
     assert result["submitted"] is False
@@ -102,7 +105,7 @@ def test_live_submission_flags_do_not_claim_submission_without_adapter_execution
         upsert_answer(db, key=key, value=value, source="user", sensitive=key == "work_authorization")
 
     job, application = _job_app(db)
-    result = execute_apply(db, settings, application.id)
+    result = execute_apply(db, settings, application.id, html=SAMPLE_FORM)
     db.refresh(application)
     db.refresh(job)
 

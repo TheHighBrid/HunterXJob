@@ -2,20 +2,26 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.adapter_runtime import ADAPTER_CATALOG, GREENHOUSE_FIXTURE, detect_platform, plan_for_html
+from app.adapter_runtime import ADAPTER_CATALOG, platform_for_job
 from app.ai import LocalAI
 from app.config import Settings
 from app.decisioning import Decision, DecisionContext, JobFacts, evaluate_job
 from app.evidence import record_evidence
 from app.flags import is_enabled, kill_switch_engaged
+from app.form_engine import FillPlan, detect_handoff, parse_controls, plan_fill
+from app.greenhouse_form import FormFetchError, RealForm
 from app.models import AdapterMaturity, Application, Job, PipelineEvent, PipelineStage
 from app.review_queue import open_task
 from app.state_machine import assert_transition
 from app.vault_store import load_vault
+
+if TYPE_CHECKING:
+    from app.real_forms import FormProvider
 
 
 @dataclass(slots=True)
@@ -95,7 +101,7 @@ def score_pending_jobs(db: Session, settings: Settings, resume_facts: str, use_a
     processed = 0
 
     for job in jobs:
-        job.platform = job.platform or detect_platform(job.url)
+        job.platform = platform_for_job(job)
         result = deterministic_gate(job, settings)
         job.eligible = result.eligible
         job.eligibility_reason = result.reason
@@ -204,7 +210,38 @@ def approve_application(db: Session, application_id: str) -> Application:
     return application
 
 
-def execute_apply(db: Session, settings: Settings, application_id: str, html: str | None = None) -> dict[str, object]:
+def _blocker_detail(plan: FillPlan) -> str:
+    lines = []
+    for item in plan.items:
+        if item.status != "review":
+            continue
+        required = "required" if item.control.required else "optional"
+        lines.append(f"- [{item.control.section}] {item.control.label or item.control.key} ({item.control.key}, {required}): {item.reason}")
+    return "\n".join(lines)
+
+
+def preview_form(db: Session, form: RealForm) -> tuple[FillPlan, dict[str, object]]:
+    """Plan a real form against the vault without changing any state."""
+    vault = load_vault(db, form.vault_scopes)
+    plan = plan_fill(form.controls, vault)
+    return plan, form.summary()
+
+
+def execute_apply(
+    db: Session,
+    settings: Settings,
+    application_id: str,
+    html: str | None = None,
+    form_provider: FormProvider | None = None,
+) -> dict[str, object]:
+    """Run a dry-run apply cycle against the job's real application form.
+
+    The form comes from ``form_provider`` (default: live, read-only fetch of
+    the employer's posting). ``html`` lets a caller supply an explicit form
+    snapshot instead (used by tests); it is labelled ``supplied_snapshot`` in
+    the evidence. If the real form cannot be obtained the application goes to
+    review. There is no fallback to a sample form, and nothing is submitted.
+    """
     application = db.get(Application, application_id)
     if application is None:
         raise ValueError("application not found")
@@ -220,21 +257,59 @@ def execute_apply(db: Session, settings: Settings, application_id: str, html: st
     }:
         raise RuntimeError(f"job stage {job.stage} is not ready to apply")
 
-    platform = job.platform or detect_platform(job.url)
+    platform = platform_for_job(job)
     info = ADAPTER_CATALOG.get(platform)
     if info is None:
         raise RuntimeError(f"no adapter catalog entry for {platform}")
     if not is_enabled(db, info.feature_flag):
         raise RuntimeError(f"adapter {platform} is feature-flagged off")
 
-    snapshot = html if html is not None else GREENHOUSE_FIXTURE
-    vault = load_vault(db)
-    handoff, plan = plan_for_html(snapshot, vault)
-
     application.adapter_name = platform
     application.adapter_maturity = info.maturity.value
     application.attempts += 1
-    transition(db, job, PipelineStage.applying, f"apply cycle started on {platform}")
+
+    if html is not None:
+        controls = parse_controls(html)
+        handoff = detect_handoff(html)
+        vault = load_vault(db)
+        form_summary: dict[str, object] = {"source": "supplied_snapshot", "url": job.url, "fields_total": len(controls), "warnings": []}
+    else:
+        if form_provider is None:
+            from app.real_forms import LiveFormProvider
+
+            form_provider = LiveFormProvider(settings)
+        try:
+            form = form_provider.fetch(job)
+        except FormFetchError as exc:
+            application.last_error = exc.detail
+            db.add(application)
+            db.commit()
+            open_task(
+                db,
+                reason_code=exc.reason_code,
+                title=f"Could not load the real application form for {job.title}",
+                detail=f"{exc.detail}. The dry-run was not performed; no sample form was used.",
+                application=application,
+                job=job,
+                url=job.url,
+            )
+            return {
+                "status": "needs_review",
+                "reason": exc.reason_code,
+                "detail": exc.detail,
+                "application_id": application.id,
+                "form_source": None,
+                "submitted": False,
+            }
+        controls = form.controls
+        handoff = form.handoff
+        vault = load_vault(db, form.vault_scopes)
+        form_summary = form.summary()
+
+    plan = plan_fill(controls, vault)
+    application.last_error = None
+    application.validation_json = json.dumps({"ok": False, "form": form_summary}, default=str)
+    transition(db, job, PipelineStage.applying, f"dry-run apply started on {platform} ({form_summary['source']})")
     application.stage = PipelineStage.applying.value
 
     if handoff:
@@ -247,7 +322,7 @@ def execute_apply(db: Session, settings: Settings, application_id: str, html: st
             job=job,
             url=job.url,
         )
-        return {"status": "needs_review", "reason": handoff, "application_id": application.id}
+        return {"status": "needs_review", "reason": handoff, "application_id": application.id, "form": form_summary, "submitted": False}
 
     if not plan.ready:
         reason = plan.blockers[0] if plan.blockers else "ambiguous_question"
@@ -255,18 +330,26 @@ def execute_apply(db: Session, settings: Settings, application_id: str, html: st
             db,
             reason_code=reason,
             title=f"Missing answers for {job.title}",
-            detail=", ".join(plan.blockers),
+            detail=f"Blockers: {', '.join(plan.blockers)}\n{_blocker_detail(plan)}",
             application=application,
             job=job,
             url=job.url,
         )
-        return {"status": "needs_review", "reason": reason, "blockers": plan.blockers, "application_id": application.id}
+        return {
+            "status": "needs_review",
+            "reason": reason,
+            "blockers": plan.blockers,
+            "blocked_fields": [item.control.key for item in plan.items if item.status == "review"],
+            "application_id": application.id,
+            "form": form_summary,
+            "submitted": False,
+        }
 
     filled = {item.control.key: item.value for item in plan.items if item.status == "fill"}
     application.answers_json = json.dumps(filled)
     application.stage = PipelineStage.form_filled.value
     transition(db, job, PipelineStage.form_filled, "form fields resolved from vault")
-    application.validation_json = json.dumps({"ok": True, "fields": list(filled)})
+    application.validation_json = json.dumps({"ok": True, "fields": list(filled), "form": form_summary}, default=str)
     application.stage = PipelineStage.validated.value
     transition(db, job, PipelineStage.validated, "dry-run validation passed")
 
@@ -279,9 +362,9 @@ def execute_apply(db: Session, settings: Settings, application_id: str, html: st
         db,
         application,
         kind="dry_run",
-        confirmation_text="dry-run complete; submit button was not clicked",
+        confirmation_text=f"dry-run complete against {form_summary['source']} form; submit button was not clicked",
         final_url=job.url,
-        payload=filled,
+        payload={"filled": filled, "form_source": form_summary["source"]},
         adapter_name=platform,
     )
     application.stage = PipelineStage.validated.value
@@ -292,6 +375,8 @@ def execute_apply(db: Session, settings: Settings, application_id: str, html: st
         "application_id": application.id,
         "adapter": platform,
         "maturity": info.maturity.value,
+        "form_source": form_summary["source"],
+        "form": form_summary,
         "filled": list(filled),
         "submitted": False,
     }

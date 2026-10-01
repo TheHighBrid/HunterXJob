@@ -66,6 +66,30 @@ Default is `dry_run`. `ALLOW_LIVE_SUBMISSION` and `unattended_mode` stay false.
 5. Generate materials, approve, then `POST /api/applications/{id}/apply` for a dry-run.
 6. Watch `/api/review-tasks` instead of hoping the bot guessed.
 
+## Real-form dry-runs (Greenhouse)
+
+A dry-run plans against the **employer's real application form**, never a sample:
+
+- The form comes from the public boards API: `GET https://boards-api.greenhouse.io/v1/boards/{board}/jobs/{id}?questions=true`. That covers standard fields, custom questions, location questions, EEOC compliance questions, demographic questions, and GDPR consent flags. Only GET is used, only against that host, and redirects are not followed.
+- Optional browser verification (`GREENHOUSE_BROWSER_VERIFY=true`, needs `pip install -e '.[browser]'` plus `python -m playwright install chromium`) loads the posting's embed page in headless Chromium. All non-GET requests are aborted, nothing is clicked or typed, and no files are uploaded. Required fields that are on the page but missing from the API (for example employment/education history or the phone-country picker) are added and stop the plan for review. `GREENHOUSE_BROWSER_FALLBACK=true` builds the form from the page when the API is temporarily failing. Comboboxes read only from the page always go to review, because their options can't be checked without interacting.
+- If the form can't be fetched (posting closed, network error, unsupported platform), the application goes to review with `form_unavailable` or `form_fetch_failed`. Nothing is faked. Lever, email, and generic postings don't have a real-form fetcher yet, so their dry-runs are refused.
+- `GET /api/jobs/{job_id}/form` previews the real form and the fill plan without changing any state. Sensitive and legal values are redacted.
+
+Answer-vault keys for real forms:
+
+- Standard Greenhouse fields use their own names: `first_name`, `last_name`, `email`, `phone`, `resume`, `cover_letter`, `location`, `preferred_name`.
+- Recognized custom questions map to shared keys: `linkedin_url`, `website_url`, `github_url`, `current_company`, `current_title`, `salary_expectation`, `willing_to_relocate`, `referral_source`, `country_of_residence`, `time_zone`, `pronouns`.
+- Work-authorization and sponsorship keys always name a country: `work_authorization_ca`, `work_authorization_us`, `sponsorship_ca`, … or `*_residence_country` when the question asks about where you live. If a question doesn't say which country, there is no shared key and it goes to review. A single global "Yes" is never reused across countries.
+- Any question can be answered on its own by storing its field name (for example `question_64283527`). This works globally or scoped to `greenhouse:{board}` / `greenhouse:{board}:{job_id}`. Employer-specific, conditional, and legal/attestation questions can only be answered this way.
+- EEOC and demographic questions are filled only from explicit answers (`gender`, `race_ethnicity`, `veteran_status`, `disability`, …) or from an explicit `voluntary_self_identification=decline` policy. That policy picks the form's single "decline to answer" option. These answers are never inferred.
+- A select is filled only when the stored answer exactly matches one of the listed options (ignoring case and whitespace). Otherwise it goes to review.
+
+Smoke-test live postings without the database. This is read-only and submits nothing:
+
+```bash
+.venv/bin/python scripts/greenhouse_smoke.py --browser-verify brex:8795500002 https://job-boards.greenhouse.io/gitlab/jobs/8556658002
+```
+
 ## Tests
 
 ```bash

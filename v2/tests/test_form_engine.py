@@ -1,7 +1,17 @@
-from app.adapter_runtime import GREENHOUSE_FIXTURE, detect_platform, plan_for_html
+from conftest import load_sample_form
+
+from app.adapter_runtime import detect_platform, plan_for_html
 from app.answer_vault import AnswerRecord, AnswerSource, AnswerVault
-from app.form_engine import ControlType, detect_handoff, parse_controls, plan_fill, verify_filled
+from app.form_engine import (
+    ControlType,
+    detect_handoff,
+    parse_controls,
+    plan_fill,
+    verify_filled,
+)
 from app.models import AdapterMaturity
+
+GREENHOUSE_FIXTURE = load_sample_form()
 
 
 def test_parse_greenhouse_fixture_controls():

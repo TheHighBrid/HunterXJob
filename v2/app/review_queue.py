@@ -21,6 +21,8 @@ REASON_CODES = frozenset({
     "submission_confirmation_uncertain",
     "decision_review",
     "liveness_review",
+    "form_fetch_failed",
+    "form_unavailable",
 })
 
 

@@ -16,7 +16,9 @@ from app.db import get_db, init_db
 from app.discovery import discover_all, upsert_jobs
 from app.flags import ensure_flags, set_flag, snapshot
 from app.models import Application, Job, PipelineEvent, ReviewTask
-from app.pipeline import approve_application, execute_apply, generate_materials, score_pending_jobs
+from app.greenhouse_form import FormFetchError
+from app.pipeline import approve_application, execute_apply, generate_materials, preview_form, score_pending_jobs
+from app.real_forms import LiveFormProvider
 from app.review_queue import list_open, resolve_task
 from app.scheduler import can_run_unattended, submissions_today
 from app.vault_store import upsert_answer
@@ -148,6 +150,41 @@ def list_jobs(db: Session = Depends(get_db), limit: int = 100) -> list[dict[str,
         "stage": j.stage, "eligible": j.eligible, "score": j.final_score, "url": j.url,
         "reason": j.eligibility_reason, "platform": j.platform,
     } for j in rows]
+
+
+@app.get("/api/jobs/{job_id}/form")
+def job_form(job_id: str, db: Session = Depends(get_db)) -> dict[str, object]:
+    """Fetch the job's real application form (read-only) and plan it against the vault.
+
+    No state changes, no evidence, nothing submitted. Values for sensitive or
+    legal fields are redacted in the response.
+    """
+    job = db.get(Job, job_id)
+    if job is None:
+        raise HTTPException(404, "job not found")
+    try:
+        form = LiveFormProvider(settings).fetch(job)
+    except FormFetchError as exc:
+        raise HTTPException(502 if exc.reason_code == "form_fetch_failed" else 409, {"reason": exc.reason_code, "detail": exc.detail}) from exc
+    plan, summary = preview_form(db, form)
+    return {
+        "form": summary,
+        "ready": plan.ready,
+        "blockers": plan.blockers,
+        "fields": [{
+            "key": item.control.key,
+            "label": item.control.label,
+            "type": item.control.control_type.value,
+            "section": item.control.section,
+            "required": item.control.required,
+            "sensitive": item.control.sensitive,
+            "legal": item.control.legal,
+            "options": len(item.control.options),
+            "status": item.status,
+            "reason": item.reason,
+            "value": ("[set]" if item.control.sensitive or item.control.legal else item.value) if item.status == "fill" else None,
+        } for item in plan.items],
+    }
 
 
 @app.get("/api/applications")

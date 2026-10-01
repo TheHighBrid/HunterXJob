@@ -143,6 +143,24 @@ doctor_app() {
       || { echo "Python syntax     FAIL"; failures=$((failures+1)); }
   fi
 
+  if [ -x .venv/bin/python ]; then
+    browser_verify="$(env_value GREENHOUSE_BROWSER_VERIFY false | tr '[:upper:]' '[:lower:]')"
+    if .venv/bin/python - >/dev/null 2>&1 <<'PY'
+import os
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    raise SystemExit(0 if os.path.exists(p.chromium.executable_path) else 1)
+PY
+    then
+      echo "Browser verify   OK (Playwright Chromium available; GREENHOUSE_BROWSER_VERIFY=${browser_verify})"
+    elif [ "$browser_verify" = "true" ]; then
+      echo "Browser verify   FAIL (GREENHOUSE_BROWSER_VERIFY=true but Playwright Chromium is missing)"
+      failures=$((failures+1))
+    else
+      echo "Browser verify   WARN (optional: pip install -e '.[browser]' && python -m playwright install chromium)"
+    fi
+  fi
+
   if command -v curl >/dev/null && curl -fsS http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
     echo "Local AI         OK"
   else
