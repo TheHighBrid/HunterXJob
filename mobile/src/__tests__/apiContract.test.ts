@@ -32,7 +32,7 @@ describe("API contract", () => {
   }
 
   it("finds the client's calls", () => {
-    expect(calls.length).toBeGreaterThanOrEqual(18);
+    expect(calls.length).toBeGreaterThanOrEqual(29);
   });
 
   it.each(calls.map((c) => [`${c.method} ${c.path}`, c] as const))("%s exists in v2/openapi.json", (_label, call) => {

@@ -115,7 +115,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Generate */
+        /**
+         * Generate
+         * @description Draft a résumé and cover letter from verified profile facts (needs owner approval).
+         */
         post: operations["generate_api_applications__application_id__generate_post"];
         delete?: never;
         options?: never;
@@ -311,6 +314,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs/{job_id}/materials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Job Materials */
+        get: operations["job_materials_api_jobs__job_id__materials_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{job_id}/materials/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate Job Materials
+         * @description Create new DRAFT versions from verified facts. Approved versions are kept; nothing is attached or sent.
+         */
+        post: operations["generate_job_materials_api_jobs__job_id__materials_generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/kill-switch": {
         parameters: {
             query?: never;
@@ -326,6 +366,185 @@ export interface paths {
          * @description Engage (always allowed) or disengage (needs ``confirm: true``) the kill switch.
          */
         post: operations["set_kill_switch_api_kill_switch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{material_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Material */
+        get: operations["material_api_materials__material_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{material_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve
+         * @description Approve this draft version. Only approved versions can ever be attached to a form.
+         */
+        post: operations["approve_api_materials__material_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{material_id}/file/{fmt}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Material File */
+        get: operations["material_file_api_materials__material_id__file__fmt__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{material_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject */
+        post: operations["reject_api_materials__material_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Profile */
+        get: operations["profile_api_profile_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/profile/facts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Fact */
+        post: operations["create_fact_api_profile_facts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/profile/facts/{fact_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Fact
+         * @description Replace a fact's content. It becomes unverified unless ``verified`` is true in the same request.
+         */
+        put: operations["update_fact_api_profile_facts__fact_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/profile/facts/{fact_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Delete Fact */
+        post: operations["delete_fact_api_profile_facts__fact_id__remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/profile/facts/{fact_id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify Fact */
+        post: operations["verify_fact_api_profile_facts__fact_id__verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/profile/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Profile
+         * @description Import a YAML/JSON profile, or pasted résumé text (always imported UNVERIFIED).
+         */
+        post: operations["import_profile_api_profile_import_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -771,6 +990,45 @@ export interface components {
             /** To Stage */
             to_stage: string;
         };
+        /** FactCreateIn */
+        FactCreateIn: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "contact" | "summary" | "work_authorization" | "employment" | "education" | "skill" | "certification" | "language" | "project" | "achievement";
+            /** Data */
+            data: {
+                [key: string]: unknown;
+            };
+            /**
+             * Verified
+             * @default false
+             */
+            verified: boolean;
+        };
+        /** FactEditIn */
+        FactEditIn: {
+            /** Data */
+            data: {
+                [key: string]: unknown;
+            };
+            /**
+             * Verified
+             * @default false
+             */
+            verified: boolean;
+        };
+        /** FactRemovedOut */
+        FactRemovedOut: {
+            /** Removed */
+            removed: string;
+        };
+        /** FactVerifyIn */
+        FactVerifyIn: {
+            /** Verified */
+            verified: boolean;
+        };
         /** FlagIn */
         FlagIn: {
             /**
@@ -922,6 +1180,8 @@ export interface components {
             id: string;
             /** Last Error */
             last_error: string | null;
+            /** Materials Ready */
+            materials_ready: boolean;
             /** Maturity */
             maturity: string | null;
             /** Mode */
@@ -978,6 +1238,32 @@ export interface components {
             title: string;
             /** Url */
             url: string;
+        };
+        /** JobMaterialsOut */
+        JobMaterialsOut: {
+            /** Application Id */
+            application_id: string | null;
+            /** Approved */
+            approved: {
+                [key: string]: string;
+            };
+            /** Can Generate */
+            can_generate: boolean;
+            /** Generate Blockers */
+            generate_blockers: string[];
+            /** Items */
+            items: components["schemas"]["MaterialOut"][];
+            /** Job Id */
+            job_id: string;
+            /** Job Stage */
+            job_stage: string;
+            /**
+             * Live Submission Locked
+             * @constant
+             */
+            live_submission_locked: true;
+            /** Llm Enabled */
+            llm_enabled: boolean;
         };
         /** JobOut */
         JobOut: {
@@ -1081,6 +1367,129 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** MaterialActionOut */
+        MaterialActionOut: {
+            /** Application Stage */
+            application_stage: string;
+            /** Job Stage */
+            job_stage: string;
+            material: components["schemas"]["MaterialOut"];
+            /** Materials Ready */
+            materials_ready: boolean;
+            /**
+             * Submitted
+             * @constant
+             */
+            submitted: false;
+        };
+        /** MaterialDecisionIn */
+        MaterialDecisionIn: {
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /** MaterialDetailOut */
+        MaterialDetailOut: {
+            /** Application Id */
+            application_id: string;
+            /** Content Sha256 */
+            content_sha256: string;
+            /** Created At */
+            created_at: string | null;
+            /** Decided At */
+            decided_at: string | null;
+            /** Decision Note */
+            decision_note: string;
+            /** Docx Sha256 */
+            docx_sha256: string | null;
+            /** Facts Used */
+            facts_used: string[];
+            /** Generator */
+            generator: string;
+            /** Guard */
+            guard: {
+                [key: string]: unknown;
+            };
+            /** Has Docx */
+            has_docx: boolean;
+            /** Has Pdf */
+            has_pdf: boolean;
+            /** Id */
+            id: string;
+            /** Job Id */
+            job_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "resume" | "cover_letter";
+            /** Llm */
+            llm: string;
+            /** Llm Report */
+            llm_report: {
+                [key: string]: unknown;
+            };
+            /** Pdf Sha256 */
+            pdf_sha256: string | null;
+            /** Profile Sha256 */
+            profile_sha256: string;
+            /** Render Warnings */
+            render_warnings: string[];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "approved" | "rejected" | "superseded";
+            /** Text */
+            text: string;
+            /** Version */
+            version: number;
+        };
+        /** MaterialOut */
+        MaterialOut: {
+            /** Application Id */
+            application_id: string;
+            /** Content Sha256 */
+            content_sha256: string;
+            /** Created At */
+            created_at: string | null;
+            /** Decided At */
+            decided_at: string | null;
+            /** Decision Note */
+            decision_note: string;
+            /** Docx Sha256 */
+            docx_sha256: string | null;
+            /** Generator */
+            generator: string;
+            /** Has Docx */
+            has_docx: boolean;
+            /** Has Pdf */
+            has_pdf: boolean;
+            /** Id */
+            id: string;
+            /** Job Id */
+            job_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "resume" | "cover_letter";
+            /** Llm */
+            llm: string;
+            /** Pdf Sha256 */
+            pdf_sha256: string | null;
+            /** Profile Sha256 */
+            profile_sha256: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "approved" | "rejected" | "superseded";
+            /** Version */
+            version: number;
+        };
         /** NoteIn */
         NoteIn: {
             /**
@@ -1088,6 +1497,78 @@ export interface components {
              * @default
              */
             note: string;
+        };
+        /** ProfileFactOut */
+        ProfileFactOut: {
+            /** Category */
+            category: string;
+            /** Data */
+            data: {
+                [key: string]: unknown;
+            };
+            /** Id */
+            id: string;
+            /** Key */
+            key: string;
+            /** Provenance */
+            provenance: string;
+            /** Source */
+            source: string;
+            /** Updated At */
+            updated_at: string | null;
+            /** Verified */
+            verified: boolean;
+            /** Verified At */
+            verified_at: string | null;
+        };
+        /** ProfileImportIn */
+        ProfileImportIn: {
+            /** Content */
+            content: string;
+            /**
+             * Filename
+             * @default
+             */
+            filename: string;
+            /**
+             * Format
+             * @enum {string}
+             */
+            format: "yaml" | "json" | "resume_text";
+        };
+        /** ProfileImportOut */
+        ProfileImportOut: {
+            /** Created */
+            created: number;
+            /** Keys */
+            keys: string[];
+            /** Unchanged */
+            unchanged: number;
+            /** Unverified */
+            unverified: number;
+            /** Updated */
+            updated: number;
+            /** Verified */
+            verified: number;
+            /** Warnings */
+            warnings: string[];
+        };
+        /** ProfileOut */
+        ProfileOut: {
+            /** Categories */
+            categories: string[];
+            /** Facts */
+            facts: components["schemas"]["ProfileFactOut"][];
+            /** Missing */
+            missing: string[];
+            /** Ready */
+            ready: boolean;
+            /** Total */
+            total: number;
+            /** Unverified */
+            unverified: number;
+            /** Verified */
+            verified: number;
         };
         /** QuietHoursOut */
         QuietHoursOut: {
@@ -1212,6 +1693,8 @@ export interface components {
              * @constant
              */
             live_submission_locked: true;
+            /** Materials */
+            materials: components["schemas"]["MaterialOut"][];
             /** Reason Code */
             reason_code: string;
             /** Resolved At */
@@ -1920,6 +2403,68 @@ export interface operations {
             };
         };
     };
+    job_materials_api_jobs__job_id__materials_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobMaterialsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_job_materials_api_jobs__job_id__materials_generate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobMaterialsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     kill_switch_api_kill_switch_get: {
         parameters: {
             query?: never;
@@ -1960,6 +2505,326 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KillSwitchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    material_api_materials__material_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_api_materials__material_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MaterialDecisionIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialActionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    material_file_api_materials__material_id__file__fmt__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+                fmt: "pdf" | "docx";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_api_materials__material_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MaterialDecisionIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialActionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profile_api_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileOut"];
+                };
+            };
+        };
+    };
+    create_fact_api_profile_facts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FactCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileFactOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_fact_api_profile_facts__fact_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FactEditIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileFactOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_fact_api_profile_facts__fact_id__remove_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactRemovedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_fact_api_profile_facts__fact_id__verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FactVerifyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileFactOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_profile_api_profile_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileImportIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileImportOut"];
                 };
             };
             /** @description Validation Error */

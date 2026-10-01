@@ -4,12 +4,21 @@ import type {
   AuthCheck,
   Backups,
   Cycle,
+  FactCategory,
+  FactRemoved,
   FormPreview,
   Health,
   Job,
   JobDetail,
+  JobMaterials,
   KillSwitch,
   KillSwitchRequest,
+  MaterialAction,
+  MaterialDetail,
+  Profile,
+  ProfileFact,
+  ProfileImport,
+  ProfileImportResult,
   ReviewAction,
   ReviewResolution,
   ReviewTask,
@@ -160,6 +169,21 @@ export function createClient(getConfig: () => ClientConfig, fetchImpl: FetchLike
     setKillSwitch: (body: KillSwitchRequest) => post<KillSwitch>("/api/kill-switch", body),
 
     backups: () => request<Backups>("/api/backups"),
+
+    profile: () => request<Profile>("/api/profile"),
+    importProfile: (body: ProfileImport) => post<ProfileImportResult>("/api/profile/import", body),
+    addFact: (category: FactCategory, data: Record<string, unknown>, verified = false) =>
+      post<ProfileFact>("/api/profile/facts", { category, data, verified }),
+    editFact: (id: string, data: Record<string, unknown>, verified = false) =>
+      request<ProfileFact>(`/api/profile/facts/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ data, verified }) }),
+    verifyFact: (id: string, verified: boolean) => post<ProfileFact>(`/api/profile/facts/${encodeURIComponent(id)}/verify`, { verified }),
+    removeFact: (id: string) => post<FactRemoved>(`/api/profile/facts/${encodeURIComponent(id)}/remove`),
+
+    jobMaterials: (jobId: string) => request<JobMaterials>(`/api/jobs/${encodeURIComponent(jobId)}/materials`),
+    generateMaterials: (jobId: string) => request<JobMaterials>(`/api/jobs/${encodeURIComponent(jobId)}/materials/generate`, { method: "POST" }, 60000),
+    material: (id: string) => request<MaterialDetail>(`/api/materials/${encodeURIComponent(id)}`),
+    approveMaterial: (id: string, note = "") => post<MaterialAction>(`/api/materials/${encodeURIComponent(id)}/approve`, { note }),
+    rejectMaterial: (id: string, note = "") => post<MaterialAction>(`/api/materials/${encodeURIComponent(id)}/reject`, { note }),
   };
 }
 
