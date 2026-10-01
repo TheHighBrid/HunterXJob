@@ -57,4 +57,6 @@ npm run start
 ./scripts/test-all.sh
 ```
 
-The script runs backend preflight/syntax/tests, v2 preflight/syntax/tests, and mobile typecheck when `node_modules` exists.
+The script runs backend syntax/tests, v2 syntax/tests, and the mobile typecheck, then prints a PASS/FAIL summary and exits non-zero if any step failed. It expects `backend/.venv` (Python 3.11), `v2/.venv` (Python 3.12+), and `mobile/node_modules` (`cd mobile && npm ci`) to exist.
+
+CI mirrors this: `.github/workflows/v2-tests.yml` covers `v2/`, and `.github/workflows/validate.yml` covers `backend/` and `mobile/`.

@@ -15,6 +15,11 @@ __pycache__/
 *.db
 backend/data/*.db
 
+# v2 local runtime state (created by ./hunterx doctor/start)
+v2/data/
+v2/logs/
+v2/run/
+
 # Node / Expo
 node_modules/
 .expo/
