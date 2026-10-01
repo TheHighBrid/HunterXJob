@@ -9,9 +9,11 @@ export const LIVE_SUBMISSION_COPY =
 
 /** Engaging is always allowed. Disengaging needs an explicit confirmation. */
 export function killSwitchRequest(engage: boolean, confirmed: boolean, note = "") {
-  if (engage) return { engaged: true, confirm: false, note: note || "engaged from the phone" } satisfies KillSwitchRequest;
-  if (!confirmed) return null;
-  return { engaged: false, confirm: true, note: note || "disengaged from the phone" } satisfies KillSwitchRequest;
+  if (!engage && !confirmed) return null;
+  const request: KillSwitchRequest = engage
+    ? { engaged: true, confirm: false, note: note || "engaged from the phone" }
+    : { engaged: false, confirm: true, note: note || "disengaged from the phone" };
+  return request;
 }
 
 export const REVIEW_ACTION_COPY = {

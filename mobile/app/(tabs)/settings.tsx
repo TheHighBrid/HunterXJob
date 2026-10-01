@@ -188,7 +188,9 @@ function BackupsCard({ backups }: { backups: Backups }) {
 
 type Message = { tone: "info" | "danger"; text: string };
 
-function useSettingsEditor(resource: ReturnType<typeof useApiResource<SettingsData>>) {
+/** Loads settings + backups and keeps an editable form in sync with them. */
+function useSettingsEditor() {
+  const resource = useApiResource(loadSettings);
   const { data, setData } = resource;
   const [form, setForm] = useState<SettingsForm | null>(null);
   const [saving, setSaving] = useState(false);
@@ -221,14 +223,12 @@ function useSettingsEditor(resource: ReturnType<typeof useApiResource<SettingsDa
   function discard() {
     if (data) setForm(settingsToForm(data.settings));
   }
-  return { form, set, dirty, saving, message, save, discard };
+  return { ...resource, form, set, dirty, saving, message, save, discard };
 }
 
 export default function SettingsScreen() {
   const theme = useTheme();
-  const resource = useApiResource(loadSettings);
-  const { data, loading, refreshing, error, refresh, reload } = resource;
-  const { form, set, dirty, saving, message, save, discard } = useSettingsEditor(resource);
+  const { data, loading, refreshing, error, refresh, reload, form, set, dirty, saving, message, save, discard } = useSettingsEditor();
 
   if (loading && !data) return <ScreenContainer><LoadingView /></ScreenContainer>;
   if (!data || !form) {
