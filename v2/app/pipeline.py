@@ -270,25 +270,11 @@ def execute_apply(db: Session, settings: Settings, application_id: str, html: st
     application.stage = PipelineStage.validated.value
     transition(db, job, PipelineStage.validated, "dry-run validation passed")
 
-    live_allowed = (
-        settings.application_mode == "autonomous"
-        and settings.allow_live_submission
-        and info.maturity is AdapterMaturity.certified_autonomous
-        and is_enabled(db, "allow_live_submission")
-        and is_enabled(db, "unattended_mode")
-    )
-    if live_allowed:
-        record_evidence(
-            db,
-            application,
-            kind="submission",
-            confirmation_text="live submission attempted without certification",
-            final_url=job.url,
-            payload=filled,
-            adapter_name=platform,
-        )
-        return {"status": application.stage, "application_id": application.id}
-
+    # This pipeline only resolves and validates forms. It does not invoke a
+    # platform adapter's submit operation, so it must never create submission
+    # evidence merely because configuration flags say live submission is allowed.
+    # A future certified adapter must perform the real submission and collect
+    # confirmation evidence before the application can enter submitted/confirmed.
     record_evidence(
         db,
         application,
