@@ -60,16 +60,34 @@ def test_unicode_blacklist_and_keyword_normalization_is_not_empty():
     assert blacklisted.vetoes == ("blacklisted_company",)
 
 
+SUBSTANTIVE_FRAUD_DESCRIPTION = (
+    "Investigate transaction alerts, review fraud cases, document evidence, follow compliance procedures, "
+    "communicate findings to internal teams, and support accurate case resolution for customers "
+    "across card, deposit, and online banking channels."
+)
+THIN_FRAUD_DESCRIPTION = "Investigate fraud alerts and document evidence for the operations team."
+
+
 def test_threshold_only_review_has_accurate_reason():
-    # Keep the description substantive so this test isolates threshold behavior.
+    # The description must clear the 25-word evidence floor so this test
+    # isolates threshold behavior instead of tripping the thin-description flag.
     report = evaluate_job(
-        JobFacts(title="Fraud Analyst", company="Example", location="Ottawa", description=("Investigate transaction alerts, review fraud cases, document evidence, follow compliance procedures, "
-                                                                                              "communicate findings to internal teams, and support accurate case resolution for customers.")),
+        JobFacts(title="Fraud Analyst", company="Example", location="Ottawa", description=SUBSTANTIVE_FRAUD_DESCRIPTION),
         DecisionContext(target_locations=("Ottawa",), target_keywords=("fraud",), shortlist_threshold=99.0),
     )
     assert report.decision is Decision.REVIEW
     assert report.review_flags == ()
     assert report.reason == "below shortlist threshold"
+
+
+def test_thin_description_routes_to_review_even_when_threshold_is_met():
+    report = evaluate_job(
+        JobFacts(title="Fraud Analyst", company="Example", location="Ottawa", description=THIN_FRAUD_DESCRIPTION),
+        DecisionContext(target_locations=("Ottawa",), target_keywords=("fraud",), shortlist_threshold=0.0),
+    )
+    assert report.decision is Decision.REVIEW
+    assert report.review_flags == ("job description is too thin for a confident decision",)
+    assert report.reason == "eligible with review flags"
 
 
 def test_sensitive_answer_requires_explicit_provenance():
