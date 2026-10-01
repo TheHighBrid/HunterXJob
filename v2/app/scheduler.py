@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
-from datetime import datetime, time, timezone
+from datetime import UTC, datetime, time, tzinfo
+from functools import lru_cache
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -9,7 +12,9 @@ from sqlalchemy.orm import Session
 from app.adapter_runtime import ADAPTER_CATALOG, detect_platform
 from app.config import Settings
 from app.flags import is_enabled, kill_switch_engaged
-from app.models import AdapterMaturity, Application, Job, PipelineStage, utcnow
+from app.models import AdapterMaturity, Application, Job, PipelineEvent, PipelineStage
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -34,8 +39,38 @@ def in_quiet_hours(now: datetime, start: str, end: str) -> bool:
     return current >= start_t or current < end_t
 
 
-def submissions_today(db: Session) -> int:
-    start = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+@lru_cache(maxsize=8)
+def _zone(name: str) -> tzinfo:
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        logger.warning("unknown TIMEZONE %r; using UTC", name)
+        return UTC
+
+
+def local_now(settings: Settings, now: datetime | None = None) -> datetime:
+    """``now`` (default: current time) in the configured TIMEZONE."""
+    return (now or datetime.now(UTC)).astimezone(_zone(settings.timezone))
+
+
+def day_start_utc(settings: Settings, now: datetime | None = None) -> datetime:
+    """Start of the current local day (TIMEZONE), expressed in UTC."""
+    local = local_now(settings, now)
+    return local.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(UTC)
+
+
+def dry_runs_today(db: Session, since: datetime) -> int:
+    """Dry-run attempts that reached the form since ``since`` (manual or scheduled)."""
+    return int(db.execute(
+        select(func.count(PipelineEvent.id)).where(
+            PipelineEvent.to_stage == PipelineStage.applying.value,
+            PipelineEvent.created_at >= since,
+        )
+    ).scalar_one())
+
+
+def submissions_today(db: Session, since: datetime | None = None) -> int:
+    start = since or datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     return int(db.execute(
         select(func.count(Application.id)).where(
             Application.stage.in_([PipelineStage.submitted.value, PipelineStage.confirmed.value]),
@@ -45,7 +80,7 @@ def submissions_today(db: Session) -> int:
 
 
 def can_run_unattended(db: Session, settings: Settings, job: Job | None = None, now: datetime | None = None) -> SchedulerDecision:
-    now = now or datetime.now(timezone.utc)
+    now = local_now(settings, now)
     if kill_switch_engaged(db):
         return SchedulerDecision(False, "global kill switch")
     if not settings.automation_enabled:
@@ -54,7 +89,7 @@ def can_run_unattended(db: Session, settings: Settings, job: Job | None = None, 
         return SchedulerDecision(False, "unattended mode disabled")
     if in_quiet_hours(now, settings.quiet_hours_start, settings.quiet_hours_end):
         return SchedulerDecision(False, "quiet hours")
-    if submissions_today(db) >= settings.max_applications_per_day:
+    if submissions_today(db, day_start_utc(settings, now)) >= settings.max_applications_per_day:
         return SchedulerDecision(False, "daily cap reached")
     if job is not None:
         platform = job.platform or detect_platform(job.url)

@@ -49,6 +49,7 @@ install_app() {
 
   echo "[4/5] Creating configuration"
   [ -f .env ] || cp .env.example .env
+  ensure_api_key
 
   echo "[5/5] Verifying installation"
   .venv/bin/python -c "import app, fastapi, sqlalchemy, httpx; print('Python imports OK')"
@@ -57,10 +58,42 @@ install_app() {
   echo "Install complete. Run: ./hunterx doctor"
 }
 
-start_app() {
+ensure_api_key() {
+  local key
+  if [ -z "$(env_value API_KEY '')" ]; then
+    key="$(.venv/bin/python -m app.cli api-key)"
+    if grep -q '^API_KEY=' .env; then
+      sed -i "s|^API_KEY=.*|API_KEY=${key}|" .env
+    else
+      printf '\nAPI_KEY=%s\n' "$key" >> .env
+    fi
+    echo "Generated a random API_KEY in .env. Send it as the X-API-Key header (mobile app: Settings > API key)."
+  fi
+  chmod 600 .env
+}
+
+preflight() {
   [ -x .venv/bin/python ] || { echo "Installation incomplete. Run ./hunterx install"; exit 1; }
   [ -f .env ] || { echo "Missing .env. Run ./hunterx install"; exit 1; }
   .venv/bin/python -c "import app, uvicorn" >/dev/null 2>&1 || { echo "Installation is broken. Run ./hunterx install"; exit 1; }
+  local detail
+  if ! detail="$(.venv/bin/python -m app.cli check-auth 2>&1)"; then
+    case "$detail" in
+      *"loopback requests only"*) ;;
+      *) echo "WARNING: API authentication is not configured ($detail); every request except /api/health will be refused. Run ./hunterx api-key and set API_KEY in .env." ;;
+    esac
+  fi
+  .venv/bin/python -m app.cli migrate
+}
+
+serve_app() {
+  # Foreground server for systemd / Termux:Boot (no pid file, logs to stdout).
+  preflight
+  exec .venv/bin/python -m uvicorn app.main:app --host "$(env_value HOST 127.0.0.1)" --port "$(env_value PORT 8011)"
+}
+
+start_app() {
+  preflight
 
   if [ -f run/api.pid ] && kill -0 "$(cat run/api.pid)" 2>/dev/null; then
     echo "HunterXJob v2 already running"
@@ -161,6 +194,39 @@ PY
     fi
   fi
 
+  if [ -x .venv/bin/python ] && [ -f .env ]; then
+    auth_rc=0
+    auth_detail="$(.venv/bin/python -m app.cli check-auth 2>&1)" || auth_rc=$?
+    case "$auth_rc" in
+      0) echo "API auth         OK (${auth_detail})" ;;
+      2) echo "API auth         WARN (${auth_detail})" ;;
+      *) echo "API auth         FAIL (${auth_detail}; run ./hunterx api-key and set API_KEY in .env)"; failures=$((failures+1)) ;;
+    esac
+    env_mode="$(stat -c %a .env 2>/dev/null || echo unknown)"
+    case "$env_mode" in
+      600|400) echo "Secrets file     OK (.env mode ${env_mode})" ;;
+      *) echo "Secrets file     WARN (.env mode ${env_mode}; run chmod 600 .env)" ;;
+    esac
+    host="$(env_value HOST 127.0.0.1)"
+    case "$host" in
+      127.0.0.1|::1|localhost) echo "Network bind     OK (HOST=${host}; reach it through a tunnel or TLS reverse proxy)" ;;
+      *) echo "Network bind     WARN (HOST=${host} listens beyond this machine; use TLS and keep API_KEY set)" ;;
+    esac
+    if schema="$(.venv/bin/python -m app.cli schema 2>&1)"; then
+      echo "Database schema  OK (${schema})"
+    else
+      echo "Database schema  FAIL (${schema})"; failures=$((failures+1))
+    fi
+    continuous="$(env_value CONTINUOUS_RUN_ENABLED false | tr '[:upper:]' '[:lower:]')"
+    echo "Continuous run   INFO (CONTINUOUS_RUN_ENABLED=${continuous}, every $(env_value CYCLE_INTERVAL_MINUTES 60) min; dry-runs need AUTOMATION_ENABLED=true)"
+    backup_dir="$(env_value BACKUP_DIR ./data/backups)"
+    if mkdir -p "$backup_dir" 2>/dev/null && [ -w "$backup_dir" ]; then
+      echo "Backups          OK (${backup_dir}, keep $(env_value BACKUP_RETENTION 14), every $(env_value BACKUP_INTERVAL_HOURS 24)h while running)"
+    else
+      echo "Backups          FAIL (${backup_dir} is not writable)"; failures=$((failures+1))
+    fi
+  fi
+
   if command -v curl >/dev/null && curl -fsS http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
     echo "Local AI         OK"
   else
@@ -170,14 +236,50 @@ PY
   [ "$failures" -eq 0 ]
 }
 
+service_install() {
+  command -v systemctl >/dev/null 2>&1 || { echo "systemctl not found. On Termux use: ./hunterx boot-install"; exit 1; }
+  local unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+  mkdir -p "$unit_dir"
+  sed "s|@HUNTERX_DIR@|${ROOT}|g" deploy/systemd/hunterxjob.service > "$unit_dir/hunterxjob.service"
+  systemctl --user daemon-reload
+  echo "Installed $unit_dir/hunterxjob.service"
+  echo "Next:"
+  echo "  ./hunterx doctor                      # must pass (API key set)"
+  echo "  systemctl --user enable --now hunterxjob"
+  echo "  sudo loginctl enable-linger \"\$USER\"   # start at boot without logging in"
+  echo "  journalctl --user -u hunterxjob -f    # logs"
+}
+
+boot_install() {
+  local boot_dir="$HOME/.termux/boot"
+  mkdir -p "$boot_dir"
+  sed "s|\$HOME/HunterXJob/v2|${ROOT}|" deploy/termux/hunterxjob-boot.sh > "$boot_dir/hunterxjob"
+  chmod 700 "$boot_dir/hunterxjob"
+  echo "Installed $boot_dir/hunterxjob (runs ./hunterx start after the phone boots; needs the Termux:Boot app)"
+}
+
+py_cli() {
+  [ -x .venv/bin/python ] || { echo "Installation incomplete. Run ./hunterx install"; exit 1; }
+  .venv/bin/python -m app.cli "$@"
+}
+
 case "$cmd" in
   install) install_app ;;
   start) start_app ;;
+  serve) serve_app ;;
+  service-install) service_install ;;
+  boot-install) boot_install ;;
+  backup) shift; py_cli backup "$@" ;;
+  backups) shift; py_cli backups "$@" ;;
+  migrate) py_cli migrate ;;
+  cycle) py_cli cycle ;;
+  api-key) py_cli api-key ;;
+  version) py_cli version ;;
   stop) stop_app ;;
   restart) stop_app; start_app ;;
   status) status_app ;;
   doctor) doctor_app ;;
   test) .venv/bin/pytest -q ;;
   logs) tail -n 100 -f logs/api.log ;;
-  *) echo "Usage: ./hunterx {install|start|stop|restart|status|doctor|test|logs}" ;;
+  *) echo "Usage: ./hunterx {install|start|serve|stop|restart|status|doctor|test|logs|backup [--keep N]|backups|migrate|cycle|api-key|version|service-install|boot-install}" ;;
 esac
