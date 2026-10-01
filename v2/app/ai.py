@@ -81,17 +81,3 @@ JOB REQUIREMENTS:
 """
         raw = self.generate(prompt, quality=False, json_mode=True)
         return json.loads(raw)
-
-    def draft_materials(self, compact_resume: str, job_text: str) -> dict[str, object]:
-        prompt = f"""Create truthful application materials using only the supplied facts.
-Return JSON only with keys: summary, resume_bullets, cover_letter, screening_answers.
-Do not invent dates, titles, certifications, employers, metrics, or skills.
-
-RESUME FACTS:
-{compact_resume[:6000]}
-
-JOB:
-{job_text[:7000]}
-"""
-        raw = self.generate(prompt, quality=True, json_mode=True)
-        return json.loads(raw)

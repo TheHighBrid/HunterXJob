@@ -30,7 +30,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from app.ai import LocalAI
@@ -38,8 +38,11 @@ from app.backup import create_backup, latest_backup_time
 from app.config import Settings
 from app.discovery import JobRecord, discover_all, upsert_jobs
 from app.flags import is_enabled, kill_switch_engaged, set_flag
-from app.models import Application, Job, PipelineStage, SchedulerCycle, iso_utc
-from app.pipeline import execute_apply, generate_materials, score_pending_jobs
+from app.material_store import MaterialsError
+from app.material_workflow import generate_for_application
+from app.models import Application, ApplicationMaterial, Job, PipelineStage, SchedulerCycle, iso_utc
+from app.pipeline import execute_apply, score_pending_jobs
+from app.profile import readiness, verified_profile
 from app.resume_facts import read_resume_facts
 from app.scheduler import day_start_utc, dry_runs_today, in_quiet_hours, local_now, submissions_today
 
@@ -277,15 +280,17 @@ class CycleRunner:
         return {"status": "ok", "processed": processed, "ai_used": ctx.ai_ok}
 
     def _prepare(self, db: Session, ctx: _Context) -> dict[str, Any]:
-        if not ctx.resume:
-            return _skipped("resume facts are not configured")
-        if not ctx.ai_ok:
-            return _skipped("local AI is unavailable")
+        # Materials come from verified profile facts (deterministic template;
+        # optional guarded LLM rewording), so the local AI is not required.
+        missing = readiness(verified_profile(db))
+        if missing:
+            return _skipped("profile is not ready: " + "; ".join(missing))
         if self.settings.cycle_max_prepare == 0:
             return _skipped("CYCLE_MAX_PREPARE=0")
+        has_materials = exists().where(ApplicationMaterial.application_id == Application.id)
         candidates = db.execute(
             select(Application).join(Job)
-            .where(Job.stage == PipelineStage.shortlisted.value, Application.cover_letter_text.is_(None))
+            .where(Job.stage == PipelineStage.shortlisted.value, ~has_materials)
             .order_by(Job.final_score.desc().nullslast())
             .limit(self.settings.cycle_max_prepare)
         ).scalars().all()
@@ -294,9 +299,14 @@ class CycleRunner:
             if kill_switch_engaged(db):
                 ctx.aborted = True
                 break
-            updated = generate_materials(db, self.settings, application.id, ctx.resume)
-            results.append({"application_id": updated.id, "stage": updated.stage, "error": updated.last_error})
-        return {"status": "ok", "prepared": results, "note": "materials await owner approval"}
+            try:
+                rows = generate_for_application(db, self.settings, application.id)
+            except MaterialsError as exc:
+                results.append({"application_id": application.id, "stage": application.stage, "error": exc.detail})
+                continue
+            results.append({"application_id": application.id, "stage": application.stage, "error": None,
+                            "materials": [row.id for row in rows]})
+        return {"status": "ok", "prepared": results, "note": "draft materials await owner approval"}
 
     def _dry_run_budget(self, db: Session) -> tuple[int, str | None]:
         s = self.settings

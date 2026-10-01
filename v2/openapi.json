@@ -509,6 +509,87 @@
         "title": "EventOut",
         "type": "object"
       },
+      "FactCreateIn": {
+        "properties": {
+          "category": {
+            "enum": [
+              "contact",
+              "summary",
+              "work_authorization",
+              "employment",
+              "education",
+              "skill",
+              "certification",
+              "language",
+              "project",
+              "achievement"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "data": {
+            "additionalProperties": true,
+            "title": "Data",
+            "type": "object"
+          },
+          "verified": {
+            "default": false,
+            "title": "Verified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "category",
+          "data"
+        ],
+        "title": "FactCreateIn",
+        "type": "object"
+      },
+      "FactEditIn": {
+        "properties": {
+          "data": {
+            "additionalProperties": true,
+            "title": "Data",
+            "type": "object"
+          },
+          "verified": {
+            "default": false,
+            "title": "Verified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "FactEditIn",
+        "type": "object"
+      },
+      "FactRemovedOut": {
+        "properties": {
+          "removed": {
+            "title": "Removed",
+            "type": "string"
+          }
+        },
+        "required": [
+          "removed"
+        ],
+        "title": "FactRemovedOut",
+        "type": "object"
+      },
+      "FactVerifyIn": {
+        "properties": {
+          "verified": {
+            "title": "Verified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "verified"
+        ],
+        "title": "FactVerifyIn",
+        "type": "object"
+      },
       "FlagIn": {
         "properties": {
           "confirm": {
@@ -994,6 +1075,10 @@
             ],
             "title": "Last Error"
           },
+          "materials_ready": {
+            "title": "Materials Ready",
+            "type": "boolean"
+          },
           "maturity": {
             "anyOf": [
               {
@@ -1031,6 +1116,7 @@
           "has_cover_letter",
           "id",
           "last_error",
+          "materials_ready",
           "maturity",
           "mode",
           "stage",
@@ -1233,6 +1319,76 @@
           "url"
         ],
         "title": "JobDetailOut",
+        "type": "object"
+      },
+      "JobMaterialsOut": {
+        "properties": {
+          "application_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Application Id"
+          },
+          "approved": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Approved",
+            "type": "object"
+          },
+          "can_generate": {
+            "title": "Can Generate",
+            "type": "boolean"
+          },
+          "generate_blockers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Generate Blockers",
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MaterialOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "job_stage": {
+            "title": "Job Stage",
+            "type": "string"
+          },
+          "live_submission_locked": {
+            "const": true,
+            "title": "Live Submission Locked",
+            "type": "boolean"
+          },
+          "llm_enabled": {
+            "title": "Llm Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "application_id",
+          "approved",
+          "can_generate",
+          "generate_blockers",
+          "items",
+          "job_id",
+          "job_stage",
+          "live_submission_locked",
+          "llm_enabled"
+        ],
+        "title": "JobMaterialsOut",
         "type": "object"
       },
       "JobOut": {
@@ -1520,6 +1676,346 @@
         "title": "LiveSubmissionOut",
         "type": "object"
       },
+      "MaterialActionOut": {
+        "properties": {
+          "application_stage": {
+            "title": "Application Stage",
+            "type": "string"
+          },
+          "job_stage": {
+            "title": "Job Stage",
+            "type": "string"
+          },
+          "material": {
+            "$ref": "#/components/schemas/MaterialOut"
+          },
+          "materials_ready": {
+            "title": "Materials Ready",
+            "type": "boolean"
+          },
+          "submitted": {
+            "const": false,
+            "title": "Submitted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "application_stage",
+          "job_stage",
+          "material",
+          "materials_ready",
+          "submitted"
+        ],
+        "title": "MaterialActionOut",
+        "type": "object"
+      },
+      "MaterialDecisionIn": {
+        "properties": {
+          "note": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "title": "MaterialDecisionIn",
+        "type": "object"
+      },
+      "MaterialDetailOut": {
+        "properties": {
+          "application_id": {
+            "title": "Application Id",
+            "type": "string"
+          },
+          "content_sha256": {
+            "title": "Content Sha256",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decision_note": {
+            "title": "Decision Note",
+            "type": "string"
+          },
+          "docx_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Docx Sha256"
+          },
+          "facts_used": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Facts Used",
+            "type": "array"
+          },
+          "generator": {
+            "title": "Generator",
+            "type": "string"
+          },
+          "guard": {
+            "additionalProperties": true,
+            "title": "Guard",
+            "type": "object"
+          },
+          "has_docx": {
+            "title": "Has Docx",
+            "type": "boolean"
+          },
+          "has_pdf": {
+            "title": "Has Pdf",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "resume",
+              "cover_letter"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "llm": {
+            "title": "Llm",
+            "type": "string"
+          },
+          "llm_report": {
+            "additionalProperties": true,
+            "title": "Llm Report",
+            "type": "object"
+          },
+          "pdf_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pdf Sha256"
+          },
+          "profile_sha256": {
+            "title": "Profile Sha256",
+            "type": "string"
+          },
+          "render_warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Render Warnings",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "approved",
+              "rejected",
+              "superseded"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "application_id",
+          "content_sha256",
+          "created_at",
+          "decided_at",
+          "decision_note",
+          "docx_sha256",
+          "facts_used",
+          "generator",
+          "guard",
+          "has_docx",
+          "has_pdf",
+          "id",
+          "job_id",
+          "kind",
+          "llm",
+          "llm_report",
+          "pdf_sha256",
+          "profile_sha256",
+          "render_warnings",
+          "status",
+          "text",
+          "version"
+        ],
+        "title": "MaterialDetailOut",
+        "type": "object"
+      },
+      "MaterialOut": {
+        "properties": {
+          "application_id": {
+            "title": "Application Id",
+            "type": "string"
+          },
+          "content_sha256": {
+            "title": "Content Sha256",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decision_note": {
+            "title": "Decision Note",
+            "type": "string"
+          },
+          "docx_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Docx Sha256"
+          },
+          "generator": {
+            "title": "Generator",
+            "type": "string"
+          },
+          "has_docx": {
+            "title": "Has Docx",
+            "type": "boolean"
+          },
+          "has_pdf": {
+            "title": "Has Pdf",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "resume",
+              "cover_letter"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "llm": {
+            "title": "Llm",
+            "type": "string"
+          },
+          "pdf_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pdf Sha256"
+          },
+          "profile_sha256": {
+            "title": "Profile Sha256",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "approved",
+              "rejected",
+              "superseded"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "application_id",
+          "content_sha256",
+          "created_at",
+          "decided_at",
+          "decision_note",
+          "docx_sha256",
+          "generator",
+          "has_docx",
+          "has_pdf",
+          "id",
+          "job_id",
+          "kind",
+          "llm",
+          "pdf_sha256",
+          "profile_sha256",
+          "status",
+          "version"
+        ],
+        "title": "MaterialOut",
+        "type": "object"
+      },
       "NoteIn": {
         "properties": {
           "note": {
@@ -1530,6 +2026,206 @@
           }
         },
         "title": "NoteIn",
+        "type": "object"
+      },
+      "ProfileFactOut": {
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "data": {
+            "additionalProperties": true,
+            "title": "Data",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "provenance": {
+            "title": "Provenance",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "verified": {
+            "title": "Verified",
+            "type": "boolean"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          }
+        },
+        "required": [
+          "category",
+          "data",
+          "id",
+          "key",
+          "provenance",
+          "source",
+          "updated_at",
+          "verified",
+          "verified_at"
+        ],
+        "title": "ProfileFactOut",
+        "type": "object"
+      },
+      "ProfileImportIn": {
+        "properties": {
+          "content": {
+            "maxLength": 200000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "filename": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Filename",
+            "type": "string"
+          },
+          "format": {
+            "enum": [
+              "yaml",
+              "json",
+              "resume_text"
+            ],
+            "title": "Format",
+            "type": "string"
+          }
+        },
+        "required": [
+          "format",
+          "content"
+        ],
+        "title": "ProfileImportIn",
+        "type": "object"
+      },
+      "ProfileImportOut": {
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "integer"
+          },
+          "keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Keys",
+            "type": "array"
+          },
+          "unchanged": {
+            "title": "Unchanged",
+            "type": "integer"
+          },
+          "unverified": {
+            "title": "Unverified",
+            "type": "integer"
+          },
+          "updated": {
+            "title": "Updated",
+            "type": "integer"
+          },
+          "verified": {
+            "title": "Verified",
+            "type": "integer"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "created",
+          "keys",
+          "unchanged",
+          "unverified",
+          "updated",
+          "verified",
+          "warnings"
+        ],
+        "title": "ProfileImportOut",
+        "type": "object"
+      },
+      "ProfileOut": {
+        "properties": {
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/ProfileFactOut"
+            },
+            "title": "Facts",
+            "type": "array"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "unverified": {
+            "title": "Unverified",
+            "type": "integer"
+          },
+          "verified": {
+            "title": "Verified",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "categories",
+          "facts",
+          "missing",
+          "ready",
+          "total",
+          "unverified",
+          "verified"
+        ],
+        "title": "ProfileOut",
         "type": "object"
       },
       "QuietHoursOut": {
@@ -1918,6 +2614,13 @@
             "title": "Live Submission Locked",
             "type": "boolean"
           },
+          "materials": {
+            "items": {
+              "$ref": "#/components/schemas/MaterialOut"
+            },
+            "title": "Materials",
+            "type": "array"
+          },
           "reason_code": {
             "title": "Reason Code",
             "type": "string"
@@ -1967,6 +2670,7 @@
           "job_id",
           "job_title",
           "live_submission_locked",
+          "materials",
           "reason_code",
           "resolved_at",
           "status",
@@ -2806,7 +3510,7 @@
   },
   "info": {
     "title": "HunterXJob v2",
-    "version": "0.4.0"
+    "version": "0.5.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -2998,6 +3702,7 @@
     },
     "/api/applications/{application_id}/generate": {
       "post": {
+        "description": "Draft a r\u00e9sum\u00e9 and cover letter from verified profile facts (needs owner approval).",
         "operationId": "generate_api_applications__application_id__generate_post",
         "parameters": [
           {
@@ -3420,6 +4125,91 @@
         ]
       }
     },
+    "/api/jobs/{job_id}/materials": {
+      "get": {
+        "operationId": "job_materials_api_jobs__job_id__materials_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobMaterialsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Job Materials",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/jobs/{job_id}/materials/generate": {
+      "post": {
+        "description": "Create new DRAFT versions from verified facts. Approved versions are kept; nothing is attached or sent.",
+        "operationId": "generate_job_materials_api_jobs__job_id__materials_generate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobMaterialsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate Job Materials",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
     "/api/kill-switch": {
       "get": {
         "operationId": "kill_switch_api_kill_switch_get",
@@ -3478,6 +4268,469 @@
         "summary": "Set Kill Switch",
         "tags": [
           "remote"
+        ]
+      }
+    },
+    "/api/materials/{material_id}": {
+      "get": {
+        "operationId": "material_api_materials__material_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Material",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/materials/{material_id}/approve": {
+      "post": {
+        "description": "Approve this draft version. Only approved versions can ever be attached to a form.",
+        "operationId": "approve_api_materials__material_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/MaterialDecisionIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialActionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/materials/{material_id}/file/{fmt}": {
+      "get": {
+        "operationId": "material_file_api_materials__material_id__file__fmt__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "title": "Material Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "fmt",
+            "required": true,
+            "schema": {
+              "enum": [
+                "pdf",
+                "docx"
+              ],
+              "title": "Fmt",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/pdf": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Material File",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/materials/{material_id}/reject": {
+      "post": {
+        "operationId": "reject_api_materials__material_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/MaterialDecisionIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialActionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/profile": {
+      "get": {
+        "operationId": "profile_api_profile_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Profile",
+        "tags": [
+          "profile"
+        ]
+      }
+    },
+    "/api/profile/facts": {
+      "post": {
+        "operationId": "create_fact_api_profile_facts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FactCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileFactOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Fact",
+        "tags": [
+          "profile"
+        ]
+      }
+    },
+    "/api/profile/facts/{fact_id}": {
+      "put": {
+        "description": "Replace a fact's content. It becomes unverified unless ``verified`` is true in the same request.",
+        "operationId": "update_fact_api_profile_facts__fact_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fact_id",
+            "required": true,
+            "schema": {
+              "title": "Fact Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FactEditIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileFactOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Fact",
+        "tags": [
+          "profile"
+        ]
+      }
+    },
+    "/api/profile/facts/{fact_id}/remove": {
+      "post": {
+        "operationId": "delete_fact_api_profile_facts__fact_id__remove_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fact_id",
+            "required": true,
+            "schema": {
+              "title": "Fact Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FactRemovedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Fact",
+        "tags": [
+          "profile"
+        ]
+      }
+    },
+    "/api/profile/facts/{fact_id}/verify": {
+      "post": {
+        "operationId": "verify_fact_api_profile_facts__fact_id__verify_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fact_id",
+            "required": true,
+            "schema": {
+              "title": "Fact Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FactVerifyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileFactOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Fact",
+        "tags": [
+          "profile"
+        ]
+      }
+    },
+    "/api/profile/import": {
+      "post": {
+        "description": "Import a YAML/JSON profile, or pasted r\u00e9sum\u00e9 text (always imported UNVERIFIED).",
+        "operationId": "import_profile_api_profile_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileImportIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileImportOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Profile",
+        "tags": [
+          "profile"
         ]
       }
     },

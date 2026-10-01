@@ -1,0 +1,27 @@
+Avery Quinn
+Ottawa, ON | +1 613 555 0142 | avery.quinn@example.com | linkedin.com/in/avery-quinn-example
+
+SUMMARY
+Bilingual fraud and disputes analyst with 7 years in Canadian banking and payments.
+
+EXPERIENCE
+Senior Fraud Analyst | Northwind Credit Union | Ottawa, ON
+Apr 2022 – Present
+• Cut false-positive fraud alerts by 32% by redesigning card-transaction rules in SQL
+• Led weekly AML case reviews for a team of 6 analysts
+
+Disputes Analyst, Lakeshore Payments Inc., Toronto, ON
+06/2019 - 03/2022
+- Resolved 1,800 chargeback disputes with a 96% win rate on documented cases
+
+EDUCATION
+Bachelor of Commerce, Finance — Capital City University, 2017
+
+SKILLS
+Fraud detection, AML, KYC, SQL, Python, Excel
+
+CERTIFICATIONS
+Fraud Prevention Fundamentals — Example Training Institute (2021)
+
+LANGUAGES
+English (Native), French (Professional working)

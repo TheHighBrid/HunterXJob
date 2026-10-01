@@ -90,6 +90,7 @@ v2_syntax() {
 v2_tests() {
   require_python_module "$V2_TEST_PYTHON" pytest "cd v2 && $V2_PYTHON -m venv .venv && .venv/bin/pip install -e '.[test]'" &&
     require_python_module "$V2_TEST_PYTHON" pydantic "cd v2 && $V2_PYTHON -m venv .venv && .venv/bin/pip install -e '.[test]'" &&
+    require_python_module "$V2_TEST_PYTHON" reportlab "cd v2 && .venv/bin/pip install -e '.[test]'" &&
     cd "$V2_DIR" && "$V2_TEST_PYTHON" -m pytest -q
 }
 

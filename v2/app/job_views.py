@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.material_store import materials_ready
 from app.models import Application, Job, PipelineEvent, ReviewTask, iso_utc
 from app.review_actions import task_summary
 
@@ -148,6 +149,7 @@ def job_detail(db: Session, job: Job) -> dict[str, Any]:
             "attempts": application.attempts, "last_error": application.last_error,
             "adapter": application.adapter_name, "maturity": application.adapter_maturity,
             "has_cover_letter": bool(application.cover_letter_text),
+            "materials_ready": materials_ready(db, application),
             "updated_at": iso_utc(application.updated_at),
         },
         "form_status": form_status(application, open_tasks),

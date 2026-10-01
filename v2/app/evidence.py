@@ -46,8 +46,11 @@ def record_evidence(
     payload: dict[str, Any] | None = None,
     adapter_name: str | None = None,
     adapter_version: str = "2.0.0",
+    update_application: bool = True,
 ) -> SubmissionEvidence:
-    sufficient = evidence_is_sufficient(
+    # Only a submission can ever count as confirmed; dry-run and materials
+    # entries are ledger records, never proof that anything was sent.
+    sufficient = kind == "submission" and evidence_is_sufficient(
         confirmation_text=confirmation_text,
         candidate_id=candidate_id,
         final_url=final_url,
@@ -66,6 +69,16 @@ def record_evidence(
         adapter_version=adapter_version,
     )
     db.add(row)
+    if update_application:
+        _update_application(application, kind, sufficient, final_url, confirmation_text, candidate_id)
+        db.add(application)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def _update_application(application: Application, kind: str, sufficient: bool, final_url: str | None,
+                        confirmation_text: str | None, candidate_id: str | None) -> None:
     application.confirmation_json = json.dumps({
         "kind": kind,
         "sufficient": sufficient,
@@ -74,11 +87,4 @@ def record_evidence(
         "candidate_id": candidate_id,
     })
     if kind == "submission":
-        if sufficient:
-            application.stage = PipelineStage.submitted.value
-        else:
-            application.stage = PipelineStage.submission_uncertain.value
-    db.add(application)
-    db.commit()
-    db.refresh(row)
-    return row
+        application.stage = PipelineStage.submitted.value if sufficient else PipelineStage.submission_uncertain.value

@@ -10,6 +10,12 @@ import { useTheme } from "@/theme";
 export default function RootLayout() {
   const scheme = useColorScheme();
   const theme = useTheme();
+  const pushed = {
+    headerShown: true,
+    headerStyle: { backgroundColor: theme.surface },
+    headerTintColor: theme.text,
+    headerShadowVisible: false,
+  };
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -28,6 +34,8 @@ export default function RootLayout() {
               headerTintColor: theme.text,
             }}
           />
+          <Stack.Screen name="profile" options={{ ...pushed, title: "Profile" }} />
+          <Stack.Screen name="materials/[id]" options={{ ...pushed, title: "Materials" }} />
         </Stack>
       </SafeAreaProvider>
     </GestureHandlerRootView>

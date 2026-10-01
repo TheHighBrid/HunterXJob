@@ -19,6 +19,7 @@ REASON_CODES = frozenset({
     "liveness_review",
     "form_fetch_failed",
     "form_unavailable",
+    "materials_review",
 })
 
 
@@ -31,7 +32,9 @@ def open_task(
     application: Application | None = None,
     job: Job | None = None,
     url: str | None = None,
+    hold: bool = True,
 ) -> ReviewTask:
+    """Open a review task. With ``hold`` (default) the job/application move to needs_review."""
     if reason_code not in REASON_CODES:
         reason_code = "ambiguous_question"
     task = ReviewTask(
@@ -44,6 +47,10 @@ def open_task(
         status="open",
     )
     db.add(task)
+    if not hold:
+        db.commit()
+        db.refresh(task)
+        return task
     if application is not None:
         application.stage = PipelineStage.needs_review.value
         db.add(application)

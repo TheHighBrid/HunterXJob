@@ -135,8 +135,12 @@ def main(argv: list[str] | None = None) -> int:
             command.add_argument("--check", action="store_true", help="exit 1 if the snapshot is out of date")
         if name == "backup":
             command.add_argument("--keep", type=int, help="number of backups to keep (default: BACKUP_RETENTION)")
+    from app.cli_profile import register
+
+    register(sub)
     args = parser.parse_args(argv)
-    return COMMANDS[args.command][0](args)
+    handler = getattr(args, "handler", None) or COMMANDS[args.command][0]
+    return handler(args)
 
 
 if __name__ == "__main__":

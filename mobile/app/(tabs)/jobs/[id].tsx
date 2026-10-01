@@ -144,8 +144,9 @@ function OpenTasksCard({ tasks }: { tasks: JobDetail["review_tasks"] }) {
   );
 }
 
-function ApplicationCard({ application }: { application: JobDetail["application"] }) {
+function ApplicationCard({ application, jobId }: { application: JobDetail["application"]; jobId: string }) {
   const theme = useTheme();
+  const router = useRouter();
   if (!application) return null;
   return (
     <Card title="Application">
@@ -153,7 +154,11 @@ function ApplicationCard({ application }: { application: JobDetail["application"
       <Row label="Mode" value={humanize(application.mode)} />
       <Row label="Adapter" value={`${application.adapter ?? "—"} (${humanize(application.maturity)})`} />
       <Row label="Attempts" value={String(application.attempts)} />
-      <Row label="Cover letter" value={application.has_cover_letter ? "Drafted" : "Not yet"} />
+      <Row label="Approved materials" value={application.materials_ready ? "Résumé approved" : "Not yet"} valueColor={application.materials_ready ? theme.success : theme.textMuted} />
+      <Row label="Cover letter" value={application.has_cover_letter ? "Approved" : "None approved"} />
+      <PrimaryButton title="Résumé & cover letter ›" variant="secondary" onPress={() => {
+        router.push({ pathname: "/materials/[id]", params: { id: jobId } });
+      }} />
     </Card>
   );
 }
@@ -227,7 +232,7 @@ export default function JobDetailScreen() {
         {previewError ? <Banner tone="danger" message={previewError} /> : null}
         <PrimaryButton title="Check the live form now (read-only)" variant="secondary" loading={checking} onPress={() => void checkForm()} />
         <OpenTasksCard tasks={job.review_tasks.filter((task) => task.status === "open")} />
-        <ApplicationCard application={job.application} />
+        <ApplicationCard application={job.application} jobId={job.id} />
         <TimelineCard events={job.events} />
         <DescriptionCard description={job.description} />
         <PrimaryButton title="Open posting in browser" variant="secondary" onPress={() => void Linking.openURL(job.url)} />

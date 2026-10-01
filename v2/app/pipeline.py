@@ -16,6 +16,7 @@ from app.evidence import record_evidence
 from app.flags import is_enabled, kill_switch_engaged
 from app.form_engine import FillPlan, FormControl, detect_handoff, parse_controls, plan_fill
 from app.greenhouse_form import FormFetchError, RealForm
+from app.material_store import manifest, materials_ready, vault_records
 from app.models import AdapterMaturity, Application, Job, PipelineEvent, PipelineStage
 from app.review_queue import open_task
 from app.state_machine import assert_transition
@@ -175,34 +176,6 @@ def score_pending_jobs(db: Session, settings: Settings, resume_facts: str, use_a
     return processed
 
 
-def generate_materials(db: Session, settings: Settings, application_id: str, resume_facts: str) -> Application:
-    application = db.get(Application, application_id)
-    if application is None:
-        raise ValueError("application not found")
-    job = application.job
-    application.attempts += 1
-    application.last_error = None
-    try:
-        if job.stage in {PipelineStage.shortlisted.value, PipelineStage.approved.value}:
-            transition(db, job, PipelineStage.preparing, "preparing application materials")
-        materials = LocalAI(settings).draft_materials(
-            resume_facts,
-            f"{job.title}\n{job.company}\n{job.location}\n{job.description}",
-        )
-        application.cover_letter_text = str(materials.get("cover_letter", ""))
-        application.answers_json = json.dumps(materials.get("screening_answers", {}))
-        application.stage = PipelineStage.materials_generated.value
-        transition(db, job, PipelineStage.materials_generated, "application materials generated")
-    except AI_FAILURES as exc:
-        application.last_error = str(exc)
-        application.stage = PipelineStage.failed.value
-        transition(db, job, PipelineStage.failed, "material generation failed", {"error": str(exc)})
-    db.add(application)
-    db.commit()
-    db.refresh(application)
-    return application
-
-
 def approve_application(db: Session, application_id: str) -> Application:
     application = db.get(Application, application_id)
     if application is None:
@@ -210,7 +183,8 @@ def approve_application(db: Session, application_id: str) -> Application:
     job = application.job
     if job.stage == PipelineStage.shortlisted.value:
         transition(db, job, PipelineStage.approved, "owner approved application")
-    has_materials = bool(application.cover_letter_text or application.answers_json)
+    # Only an owner-approved résumé (intact, all facts still verified) counts.
+    has_materials = materials_ready(db, application)
     if has_materials and job.stage in {
         PipelineStage.approved.value,
         PipelineStage.materials_generated.value,
@@ -276,18 +250,28 @@ def _apply_adapter(db: Session, settings: Settings, job: Job) -> tuple[str, Adap
     return platform, info
 
 
-def _load_form(db: Session, settings: Settings, job: Job, html: str | None, form_provider: FormProvider | None) -> _LoadedForm:
+def _with_materials(db: Session, application: Application, vault: AnswerVault) -> AnswerVault:
+    """Offer only owner-approved material versions to résumé/cover-letter fields."""
+    for record in vault_records(db, application):
+        vault.put(record)
+    return vault
+
+
+def _load_form(db: Session, settings: Settings, application: Application, html: str | None,
+               form_provider: FormProvider | None) -> _LoadedForm:
     """Load the form to plan against. Raises FormFetchError if the real form is unavailable."""
+    job = application.job
     if html is not None:
         controls = parse_controls(html)
         summary: dict[str, object] = {"source": "supplied_snapshot", "url": job.url, "fields_total": len(controls), "warnings": []}
-        return _LoadedForm(controls, detect_handoff(html), load_vault(db), summary)
+        return _LoadedForm(controls, detect_handoff(html), _with_materials(db, application, load_vault(db)), summary)
     if form_provider is None:
         from app.real_forms import LiveFormProvider
 
         form_provider = LiveFormProvider(settings)
     form = form_provider.fetch(job)
-    return _LoadedForm(form.controls, form.handoff, load_vault(db, form.vault_scopes), form.summary())
+    vault = _with_materials(db, application, load_vault(db, form.vault_scopes))
+    return _LoadedForm(form.controls, form.handoff, vault, form.summary())
 
 
 def _form_unavailable(db: Session, application: Application, job: Job, exc: FormFetchError) -> dict[str, object]:
@@ -365,12 +349,17 @@ def _stop_for_review(db: Session, application: Application, job: Job, plan: Fill
     }
 
 
-def _complete_dry_run(db: Session, application: Application, job: Job, plan: FillPlan, form_summary: dict[str, object], platform: str) -> list[str]:
+def _complete_dry_run(db: Session, application: Application, job: Job, plan: FillPlan, form_summary: dict[str, object],
+                      platform: str) -> tuple[list[str], dict[str, object]]:
     filled = {item.control.key: item.value for item in plan.items if item.status == "fill"}
+    # Which approved material versions would be attached (drafts never are).
+    materials = manifest(db, application)
     application.answers_json = json.dumps(filled)
     application.stage = PipelineStage.form_filled.value
     transition(db, job, PipelineStage.form_filled, "form fields resolved from vault")
-    application.validation_json = json.dumps({"ok": True, "fields": list(filled), "form": form_summary}, default=str)
+    application.validation_json = json.dumps(
+        {"ok": True, "fields": list(filled), "form": form_summary, "materials": materials}, default=str
+    )
     application.stage = PipelineStage.validated.value
     transition(db, job, PipelineStage.validated, "dry-run validation passed")
 
@@ -385,13 +374,13 @@ def _complete_dry_run(db: Session, application: Application, job: Job, plan: Fil
         kind="dry_run",
         confirmation_text=f"dry-run complete against {form_summary['source']} form; submit button was not clicked",
         final_url=job.url,
-        payload={"filled": filled, "form_source": form_summary["source"]},
+        payload={"filled": filled, "form_source": form_summary["source"], "materials": materials},
         adapter_name=platform,
     )
     application.stage = PipelineStage.validated.value
     db.add(application)
     db.commit()
-    return list(filled)
+    return list(filled), materials
 
 
 def execute_apply(
@@ -420,7 +409,7 @@ def execute_apply(
     application.attempts += 1
 
     try:
-        form = _load_form(db, settings, job, html, form_provider)
+        form = _load_form(db, settings, application, html, form_provider)
     except FormFetchError as exc:
         return _form_unavailable(db, application, job, exc)
 
@@ -434,7 +423,7 @@ def execute_apply(
     if review is not None:
         return review
 
-    filled = _complete_dry_run(db, application, job, plan, form.summary, platform)
+    filled, materials = _complete_dry_run(db, application, job, plan, form.summary, platform)
     return {
         "status": "dry_run_complete",
         "application_id": application.id,
@@ -443,5 +432,6 @@ def execute_apply(
         "form_source": form.summary["source"],
         "form": form.summary,
         "filled": filled,
+        "materials": materials,
         "submitted": False,
     }

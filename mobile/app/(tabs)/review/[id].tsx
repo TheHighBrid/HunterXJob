@@ -1,4 +1,4 @@
-import { Link, useLocalSearchParams } from "expo-router";
+import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Linking, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -13,6 +13,7 @@ import { ScreenContainer } from "@/components/ScreenContainer";
 import { ErrorView, LoadingView } from "@/components/StatusViews";
 import { useApiResource } from "@/hooks/useApiResource";
 import { confirmAsync } from "@/lib/confirm";
+import { kindLabel, shortHash } from "@/materials";
 import { reviewActionCopy, type ReviewActionName } from "@/safety";
 import { stageColor, useTheme } from "@/theme";
 import { formatDateTime, formatScore, humanize } from "@/utils/format";
@@ -103,6 +104,24 @@ function TaskJobCard({ task }: { task: ReviewTaskDetail }) {
   );
 }
 
+function TaskMaterialsCard({ task }: { task: ReviewTaskDetail }) {
+  const theme = useTheme();
+  const router = useRouter();
+  const { job } = task;
+  if (!job || (!task.materials.length && task.reason_code !== "materials_review")) return null;
+  return (
+    <Card title="Application materials">
+      {task.materials.map((item) => (
+        <Row key={item.id} label={`${kindLabel(item.kind)} v${item.version}`} value={`${item.status} · ${shortHash(item.content_sha256)}`} valueColor={item.status === "approved" ? theme.success : theme.warning} />
+      ))}
+      <Muted>Approving this task approves the pending drafts as-is. Preview them first; only approved versions are ever attached.</Muted>
+      <PrimaryButton title="Preview & approve materials ›" variant="secondary" onPress={() => {
+        router.push({ pathname: "/materials/[id]", params: { id: job.id } });
+      }} />
+    </Card>
+  );
+}
+
 type ActionsProps = Pick<ReturnType<typeof useReviewActions>, "busy" | "run"> & { task: ReviewTaskDetail };
 
 function ActionsCard({ task, busy, run }: ActionsProps) {
@@ -146,6 +165,7 @@ export default function ReviewTaskScreen() {
           </Card>
         ) : null}
         <BlockedFieldsCard fields={task.blocked_fields} />
+        <TaskMaterialsCard task={task} />
         <TaskJobCard task={task} />
         {result ? (
           <Banner tone="info" message={`Done: ${humanize(result.action)}. Job is now ${humanize(result.job_stage)}. Nothing was submitted.`} />

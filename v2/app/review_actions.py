@@ -21,6 +21,8 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.flags import kill_switch_engaged
+from app.material_store import MaterialsError, material_view, materials_for, materials_ready
+from app.material_workflow import REVIEW_REASON, approve_pending
 from app.models import Application, Job, PipelineStage, ReviewTask, iso_utc
 from app.pipeline import approve_application, shortlist_job, transition
 from app.state_machine import can_transition
@@ -56,19 +58,25 @@ def _job_brief(job: Job | None) -> dict[str, Any] | None:
     }
 
 
-def _application_brief(application: Application | None) -> dict[str, Any] | None:
+def _application_brief(db: Session, application: Application | None) -> dict[str, Any] | None:
     if application is None:
         return None
     return {
         "id": application.id, "stage": application.stage, "mode": application.mode,
         "attempts": application.attempts, "last_error": application.last_error,
         "adapter": application.adapter_name, "maturity": application.adapter_maturity,
-        "has_materials": _has_materials(application),
+        "has_materials": bool(materials_for(db, application.id)),
     }
 
 
-def _has_materials(application: Application) -> bool:
-    return bool(application.cover_letter_text or application.answers_json)
+def _latest_materials(db: Session, application: Application | None) -> list[dict[str, Any]]:
+    """Newest version of each kind (what the owner is asked to look at)."""
+    if application is None:
+        return []
+    latest: dict[str, dict[str, Any]] = {}
+    for row in materials_for(db, application.id):
+        latest.setdefault(row.kind, material_view(row))
+    return list(latest.values())
 
 
 def _task_job(db: Session, task: ReviewTask) -> Job | None:
@@ -121,7 +129,8 @@ def task_detail(db: Session, task: ReviewTask) -> dict[str, Any]:
     return {
         **task_summary(db, task),
         "job": _job_brief(job),
-        "application": _application_brief(application),
+        "application": _application_brief(db, application),
+        "materials": _latest_materials(db, application),
         "blocked_fields": blocked_fields,
         "actions": available_actions(db, task),
         "approve_effect": _approve_effect(db, task, job),
@@ -136,7 +145,7 @@ def _approve_plan(db: Session, task: ReviewTask, job: Job) -> str | None:
     application = _task_application(db, task, job)
     if application is None or application.stage in _SUBMISSION_STAGES or job.stage in _SUBMISSION_STAGES:
         return None
-    if job.stage == PipelineStage.needs_review.value and _has_materials(application):
+    if job.stage == PipelineStage.needs_review.value and materials_ready(db, application):
         return "requeue"
     if job.stage in _PREPARATION_STAGES:
         return "approve_application"
@@ -146,7 +155,8 @@ def _approve_plan(db: Session, task: ReviewTask, job: Job) -> str | None:
 _EFFECTS = {
     "shortlist": "Shortlists the job. Materials are prepared later and still need your approval.",
     "requeue": "Puts the application back in the dry-run queue. The next cycle may dry-run it; nothing is submitted.",
-    "approve_application": "Approves the application (and its materials, if any). Nothing is submitted.",
+    "approve_application": "Approves the application and any pending draft résumé/cover letter (only approved "
+                           "versions are ever attached). Nothing is submitted.",
 }
 
 
@@ -209,6 +219,11 @@ def approve_task(db: Session, settings: Settings, task_id: str) -> dict[str, Any
         db.commit()
     else:
         application = _task_application(db, task, job)
+        if task.reason_code == REVIEW_REASON:
+            try:
+                approve_pending(db, application)
+            except MaterialsError as exc:
+                raise ReviewActionError(exc.status_code, exc.detail) from exc
         approve_application(db, application.id)
     _close(db, task, "approved")
     return _result(db, task, plan)

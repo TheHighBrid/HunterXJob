@@ -14,10 +14,12 @@ on the server, and nothing in the app can unlock it. See `../docs/ARCHITECTURE.m
 | Tab | What it shows |
 |---|---|
 | **Dashboard** | Server status, live-submission lock, kill switch (engage anytime; disengage asks you to confirm), scheduler state with pause/resume/run-now, today's caps, recent cycles |
-| **Jobs** | Searchable list with stage filter and scores. Detail shows the score breakdown, form status (fields planned, needing review, blockers), a read-only live form check, review tasks and the timeline |
+| **Jobs** | Searchable list with stage filter and scores. Detail shows the score breakdown, form status (fields planned, needing review, blockers), a read-only live form check, review tasks, approved-materials state with a link to Materials, and the timeline |
 | **Review** | Open/closed queue. Detail lists the reason codes and what approving would do. Approve, reject, resolve or dismiss, each with a confirmation. Approval never submits; at most it queues another dry-run |
 | **Reports** | Pipeline counts, dry-runs, review backlog, cycles in the last 24h, 7-day history |
-| **Settings** | Read-only safety section, the editable safe subset (caps, score threshold, quiet hours, cycle limits, targeting), AI info, backups list |
+| **Settings** | Read-only safety section, the editable safe subset (caps, score threshold, quiet hours, cycle limits, targeting), AI info, backups list, link to Profile |
+| **Profile** (from Settings or Materials) | Verified-facts profile grouped by category with Verified/Unverified badges, readiness and what's missing, verify/unverify (with confirmation), edit (saving un-verifies unless you pick *Save and verify*), remove, paste-import of YAML/JSON/résumé text as unverified drafts |
+| **Materials** (from a job's Application card or a `materials_review` task) | Latest résumé and cover-letter versions with status, generator, content/PDF hashes, text preview, approve/reject per version, generate/regenerate drafts, generate blockers. Nothing is attached until approved; nothing is ever submitted |
 | **Connection** (modal, header button) | Server URL, API key, connection test |
 
 ## Setup
@@ -93,8 +95,10 @@ npx expo export --platform android   # bundle sanity check (output in dist/, git
 
 ```
 app/                       Expo Router routes
-  _layout.tsx              root stack (tabs + Connection modal)
+  _layout.tsx              root stack (tabs + Connection modal + Profile/Materials)
   connection.tsx           server URL, API key, connection test
+  profile.tsx              verified-facts profile: verify, edit, import
+  materials/[id].tsx       résumé/cover-letter versions for a job: preview, approve/reject, regenerate
   (tabs)/_layout.tsx       tab bar; redirects to Connection until configured
   (tabs)/index.tsx         Dashboard
   (tabs)/jobs/             Jobs list + [id] detail
@@ -107,6 +111,8 @@ src/
   store/connection.ts      persisted server URL (zustand + AsyncStorage)
   safety.ts                kill-switch request rules and safety copy
   settingsForm.ts          settings form <-> PATCH body (changed, editable fields only)
+  profile.ts               fact labels, grouping, field editor helpers
+  materials.ts             material version/status helpers
   hooks/useApiResource.ts  load on focus, pull-to-refresh, optional polling
   components/              shared UI
   __tests__/               jest unit tests

@@ -52,6 +52,8 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(1, "baseline schema (v0.2)", _create_tables(*BASELINE_TABLES)),
     Migration(2, "scheduler cycle ledger", _create_tables("scheduler_cycles")),
     Migration(3, "runtime setting overrides", _create_tables("setting_overrides")),
+    Migration(4, "verified profile facts and versioned application materials",
+              _create_tables("profile_facts", "application_materials")),
 )
 LATEST_VERSION = MIGRATIONS[-1].version
 

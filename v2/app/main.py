@@ -19,8 +19,11 @@ from app.config import Settings, get_settings
 from app.db import SessionLocal, get_db, init_db
 from app.discovery import discover_all, upsert_jobs
 from app.flags import ensure_flags, snapshot
+from app.material_store import MaterialsError
+from app.material_workflow import generate_for_application
+from app.materials_api import router as materials_router
 from app.models import Application, PipelineEvent, ReviewTask
-from app.pipeline import approve_application, execute_apply, generate_materials, score_pending_jobs
+from app.pipeline import approve_application, execute_apply, score_pending_jobs
 from app.remote_api import router as remote_router
 from app.resume_facts import RESUME_FACTS_PATH, read_resume_facts
 from app.runtime import runner, settings
@@ -188,14 +191,12 @@ def list_applications(db: DbSession) -> list[dict[str, object]]:
 
 @api.post("/api/applications/{application_id}/generate")
 def generate(application_id: str, db: DbSession) -> dict[str, object]:
-    resume = read_resume_facts()
-    if not resume:
-        raise HTTPException(409, "resume facts are not configured")
+    """Draft a résumé and cover letter from verified profile facts (needs owner approval)."""
     try:
-        result = generate_materials(db, settings, application_id, resume)
-    except ValueError as exc:
-        raise HTTPException(404, str(exc)) from exc
-    return {"id": result.id, "stage": result.stage, "last_error": result.last_error}
+        rows = generate_for_application(db, settings, application_id)
+    except MaterialsError as exc:
+        raise HTTPException(exc.status_code, exc.detail) from exc
+    return {"id": application_id, "materials": [{"id": row.id, "kind": row.kind, "version": row.version} for row in rows]}
 
 
 @api.post("/api/applications/{application_id}/approve")
@@ -236,3 +237,4 @@ def events(job_id: str, db: DbSession) -> list[dict[str, object]]:
 
 app.include_router(api)
 app.include_router(remote_router)
+app.include_router(materials_router)

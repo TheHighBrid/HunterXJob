@@ -57,6 +57,17 @@ class Settings(BaseSettings):
     ai_max_retries: int = 2
     ai_keep_alive: str = "60m"
 
+    # Application materials (résumé / cover letter drafts). Generation is
+    # deterministic from verified profile facts. Optional LLM rewording is off
+    # by default and must pass the truthfulness guard (see app.material_llm).
+    materials_dir: str = "./data/materials"
+    materials_llm_enabled: bool = False
+    materials_llm_provider: str = Field(default="ollama", pattern="^(ollama|openai)$")
+    materials_llm_base_url: str = ""
+    materials_llm_model: str = ""
+    materials_llm_api_key: str = ""
+    materials_llm_timeout: float = Field(default=180.0, gt=0, le=1800)
+
     target_locations: str = "Ottawa,Gatineau,National Capital Region,Remote Canada,Canada"
     target_keywords: str = "fraud,disputes,AML,KYC,compliance,collections,credit,bilingual"
     excluded_locations: str = "United States,US Remote,Bengaluru,Dublin,Tokyo"

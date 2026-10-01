@@ -63,6 +63,18 @@ function ConnectionCard() {
   );
 }
 
+function ProfileCard() {
+  const router = useRouter();
+  return (
+    <Card title="Candidate profile">
+      <Muted>Verified facts are the only source for résumés, cover letters and form answers.</Muted>
+      <PrimaryButton title="Profile & verified facts ›" variant="secondary" onPress={() => {
+        router.push("/profile");
+      }} />
+    </Card>
+  );
+}
+
 function SafetyCard({ settings }: { settings: ServerSettings }) {
   return (
     <Card title="Safety (read-only)">
@@ -252,6 +264,7 @@ export default function SettingsScreen() {
       >
         {error ? <Banner tone="danger" message={error} /> : null}
         <ConnectionCard />
+        <ProfileCard />
         <SafetyCard settings={settings} />
         <AutomationCard form={form} set={set} timezone={settings.timezone} />
         <LimitsCard form={form} set={set} />

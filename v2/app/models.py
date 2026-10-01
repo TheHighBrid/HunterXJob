@@ -215,6 +215,54 @@ class SettingOverride(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class ProfileFact(Base):
+    """One fact about the candidate (see app.profile).
+
+    Only ``verified`` facts are ever used in generated materials or form
+    answers. Facts parsed from a résumé start unverified.
+    """
+
+    __tablename__ = "profile_facts"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    key: Mapped[str] = mapped_column(String(160), unique=True, index=True)
+    category: Mapped[str] = mapped_column(String(40), index=True)
+    data_json: Mapped[str] = mapped_column(Text)
+    verified: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    source: Mapped[str] = mapped_column(String(40), default="manual")
+    provenance: Mapped[str] = mapped_column(Text, default="")
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class ApplicationMaterial(Base):
+    """A versioned, generated résumé or cover letter for one application (see app.material_store)."""
+
+    __tablename__ = "application_materials"
+    __table_args__ = (UniqueConstraint("application_id", "kind", "version", name="uq_material_version"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    application_id: Mapped[str] = mapped_column(ForeignKey("applications.id"), index=True)
+    job_id: Mapped[str] = mapped_column(ForeignKey("jobs.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(20), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
+    generator: Mapped[str] = mapped_column(String(20), default="template")
+    content_json: Mapped[str] = mapped_column(Text)
+    text: Mapped[str] = mapped_column(Text)
+    content_sha256: Mapped[str] = mapped_column(String(64))
+    profile_sha256: Mapped[str] = mapped_column(String(64))
+    pdf_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pdf_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    docx_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    docx_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    decision_note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class SchemaVersion(Base):
     """Applied schema migrations (see app.migrations)."""
 

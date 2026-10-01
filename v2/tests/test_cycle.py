@@ -1,8 +1,10 @@
+import json
 import time
 from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
+from profile_helpers import approve_drafts, load_example_profile
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
@@ -16,7 +18,16 @@ from app.flags import ensure_flags, is_enabled, set_flag
 from app.form_engine import ControlType, FormControl
 from app.greenhouse_form import FormFetchError, RealForm
 from app.migrations import run_migrations
-from app.models import Application, Job, PipelineEvent, PipelineStage, SchedulerCycle, SubmissionEvidence
+from app.models import (
+    Application,
+    ApplicationMaterial,
+    Job,
+    PipelineEvent,
+    PipelineStage,
+    ProfileFact,
+    SchedulerCycle,
+    SubmissionEvidence,
+)
 from app.vault_store import upsert_answer
 
 DESCRIPTION = (
@@ -43,9 +54,6 @@ class FakeAI:
 
     def evaluate_job(self, resume, job_text):
         return {"score": 90}
-
-    def draft_materials(self, resume, job_text):
-        return {"cover_letter": "Dear team", "screening_answers": {}}
 
 
 class SimpleFormProvider:
@@ -77,6 +85,7 @@ def _settings(tmp_path, **overrides):
         "quiet_hours_start": "00:00",
         "quiet_hours_end": "00:00",  # equal start/end disables quiet hours
         "cycle_startup_delay_seconds": 0,
+        "materials_dir": str(tmp_path / "materials"),
     }
     base.update(overrides)
     return Settings(_env_file=None, **base)
@@ -91,6 +100,7 @@ def env(tmp_path, monkeypatch):
         ensure_flags(db)
         for key, value in {"first_name": "Test", "last_name": "Candidate", "email": "candidate@example.test"}.items():
             upsert_answer(db, key=key, value=value)
+        load_example_profile(db)
     # Scoring and material drafting construct LocalAI internally; keep them offline.
     monkeypatch.setattr(pipeline, "LocalAI", FakeAI)
     provider = SimpleFormProvider()
@@ -110,7 +120,10 @@ def env(tmp_path, monkeypatch):
 def _approve_one(Session) -> str:
     with Session() as db:
         application = db.execute(select(Application).join(Job).where(Job.stage == PipelineStage.materials_generated.value)).scalars().first()
-        pipeline.approve_application(db, application.id)
+        # Approving every draft moves the job to ready_to_apply (dry-run only).
+        approve_drafts(db, application.id)
+        db.refresh(application)
+        assert application.job.stage == PipelineStage.ready_to_apply.value
         return application.id
 
 
@@ -262,17 +275,44 @@ def test_a_dry_run_claiming_submission_engages_the_kill_switch(env, monkeypatch)
         assert is_enabled(db, "global_kill_switch") is True
 
 
-def test_prepare_and_score_skip_cleanly_without_resume_or_ai(env):
+def test_score_skips_without_resume_and_prepare_needs_a_verified_profile(env):
     runner = env["make_runner"]()
     runner.deps.resume_loader = lambda: ""
     result = runner.run_once()
     assert result["steps"]["score"] == {"status": "skipped", "reason": "resume facts are not configured"}
-    assert result["steps"]["prepare"] == {"status": "skipped", "reason": "resume facts are not configured"}
 
+    # Materials do not need the local AI (deterministic template), only verified facts.
     runner = env["make_runner"]()
     runner.deps.ai_factory = lambda settings: FakeAI(ok=False)
+    with env["Session"]() as db:
+        db.query(ProfileFact).update({ProfileFact.verified: False})
+        db.commit()
     result = runner.run_once()
-    assert result["steps"]["prepare"] == {"status": "skipped", "reason": "local AI is unavailable"}
+    assert result["steps"]["prepare"]["status"] == "skipped"
+    assert result["steps"]["prepare"]["reason"].startswith("profile is not ready")
+
+
+def test_prepare_creates_drafts_that_are_never_attached_until_approved(env):
+    runner = env["make_runner"]()
+    first = runner.run_once()
+    prepared = first["steps"]["prepare"]["prepared"]
+    assert len(prepared) == 2 and all(len(item["materials"]) == 2 for item in prepared)
+    with env["Session"]() as db:
+        rows = db.execute(select(ApplicationMaterial)).scalars().all()
+        assert {row.status for row in rows} == {"draft"}
+        assert {row.kind for row in rows} == {"resume", "cover_letter"}
+        # Drafts never make an application ready.
+        assert not db.execute(select(Job).where(Job.stage == PipelineStage.ready_to_apply.value)).first()
+    approved = _approve_one(env["Session"])
+    second = runner.run_once()
+    assert [item["application_id"] for item in second["steps"]["dry_run"]["results"]] == [approved]
+    with env["Session"]() as db:
+        dry_run = db.execute(select(SubmissionEvidence).where(SubmissionEvidence.kind == "dry_run")).scalars().one()
+        assert dry_run.application_id == approved
+        application = db.get(Application, approved)
+        attached = json.loads(application.validation_json)["materials"]["attached"]
+        assert sorted(item["kind"] for item in attached) == ["cover_letter", "resume"]
+        assert all(item["status"] == "approved" for item in attached)
 
 
 def test_background_thread_runs_scheduled_cycle_and_stops(env):
