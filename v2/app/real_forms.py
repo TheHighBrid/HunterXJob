@@ -6,14 +6,26 @@ routes the application to review.
 """
 from __future__ import annotations
 
-from typing import Any, Callable, Protocol
+from collections.abc import Callable
+from typing import Any, Protocol
 
 import httpx
 
 from app.adapter_runtime import platform_for_job
 from app.config import Settings
-from app.greenhouse_browser import DomSnapshot, form_from_dom, inspect_hosted_form, reconcile
-from app.greenhouse_form import FormFetchError, GreenhouseJobRef, RealForm, fetch_greenhouse_form, ref_for_job
+from app.greenhouse_browser import (
+    DomSnapshot,
+    form_from_dom,
+    inspect_hosted_form,
+    reconcile,
+)
+from app.greenhouse_form import (
+    FormFetchError,
+    GreenhouseJobRef,
+    RealForm,
+    fetch_greenhouse_form,
+    ref_for_job,
+)
 
 
 class FormProvider(Protocol):

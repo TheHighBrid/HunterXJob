@@ -22,10 +22,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.answer_vault import AnswerRecord, AnswerSource, AnswerVault  # noqa: E402
-from app.form_engine import plan_fill  # noqa: E402
-from app.greenhouse_browser import inspect_hosted_form, reconcile  # noqa: E402
-from app.greenhouse_form import FormFetchError, GreenhouseJobRef, fetch_greenhouse_form, parse_greenhouse_ref  # noqa: E402
+from app.answer_vault import AnswerRecord, AnswerSource, AnswerVault
+from app.form_engine import plan_fill
+from app.greenhouse_browser import inspect_hosted_form, reconcile
+from app.greenhouse_form import (
+    FormFetchError,
+    GreenhouseJobRef,
+    fetch_greenhouse_form,
+    parse_greenhouse_ref,
+)
 
 # Obviously fake identity so the plan can show which *non-identity* fields block.
 DEFAULT_ANSWERS = {
@@ -33,7 +38,7 @@ DEFAULT_ANSWERS = {
     "last_name": "Candidate",
     "email": "candidate@example.test",
     "phone": "555-0100",
-    "resume": "/tmp/hunterx-smoke/resume.pdf",
+    "resume": "~/hunterx/resume.pdf",
 }
 
 
@@ -63,7 +68,7 @@ def main() -> int:
     results = []
     for arg in args.postings:
         ref = _ref(arg)
-        entry: dict[str, object] = {"posting": f"{ref.board_token}:{ref.job_id}"}
+        entry: dict[str, object] = {"posting": f"{ref.board}:{ref.job_id}"}
         try:
             form = fetch_greenhouse_form(ref)
             if args.browser_verify:

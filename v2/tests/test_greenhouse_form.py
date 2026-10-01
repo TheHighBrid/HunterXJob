@@ -5,10 +5,11 @@ served by httpx.MockTransport.
 """
 import httpx
 import pytest
+from conftest import load_fixture_json
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
-import app.adapter_runtime as adapter_runtime
+from app import adapter_runtime
 from app.answer_vault import AnswerRecord, AnswerSource, AnswerVault
 from app.config import Settings
 from app.db import Base
@@ -28,7 +29,6 @@ from app.models import Application, Job, PipelineStage, ReviewTask, SubmissionEv
 from app.pipeline import execute_apply
 from app.real_forms import LiveFormProvider
 from app.vault_store import load_vault, upsert_answer
-from conftest import load_fixture_json
 
 ASANA = GreenhouseJobRef("asana", "8165477")
 GITLAB = GreenhouseJobRef("gitlab", "8556658002")
@@ -47,10 +47,10 @@ def _vault(**answers):
     return AnswerVault([AnswerRecord(key, value, AnswerSource.USER) for key, value in answers.items()])
 
 
-IDENTITY = dict(
-    first_name="Test", last_name="Candidate", email="candidate@example.test",
-    phone="555-0100", resume="/tmp/resume.pdf",
-)
+IDENTITY = {
+    "first_name": "Test", "last_name": "Candidate", "email": "candidate@example.test",
+    "phone": "555-0100", "resume": "~/hunterx/resume.pdf",
+}
 
 
 # --- refs -------------------------------------------------------------------
@@ -62,13 +62,13 @@ IDENTITY = dict(
 ])
 def test_parse_greenhouse_ref_from_hosted_urls(url, expected):
     ref = parse_greenhouse_ref(url)
-    assert (ref.board_token, ref.job_id) == expected
+    assert (ref.board, ref.job_id) == expected
 
 
 def test_parse_greenhouse_ref_needs_board_hint_for_custom_career_pages():
     url = "https://www.asana.com/jobs/apply/8165477?gh_jid=8165477"
     assert parse_greenhouse_ref(url) is None
-    ref = parse_greenhouse_ref(url, board_token_hint="asana")
+    ref = parse_greenhouse_ref(url, board_hint="asana")
     assert ref == ASANA
     assert ref.api_url == "https://boards-api.greenhouse.io/v1/boards/asana/jobs/8165477"
 
@@ -396,7 +396,7 @@ def _answer_everything_d2l(db):
 def test_dry_run_uses_the_real_form_and_never_submits():
     db = _db()
     _answer_everything_d2l(db)
-    job, application = _greenhouse_job(db)
+    _job, application = _greenhouse_job(db)
     provider = _FixtureProvider(form=_form("d2l_7696196.json", D2L))
     settings = Settings(automation_enabled=True, application_mode="autonomous", allow_live_submission=True)
     set_flag(db, "allow_live_submission", True)
@@ -420,7 +420,7 @@ def test_blocked_real_form_lists_the_blocking_fields():
     db = _db()
     for key, value in IDENTITY.items():
         upsert_answer(db, key=key, value=value)
-    job, application = _greenhouse_job(db)
+    _job, application = _greenhouse_job(db)
     result = execute_apply(db, Settings(automation_enabled=True), application.id,
                            form_provider=_FixtureProvider(form=_form("d2l_7696196.json", D2L)))
     assert result["status"] == "needs_review"
@@ -458,7 +458,7 @@ def test_default_live_provider_fetches_via_the_api_for_discovered_jobs():
     db = _db()
     _answer_everything_d2l(db)
     # Custom career-page URL: the board token comes from discovery (company=d2l).
-    job, application = _greenhouse_job(db, url="https://www.d2l.com/careers/jobs/?job_id=7696196&gh_jid=7696196", platform=None)
+    _job, application = _greenhouse_job(db, url="https://www.d2l.com/careers/jobs/?job_id=7696196&gh_jid=7696196", platform=None)
     requests = []
 
     def handler(request):
@@ -473,7 +473,7 @@ def test_default_live_provider_fetches_via_the_api_for_discovered_jobs():
 
 def test_live_provider_refuses_platforms_without_a_real_form_fetcher():
     db = _db()
-    job, application = _greenhouse_job(db, url="https://jobs.lever.co/acme/abc", source="lever", platform="lever")
+    _job, application = _greenhouse_job(db, url="https://jobs.lever.co/acme/abc", source="lever", platform="lever")
     result = execute_apply(db, Settings(automation_enabled=True), application.id)
     assert result["status"] == "needs_review"
     assert result["reason"] == "form_unavailable"
@@ -482,7 +482,7 @@ def test_live_provider_refuses_platforms_without_a_real_form_fetcher():
 
 def test_browser_verification_failure_fails_closed():
     db = _db()
-    job, application = _greenhouse_job(db)
+    _job, application = _greenhouse_job(db)
 
     def broken_inspector(ref):
         raise FormFetchError("form_fetch_failed", "Chromium missing")
@@ -530,7 +530,7 @@ def test_form_preview_endpoint_is_read_only_and_redacts_sensitive_values(monkeyp
     from fastapi.testclient import TestClient
     from sqlalchemy.pool import StaticPool
 
-    import app.main as main
+    from app import main
 
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
@@ -539,7 +539,7 @@ def test_form_preview_endpoint_is_read_only_and_redacts_sensitive_values(monkeyp
     ensure_flags(db)
     for key, value in {**IDENTITY, "work_authorization_ca": "Yes"}.items():
         upsert_answer(db, key=key, value=value)
-    job, application = _greenhouse_job(db)
+    job, _application = _greenhouse_job(db)
     job_id = job.id
 
     class _Provider:

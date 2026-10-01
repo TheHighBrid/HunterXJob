@@ -19,9 +19,10 @@ Safety contract:
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Iterable
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import httpx
@@ -57,26 +58,26 @@ class FormFetchError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class GreenhouseJobRef:
-    board_token: str
+    board: str
     job_id: str
 
     def __post_init__(self) -> None:
-        if not _TOKEN_RE.match(self.board_token or ""):
-            raise ValueError(f"invalid Greenhouse board token: {self.board_token!r}")
+        if not _TOKEN_RE.match(self.board or ""):
+            raise ValueError(f"invalid Greenhouse board token: {self.board!r}")
         if not _JOB_ID_RE.match(self.job_id or ""):
             raise ValueError(f"invalid Greenhouse job id: {self.job_id!r}")
 
     @property
     def api_url(self) -> str:
-        return f"https://{GREENHOUSE_API_HOST}/v1/boards/{self.board_token}/jobs/{self.job_id}"
+        return f"https://{GREENHOUSE_API_HOST}/v1/boards/{self.board}/jobs/{self.job_id}"
 
     @property
     def embed_url(self) -> str:
-        return f"https://{GREENHOUSE_EMBED_HOST}/embed/job_app?for={self.board_token}&token={self.job_id}"
+        return f"https://{GREENHOUSE_EMBED_HOST}/embed/job_app?for={self.board}&token={self.job_id}"
 
     @property
     def vault_scopes(self) -> list[str]:
-        return [f"greenhouse:{self.board_token}", f"greenhouse:{self.board_token}:{self.job_id}"]
+        return [f"greenhouse:{self.board}", f"greenhouse:{self.board}:{self.job_id}"]
 
 
 @dataclass(slots=True)
@@ -124,7 +125,7 @@ def _valid_job_id(value: str | None) -> bool:
 def parse_greenhouse_ref(
     url: str,
     *,
-    board_token_hint: str | None = None,
+    board_hint: str | None = None,
     job_id_hint: str | None = None,
 ) -> GreenhouseJobRef | None:
     """Identify the Greenhouse board token and job id for a posting.
@@ -152,8 +153,8 @@ def parse_greenhouse_ref(
 
     gh_jid = (query.get("gh_jid") or [None])[0]
     job_id = gh_jid if _valid_job_id(gh_jid) else job_id_hint
-    if _valid_token(board_token_hint) and _valid_job_id(job_id):
-        return GreenhouseJobRef(board_token_hint, job_id)  # type: ignore[arg-type]
+    if _valid_token(board_hint) and _valid_job_id(job_id):
+        return GreenhouseJobRef(board_hint, job_id)  # type: ignore[arg-type]
     return None
 
 
@@ -166,7 +167,7 @@ def ref_for_job(job: Any) -> GreenhouseJobRef | None:
     from_greenhouse = (getattr(job, "source", "") or "") == "greenhouse"
     return parse_greenhouse_ref(
         getattr(job, "url", "") or "",
-        board_token_hint=getattr(job, "company", None) if from_greenhouse else None,
+        board_hint=getattr(job, "company", None) if from_greenhouse else None,
         job_id_hint=getattr(job, "external_id", None) if from_greenhouse else None,
     )
 
@@ -280,13 +281,13 @@ def classify_question(label: str, job_location: str = "") -> str | None:
 
 
 _DEMOGRAPHIC_KEYS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"gender", re.I), "gender"),
-    (re.compile(r"sexual orientation", re.I), "sexual_orientation"),
-    (re.compile(r"hispanic|latin", re.I), "hispanic_ethnicity"),
-    (re.compile(r"race|ethnic", re.I), "race_ethnicity"),
-    (re.compile(r"disab", re.I), "disability"),
-    (re.compile(r"veteran", re.I), "veteran_status"),
-    (re.compile(r"pronoun", re.I), "pronouns"),
+    (re.compile(r"gender", re.IGNORECASE), "gender"),
+    (re.compile(r"sexual orientation", re.IGNORECASE), "sexual_orientation"),
+    (re.compile(r"hispanic|latin", re.IGNORECASE), "hispanic_ethnicity"),
+    (re.compile(r"race|ethnic", re.IGNORECASE), "race_ethnicity"),
+    (re.compile(r"disab", re.IGNORECASE), "disability"),
+    (re.compile(r"veteran", re.IGNORECASE), "veteran_status"),
+    (re.compile(r"pronoun", re.IGNORECASE), "pronouns"),
 )
 
 
@@ -328,7 +329,7 @@ def _control_from_field(
     position: int,
 ) -> FormControl:
     raw_name = str(field_data.get("name") or "")
-    name = raw_name[:-2] if raw_name.endswith("[]") else raw_name
+    name = raw_name.removesuffix("[]")
     raw_type = str(field_data.get("type") or "")
     control_type = _TYPE_MAP.get(raw_type, ControlType.UNKNOWN)
     if name in _STANDARD_FIELDS and control_type is ControlType.TEXT:
@@ -509,7 +510,7 @@ def parse_greenhouse_payload(payload: dict[str, Any], ref: GreenhouseJobRef) -> 
         vault_scopes=ref.vault_scopes,
         warnings=warnings,
         metadata={
-            "board_token": ref.board_token,
+            "board": ref.board,
             "job_id": ref.job_id,
             "api_url": ref.api_url,
             "embed_url": ref.embed_url,

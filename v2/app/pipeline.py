@@ -232,7 +232,7 @@ def execute_apply(
     settings: Settings,
     application_id: str,
     html: str | None = None,
-    form_provider: "FormProvider | None" = None,
+    form_provider: FormProvider | None = None,
 ) -> dict[str, object]:
     """Run a dry-run apply cycle against the job's real application form.
 

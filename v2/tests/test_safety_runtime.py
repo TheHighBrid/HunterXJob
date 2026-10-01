@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+from conftest import load_sample_form
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -12,7 +13,6 @@ from app.pipeline import approve_application, execute_apply
 from app.scheduler import can_run_unattended, in_quiet_hours
 from app.state_machine import IllegalTransition, assert_transition
 from app.vault_store import upsert_answer
-from conftest import load_sample_form
 
 SAMPLE_FORM = load_sample_form()
 

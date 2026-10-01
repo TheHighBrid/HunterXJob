@@ -103,7 +103,7 @@ class DomField:
         if self.name.startswith("gdpr_"):
             return self.name
         base = self.name or ident
-        return base[:-2] if base.endswith("[]") else base
+        return base.removesuffix("[]")
 
 
 @dataclass(slots=True)
@@ -116,7 +116,7 @@ class DomSnapshot:
     fields: list[DomField]
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "DomSnapshot":
+    def from_dict(cls, data: dict[str, Any]) -> DomSnapshot:
         fields = []
         for raw in data.get("fields") or []:
             item = DomField(
@@ -237,7 +237,7 @@ def form_from_dom(ref: GreenhouseJobRef, snapshot: DomSnapshot) -> RealForm:
             platform="greenhouse", source="greenhouse_dom", url=snapshot.url, title=snapshot.title,
             controls=[], vault_scopes=ref.vault_scopes, handoff=snapshot.challenge,
             warnings=["page showed an anti-bot challenge instead of the form"],
-            metadata={"board_token": ref.board_token, "job_id": ref.job_id, "dom_url": snapshot.url},
+            metadata={"board": ref.board, "job_id": ref.job_id, "dom_url": snapshot.url},
         )
     if not snapshot.fields:
         raise FormFetchError("form_fetch_failed", "rendered page contained no application fields")
@@ -261,7 +261,7 @@ def form_from_dom(ref: GreenhouseJobRef, snapshot: DomSnapshot) -> RealForm:
         vault_scopes=ref.vault_scopes,
         warnings=warnings,
         metadata={
-            "board_token": ref.board_token,
+            "board": ref.board,
             "job_id": ref.job_id,
             "dom_url": snapshot.url,
             "submit_boundary": "captcha_detected" if snapshot.captcha else None,
