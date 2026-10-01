@@ -8,7 +8,9 @@ import { Badge } from "@/components/Badge";
 import { Banner } from "@/components/Banner";
 import { Chip } from "@/components/Chip";
 import { ScreenContainer } from "@/components/ScreenContainer";
+import { LivenessBadge } from "@/components/DiscoveryCards";
 import { EmptyView, ErrorView, LoadingView } from "@/components/StatusViews";
+import { linkedLabel, livenessBadgeStatus, sourceLabel } from "@/discovery";
 import { useApiResource } from "@/hooks/useApiResource";
 import { matchScoreColor, stageColor, useTheme } from "@/theme";
 import { formatRelativeToNow, formatScore, humanize } from "@/utils/format";
@@ -21,11 +23,14 @@ const STAGE_FILTERS: { label: string; stage?: string }[] = [
   { label: "Validated", stage: "validated" },
   { label: "Review", stage: "review" },
   { label: "Rejected", stage: "rejected" },
+  { label: "Duplicates", stage: "duplicate" },
+  { label: "Closed", stage: "closed" },
 ];
 
 function JobRow({ job }: { job: Job }) {
   const theme = useTheme();
   const router = useRouter();
+  const linked = linkedLabel(job);
   return (
     <Pressable
       accessibilityRole="button"
@@ -44,6 +49,9 @@ function JobRow({ job }: { job: Job }) {
           <View style={styles.badges}>
             <Badge label={humanize(job.stage)} color={stageColor(theme, job.stage)} />
             {job.open_review_tasks ? <Badge label={`${job.open_review_tasks} review`} color={theme.warning} /> : null}
+            <Badge label={sourceLabel(job.source)} color={theme.info} />
+            {linked ? <Badge label={linked} color={theme.textMuted} /> : null}
+            <LivenessBadge status={livenessBadgeStatus(job)} />
             <Text style={[styles.when, { color: theme.textFaint }]}>{formatRelativeToNow(job.discovered_at)}</Text>
           </View>
         </View>

@@ -24,6 +24,7 @@ from app.models import (
     ApplicationMaterial,
     FeatureFlag,
     Job,
+    JobLink,
     PipelineEvent,
     PipelineStage,
     ProfileFact,
@@ -414,6 +415,8 @@ MUTATING_ROUTES = {
     ("POST", "/api/jobs/{job_id}/materials/generate"),
     ("POST", "/api/materials/{material_id}/approve"),
     ("POST", "/api/materials/{material_id}/reject"),
+    ("POST", "/api/jobs/{job_id}/unlink-duplicate"),
+    ("POST", "/api/jobs/{job_id}/check-liveness"),
 }
 
 HOSTILE_BODIES = [
@@ -479,3 +482,75 @@ def test_no_route_can_unlock_live_submission_or_record_a_submission(env, monkeyp
         kinds = set(db.execute(select(SubmissionEvidence.kind)).scalars())
         assert kinds <= {"dry_run", "materials_draft", "materials_approved"}
         assert not db.execute(select(SubmissionEvidence).where(SubmissionEvidence.sufficient.is_(True))).first()
+
+
+# ------------------------------------------------------- sources, duplicates, liveness
+
+
+def test_source_lists_are_editable_and_validated_as_slugs(env):
+    client = env["client"]
+    response = client.patch("/api/settings", headers=AUTH, json={
+        "ashby_orgs": ["cohere", " wealthsimple ", "Cohere"],
+        "lever_companies": ["spotify"],
+        "greenhouse_board_tokens": [],
+    })
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["ashby_orgs"] == ["cohere", "wealthsimple"]
+    assert body["lever_companies"] == ["spotify"] and body["greenhouse_board_tokens"] == []
+    assert body["sources"]["ashby_orgs"] == 2
+    assert env["settings"].ashby_org_list == ["cohere", "wealthsimple"]
+    assert body["ashby_browser_verify"] is False and body["lever_browser_verify"] is False
+    for bad in (["https://evil.example"], ["../x"], ["a b"], ["x" * 101], ["ok"] * 61):
+        assert client.patch("/api/settings", headers=AUTH, json={"ashby_orgs": bad}).status_code == 422
+
+
+def test_job_list_and_detail_show_source_duplicates_and_liveness(env):
+    with env["Session"]() as db:
+        primary = _job(db, title="Fraud Analyst", stage=PipelineStage.shortlisted.value, canonical_id="greenhouse:acme:1")
+        duplicate = Job(source="ashby", board="acme", external_id="d-1", title="Fraud Analyst", company="acme",
+                        location="Montreal", url="https://jobs.ashbyhq.com/acme/d-1", stage=PipelineStage.duplicate.value,
+                        canonical_id="ashby:acme:d-1", duplicate_of_id=primary.id, liveness="live")
+        db.add(duplicate)
+        db.commit()
+        db.add(JobLink(job_id=duplicate.id, primary_job_id=primary.id, method="exact", score=1.0, status="linked"))
+        db.commit()
+        primary_id, duplicate_id = primary.id, duplicate.id
+    rows = {row["id"]: row for row in env["client"].get("/api/jobs", headers=AUTH).json()}
+    assert rows[primary_id]["linked_count"] == 1 and rows[duplicate_id]["linked_count"] == 1
+    assert rows[duplicate_id]["source"] == "ashby" and rows[duplicate_id]["duplicate_of_id"] == primary_id
+    assert rows[duplicate_id]["liveness"] == "live"
+    detail = env["client"].get(f"/api/jobs/{duplicate_id}", headers=AUTH).json()
+    assert detail["linked_postings"][0]["id"] == primary_id and detail["linked_postings"][0]["relation"] == "primary"
+    assert detail["liveness_detail"]["status"] == "live" and detail["liveness_detail"]["checks"] == []
+
+
+def test_unlink_duplicate_regates_the_posting(env):
+    with env["Session"]() as db:
+        primary = _job(db, title="Fraud Analyst", stage=PipelineStage.shortlisted.value)
+        duplicate = Job(source="lever", board="acme", external_id="l-1", title="Fraud Analyst", company="acme", location="Ottawa",
+                        url="https://jobs.lever.co/acme/l-1", stage=PipelineStage.duplicate.value, duplicate_of_id=primary.id)
+        db.add(duplicate)
+        db.commit()
+        db.add(JobLink(job_id=duplicate.id, primary_job_id=primary.id, method="fuzzy", score=0.95, status="linked"))
+        db.commit()
+        duplicate_id = duplicate.id
+    response = env["client"].post(f"/api/jobs/{duplicate_id}/unlink-duplicate", headers=AUTH)
+    assert response.status_code == 200, response.text
+    assert response.json()["stage"] == PipelineStage.discovered.value and response.json()["duplicate_of_id"] is None
+    assert env["client"].post(f"/api/jobs/{duplicate_id}/unlink-duplicate", headers=AUTH).status_code == 409
+    assert env["client"].post("/api/jobs/missing/unlink-duplicate", headers=AUTH).status_code == 404
+
+
+def test_manual_liveness_check_records_evidence_without_closing(env, monkeypatch):
+    from app import job_liveness
+
+    monkeypatch.setattr(job_liveness, "probe_posting", lambda job, **kwargs: job_liveness.Observation(
+        job_liveness.GONE, "ats_api_not_found", 404, "posting does not exist"))
+    with env["Session"]() as db:
+        job_id = _job(db, stage=PipelineStage.shortlisted.value).id
+    body = env["client"].post(f"/api/jobs/{job_id}/check-liveness", headers=AUTH).json()
+    assert body["stage"] == PipelineStage.shortlisted.value
+    assert body["liveness"] == "suspect"
+    assert body["liveness_detail"]["checks"][0]["trigger"] == "manual"
+    assert body["liveness_detail"]["checks"][0]["action"] == "suspect"

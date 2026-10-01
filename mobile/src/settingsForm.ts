@@ -18,6 +18,9 @@ export interface SettingsForm {
   excluded_titles: string;
   excluded_locations: string;
   blacklisted_companies: string;
+  greenhouse_board_tokens: string;
+  lever_companies: string;
+  ashby_orgs: string;
 }
 
 export function settingsToForm(settings: ServerSettings): SettingsForm {
@@ -37,6 +40,9 @@ export function settingsToForm(settings: ServerSettings): SettingsForm {
     excluded_titles: settings.excluded_titles.join(", "),
     excluded_locations: settings.excluded_locations.join(", "),
     blacklisted_companies: settings.blacklisted_companies.join(", "),
+    greenhouse_board_tokens: settings.greenhouse_board_tokens.join(", "),
+    lever_companies: settings.lever_companies.join(", "),
+    ashby_orgs: settings.ashby_orgs.join(", "),
   };
 }
 
@@ -83,6 +89,9 @@ export function buildSettingsPatch(settings: ServerSettings, form: SettingsForm)
     excluded_titles: changedList(form.excluded_titles, settings.excluded_titles),
     excluded_locations: changedList(form.excluded_locations, settings.excluded_locations),
     blacklisted_companies: changedList(form.blacklisted_companies, settings.blacklisted_companies),
+    greenhouse_board_tokens: changedList(form.greenhouse_board_tokens, settings.greenhouse_board_tokens),
+    lever_companies: changedList(form.lever_companies, settings.lever_companies),
+    ashby_orgs: changedList(form.ashby_orgs, settings.ashby_orgs),
   };
   const editable = new Set(settings.editable);
   // Drop unchanged fields and anything outside the server's editable subset.

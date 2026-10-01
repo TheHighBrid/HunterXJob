@@ -47,8 +47,10 @@ from app.backup import latest_backup_time, list_backups
 from app.config import Settings, get_settings
 from app.cycle import CycleRunner, recent_cycles
 from app.db import get_db
+from app.dedup import unlink
 from app.flags import KILL_SWITCH, FlagChangeRefused, check_api_flag_change, set_flag, snapshot
 from app.greenhouse_form import FormFetchError
+from app.job_liveness import CheckContext, check_job
 from app.job_views import job_detail, list_jobs
 from app.models import FeatureFlag, Job, ReviewTask, iso_utc
 from app.pipeline import preview_form
@@ -118,6 +120,33 @@ def job(job_id: str, db: DbSession) -> dict[str, object]:
     row = db.get(Job, job_id)
     if row is None:
         raise HTTPException(404, "job not found")
+    return job_detail(db, row)
+
+
+@router.post("/api/jobs/{job_id}/unlink-duplicate", response_model=JobDetailOut, tags=["remote"])
+def unlink_duplicate(job_id: str, db: DbSession) -> dict[str, object]:
+    """Owner override: this posting is not a duplicate. It is re-gated from scratch (never applied)."""
+    row = db.get(Job, job_id)
+    if row is None:
+        raise HTTPException(404, "job not found")
+    try:
+        unlink(db, row)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return job_detail(db, row)
+
+
+@router.post("/api/jobs/{job_id}/check-liveness", response_model=JobDetailOut, tags=["remote"])
+def check_liveness(job_id: str, db: DbSession, current: CurrentSettings) -> dict[str, object]:
+    """Ask the posting's public source whether it is still open (read-only GET).
+
+    Follows the same conservative policy as scheduled checks: one "gone" answer
+    only marks the posting suspect; errors never close it.
+    """
+    row = db.get(Job, job_id)
+    if row is None:
+        raise HTTPException(404, "job not found")
+    check_job(db, current, row, CheckContext("manual"))
     return job_detail(db, row)
 
 

@@ -66,7 +66,7 @@ export function stageColor(theme: Theme, stage: string | null | undefined): stri
   if (GOOD_STAGES.has(stage)) return theme.success;
   if (ATTENTION_STAGES.has(stage)) return theme.warning;
   if (BAD_STAGES.has(stage)) return theme.danger;
-  if (stage === "withdrawn") return theme.textFaint;
+  if (stage === "withdrawn" || stage === "duplicate" || stage === "closed") return theme.textFaint;
   return theme.info;
 }
 

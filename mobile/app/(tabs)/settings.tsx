@@ -35,12 +35,34 @@ const NUMBER_FIELDS: { key: NumberKey; label: string; hint: string }[] = [
   { key: "cycle_max_score", label: "Jobs scored per cycle", hint: "0-500" },
 ];
 
-const LIST_FIELDS: { key: "target_keywords" | "target_locations" | "excluded_titles" | "excluded_locations" | "blacklisted_companies"; label: string }[] = [
+type ListKey =
+  | "target_keywords"
+  | "target_locations"
+  | "excluded_titles"
+  | "excluded_locations"
+  | "blacklisted_companies"
+  | "greenhouse_board_tokens"
+  | "lever_companies"
+  | "ashby_orgs";
+
+interface ListField {
+  key: ListKey;
+  label: string;
+  hint?: string;
+}
+
+const LIST_FIELDS: ListField[] = [
   { key: "target_keywords", label: "Target keywords" },
   { key: "target_locations", label: "Target locations" },
   { key: "excluded_titles", label: "Excluded titles" },
   { key: "excluded_locations", label: "Excluded locations" },
   { key: "blacklisted_companies", label: "Excluded employers" },
+];
+
+const SOURCE_FIELDS: ListField[] = [
+  { key: "greenhouse_board_tokens", label: "Greenhouse boards", hint: "board token from boards.greenhouse.io/<token>" },
+  { key: "lever_companies", label: "Lever companies", hint: "slug from jobs.lever.co/<slug>" },
+  { key: "ashby_orgs", label: "Ashby organizations", hint: "slug from jobs.ashbyhq.com/<slug>" },
 ];
 
 type FormProps = { form: SettingsForm; set: ReturnType<typeof useSettingsEditor>["set"] };
@@ -146,12 +168,12 @@ function LimitsCard({ form, set }: FormProps) {
   );
 }
 
-function TargetingCard({ form, set, sources }: FormProps & { sources: ServerSettings["sources"] }) {
+function ListInputs({ form, set, fields }: FormProps & { fields: ListField[] }) {
   const theme = useTheme();
   const input = useInputStyle();
   return (
-    <Card title="Targeting">
-      {LIST_FIELDS.map((field) => (
+    <>
+      {fields.map((field) => (
         <View key={field.key} style={{ gap: 4 }}>
           <Text style={[styles.label, { color: theme.text }]}>{field.label}</Text>
           <TextInput
@@ -159,16 +181,39 @@ function TargetingCard({ form, set, sources }: FormProps & { sources: ServerSett
             onChangeText={(v) => {
               set({ [field.key]: v } as Partial<SettingsForm>);
             }}
-            placeholder="comma-separated"
+            placeholder={field.hint ?? "comma-separated"}
             placeholderTextColor={theme.textFaint}
+            autoCapitalize="none"
+            autoCorrect={false}
             multiline
             style={[input, { minHeight: 44 }]}
           />
         </View>
       ))}
+    </>
+  );
+}
+
+function TargetingCard({ form, set }: FormProps) {
+  return (
+    <Card title="Targeting">
+      <ListInputs form={form} set={set} fields={LIST_FIELDS} />
+      <Muted>{parseList(form.target_keywords).length} keywords</Muted>
+    </Card>
+  );
+}
+
+function SourcesCard({ form, set, sources }: FormProps & { sources: ServerSettings["sources"] }) {
+  return (
+    <Card title="Job sources">
       <Muted>
-        {parseList(form.target_keywords).length} keywords · sources: {sources.greenhouse_boards} Greenhouse boards,{" "}
-        {sources.lever_companies} Lever companies
+        Public job boards to discover from (read-only, comma-separated slugs). Duplicates across boards are linked, not
+        prepared twice.
+      </Muted>
+      <ListInputs form={form} set={set} fields={SOURCE_FIELDS} />
+      <Muted>
+        Saved: {sources.greenhouse_boards} Greenhouse · {sources.lever_companies} Lever · {sources.ashby_orgs} Ashby ·{" "}
+        {sources.generic_feeds} other feeds
       </Muted>
     </Card>
   );
@@ -180,7 +225,9 @@ function AiCard({ settings }: { settings: ServerSettings }) {
       <Row label="Provider" value={settings.llm_provider} />
       <Row label="Fast model" value={settings.llm_fast_model} mono />
       <Row label="Quality model" value={settings.llm_quality_model} mono />
-      <Row label="Browser verification" value={settings.greenhouse_browser_verify ? "On" : "Off"} />
+      <Row label="Browser check: Greenhouse" value={settings.greenhouse_browser_verify ? "On" : "Off"} />
+      <Row label="Browser check: Lever" value={settings.lever_browser_verify ? "On" : "Off"} />
+      <Row label="Browser check: Ashby" value={settings.ashby_browser_verify ? "On" : "Off"} />
     </Card>
   );
 }
@@ -268,7 +315,8 @@ export default function SettingsScreen() {
         <SafetyCard settings={settings} />
         <AutomationCard form={form} set={set} timezone={settings.timezone} />
         <LimitsCard form={form} set={set} />
-        <TargetingCard form={form} set={set} sources={settings.sources} />
+        <TargetingCard form={form} set={set} />
+        <SourcesCard form={form} set={set} sources={settings.sources} />
         {message ? <Banner tone={message.tone} message={message.text} /> : null}
         <PrimaryButton title={dirty ? "Save changes" : "No changes"} disabled={!dirty} loading={saving} onPress={() => void save()} />
         {dirty ? <PrimaryButton title="Discard" variant="secondary" onPress={discard} /> : null}

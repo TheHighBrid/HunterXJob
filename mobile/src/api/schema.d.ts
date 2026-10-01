@@ -291,6 +291,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs/{job_id}/check-liveness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Liveness
+         * @description Ask the posting's public source whether it is still open (read-only GET).
+         *
+         *     Follows the same conservative policy as scheduled checks: one "gone" answer
+         *     only marks the posting suspect; errors never close it.
+         */
+        post: operations["check_liveness_api_jobs__job_id__check_liveness_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs/{job_id}/form": {
         parameters: {
             query?: never;
@@ -345,6 +368,26 @@ export interface paths {
          * @description Create new DRAFT versions from verified facts. Approved versions are kept; nothing is attached or sent.
          */
         post: operations["generate_job_materials_api_jobs__job_id__materials_generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{job_id}/unlink-duplicate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unlink Duplicate
+         * @description Owner override: this posting is not a duplicate. It is re-gated from scratch (never applied).
+         */
+        post: operations["unlink_duplicate_api_jobs__job_id__unlink_duplicate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1198,6 +1241,10 @@ export interface components {
             application_id: string | null;
             /** Application Stage */
             application_stage: string | null;
+            /** Board */
+            board: string | null;
+            /** Canonical Id */
+            canonical_id: string | null;
             /** Company */
             company: string;
             decision: components["schemas"]["DecisionOut"] | null;
@@ -1205,6 +1252,8 @@ export interface components {
             description: string;
             /** Discovered At */
             discovered_at: string | null;
+            /** Duplicate Of Id */
+            duplicate_of_id: string | null;
             /** Eligible */
             eligible: boolean | null;
             /** Events */
@@ -1212,8 +1261,16 @@ export interface components {
             form_status: components["schemas"]["FormStatusOut"];
             /** Id */
             id: string;
+            /**
+             * Linked Count
+             * @default 0
+             */
+            linked_count: number;
+            /** Linked Postings */
+            linked_postings: components["schemas"]["LinkedPostingOut"][];
             /** Liveness */
             liveness: string | null;
+            liveness_detail: components["schemas"]["LivenessOut"];
             /** Location */
             location: string;
             /**
@@ -1232,6 +1289,11 @@ export interface components {
             /** Score */
             score: number | null;
             scores: components["schemas"]["ScoresOut"];
+            /**
+             * Source
+             * @default
+             */
+            source: string;
             /** Stage */
             stage: string;
             /** Title */
@@ -1271,14 +1333,27 @@ export interface components {
             application_id: string | null;
             /** Application Stage */
             application_stage: string | null;
+            /** Board */
+            board: string | null;
+            /** Canonical Id */
+            canonical_id: string | null;
             /** Company */
             company: string;
             /** Discovered At */
             discovered_at: string | null;
+            /** Duplicate Of Id */
+            duplicate_of_id: string | null;
             /** Eligible */
             eligible: boolean | null;
             /** Id */
             id: string;
+            /**
+             * Linked Count
+             * @default 0
+             */
+            linked_count: number;
+            /** Liveness */
+            liveness: string | null;
             /** Location */
             location: string;
             /**
@@ -1294,6 +1369,11 @@ export interface components {
             remote: boolean;
             /** Score */
             score: number | null;
+            /**
+             * Source
+             * @default
+             */
+            source: string;
             /** Stage */
             stage: string;
             /** Title */
@@ -1355,6 +1435,34 @@ export interface components {
             /** Max Dry Runs Per Day */
             max_dry_runs_per_day: number;
         };
+        /** LinkedPostingOut */
+        LinkedPostingOut: {
+            /** Canonical Id */
+            canonical_id: string | null;
+            /** Company */
+            company: string;
+            /** Id */
+            id: string;
+            /** Location */
+            location: string;
+            /** Method */
+            method: string | null;
+            /**
+             * Relation
+             * @enum {string}
+             */
+            relation: "primary" | "duplicate";
+            /** Score */
+            score: number | null;
+            /** Source */
+            source: string;
+            /** Stage */
+            stage: string;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
+        };
         /** LiveSubmissionOut */
         LiveSubmissionOut: {
             /** Env Allow Live Submission */
@@ -1366,6 +1474,45 @@ export interface components {
             locked: true;
             /** Reason */
             reason: string;
+        };
+        /** LivenessCheckOut */
+        LivenessCheckOut: {
+            /** Action */
+            action: string;
+            /** Checked At */
+            checked_at: string | null;
+            /** Detail */
+            detail: string;
+            /** Http Status */
+            http_status: number | null;
+            /** Outcome */
+            outcome: string;
+            /** Signal */
+            signal: string;
+            /** Trigger */
+            trigger: string;
+        };
+        /** LivenessOut */
+        LivenessOut: {
+            /** Checked At */
+            checked_at: string | null;
+            /** Checks */
+            checks: components["schemas"]["LivenessCheckOut"][];
+            /** Closed At */
+            closed_at: string | null;
+            /**
+             * Failures
+             * @default 0
+             */
+            failures: number;
+            /** Last Seen At */
+            last_seen_at: string | null;
+            /** Next Check At */
+            next_check_at: string | null;
+            /** Reason */
+            reason: string | null;
+            /** Status */
+            status: string | null;
         };
         /** MaterialActionOut */
         MaterialActionOut: {
@@ -1783,6 +1930,10 @@ export interface components {
         SettingsOut: {
             /** Application Mode */
             application_mode: string;
+            /** Ashby Browser Verify */
+            ashby_browser_verify: boolean;
+            /** Ashby Orgs */
+            ashby_orgs: string[];
             /** Auth Mode */
             auth_mode: string;
             /** Automation Enabled */
@@ -1809,8 +1960,14 @@ export interface components {
             excluded_locations: string[];
             /** Excluded Titles */
             excluded_titles: string[];
+            /** Greenhouse Board Tokens */
+            greenhouse_board_tokens: string[];
             /** Greenhouse Browser Verify */
             greenhouse_browser_verify: boolean;
+            /** Lever Browser Verify */
+            lever_browser_verify: boolean;
+            /** Lever Companies */
+            lever_companies: string[];
             live_submission: components["schemas"]["LiveSubmissionOut"];
             /** Llm Fast Model */
             llm_fast_model: string;
@@ -1843,6 +2000,8 @@ export interface components {
          * @description The only settings the API may change. Anything else is a 422.
          */
         SettingsPatch: {
+            /** Ashby Orgs */
+            ashby_orgs?: string[] | null;
             /** Automation Enabled */
             automation_enabled?: boolean | null;
             /** Blacklisted Companies */
@@ -1859,6 +2018,10 @@ export interface components {
             excluded_locations?: string[] | null;
             /** Excluded Titles */
             excluded_titles?: string[] | null;
+            /** Greenhouse Board Tokens */
+            greenhouse_board_tokens?: string[] | null;
+            /** Lever Companies */
+            lever_companies?: string[] | null;
             /** Max Applications Per Day */
             max_applications_per_day?: number | null;
             /** Max Dry Runs Per Day */
@@ -1876,6 +2039,8 @@ export interface components {
         };
         /** SourcesOut */
         SourcesOut: {
+            /** Ashby Orgs */
+            ashby_orgs: number;
             /** Generic Feeds */
             generic_feeds: number;
             /** Greenhouse Boards */
@@ -2372,6 +2537,37 @@ export interface operations {
             };
         };
     };
+    check_liveness_api_jobs__job_id__check_liveness_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     job_form_api_jobs__job_id__form_get: {
         parameters: {
             query?: never;
@@ -2452,6 +2648,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobMaterialsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unlink_duplicate_api_jobs__job_id__unlink_duplicate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobDetailOut"];
                 };
             };
             /** @description Validation Error */

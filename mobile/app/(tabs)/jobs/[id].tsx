@@ -7,10 +7,13 @@ import type { FormPreview, FormStatus, JobDetail } from "@/api/types";
 import { Badge } from "@/components/Badge";
 import { Banner } from "@/components/Banner";
 import { Card, Muted, Row } from "@/components/Card";
+import { LinkedPostingsCard, LivenessBadge, LivenessCard } from "@/components/DiscoveryCards";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { ErrorView, LoadingView } from "@/components/StatusViews";
+import { linkedLabel, livenessBadgeStatus, sourceLabel } from "@/discovery";
 import { useApiResource } from "@/hooks/useApiResource";
+import { confirmAsync } from "@/lib/confirm";
 import { matchScoreColor, stageColor, useTheme } from "@/theme";
 import { formatDateTime, formatScore, humanize } from "@/utils/format";
 
@@ -82,6 +85,7 @@ function FormStatusCard({ status, preview }: { status: FormStatus; preview?: For
 
 function JobHeader({ job }: { job: JobDetail }) {
   const theme = useTheme();
+  const linked = linkedLabel(job);
   return (
     <View style={{ gap: 6 }}>
       <Text style={[styles.title, { color: theme.text }]}>{job.title}</Text>
@@ -91,7 +95,9 @@ function JobHeader({ job }: { job: JobDetail }) {
       </Text>
       <View style={styles.badges}>
         <Badge label={humanize(job.stage)} color={stageColor(theme, job.stage)} />
-        {job.platform ? <Badge label={job.platform} color={theme.info} /> : null}
+        <Badge label={sourceLabel(job.source)} color={theme.info} />
+        {linked ? <Badge label={linked} color={theme.textMuted} /> : null}
+        <LivenessBadge status={livenessBadgeStatus(job)} />
       </View>
     </View>
   );
@@ -192,6 +198,24 @@ function DescriptionCard({ description }: { description: string | null | undefin
   );
 }
 
+function useDiscoveryActions(id: string, refresh: () => Promise<void>) {
+  async function checkLiveness() {
+    await api.checkLiveness(id);
+    await refresh();
+  }
+  async function unlinkDuplicate() {
+    const ok = await confirmAsync(
+      "Not a duplicate?",
+      "This posting will be scored again from scratch as its own role. Nothing is applied or submitted.",
+      "Re-check"
+    );
+    if (!ok) return;
+    await api.unlinkDuplicate(id);
+    await refresh();
+  }
+  return { checkLiveness, unlinkDuplicate };
+}
+
 function useFormPreview(id: string) {
   const [preview, setPreview] = useState<FormPreview>();
   const [previewError, setPreviewError] = useState<string>();
@@ -215,6 +239,7 @@ export default function JobDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: job, loading, refreshing, error, refresh, reload } = useApiResource(() => api.job(String(id)), [id]);
   const { preview, previewError, checking, checkForm } = useFormPreview(String(id));
+  const { checkLiveness, unlinkDuplicate } = useDiscoveryActions(String(id), refresh);
 
   if (loading && !job) return <ScreenContainer><LoadingView /></ScreenContainer>;
   if (!job) return <ScreenContainer><ErrorView message={error ?? "Job not found."} onRetry={reload} /></ScreenContainer>;
@@ -227,12 +252,14 @@ export default function JobDetailScreen() {
       >
         {error ? <Banner tone="danger" message={error} /> : null}
         <JobHeader job={job} />
+        <LinkedPostingsCard job={job} onUnlink={unlinkDuplicate} />
         <ScoreCard job={job} />
         <FormStatusCard status={job.form_status} preview={preview} />
         {previewError ? <Banner tone="danger" message={previewError} /> : null}
         <PrimaryButton title="Check the live form now (read-only)" variant="secondary" loading={checking} onPress={() => void checkForm()} />
         <OpenTasksCard tasks={job.review_tasks.filter((task) => task.status === "open")} />
         <ApplicationCard application={job.application} jobId={job.id} />
+        <LivenessCard job={job} onCheck={checkLiveness} />
         <TimelineCard events={job.events} />
         <DescriptionCard description={job.description} />
         <PrimaryButton title="Open posting in browser" variant="secondary" onPress={() => void Linking.openURL(job.url)} />
