@@ -43,6 +43,10 @@ class PipelineStage(str, enum.Enum):
     rejected = "rejected"
     withdrawn = "withdrawn"
     failed = "failed"
+    # Linked to an earlier posting of the same role (see app.dedup); never prepared or dry-run.
+    duplicate = "duplicate"
+    # The posting was confirmed closed or removed (see app.job_liveness).
+    closed = "closed"
 
 
 TERMINAL_STAGES = frozenset({
@@ -50,6 +54,7 @@ TERMINAL_STAGES = frozenset({
     PipelineStage.withdrawn.value,
     PipelineStage.failed.value,
     PipelineStage.confirmed.value,
+    PipelineStage.closed.value,
 })
 
 
@@ -84,8 +89,56 @@ class Job(Base):
     liveness: Mapped[str | None] = mapped_column(String(20), nullable=True)
     discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    # Canonical identity: "<ats>:<board>:<job id>" (see app.dedup.canonical_id).
+    board: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    canonical_id: Mapped[str | None] = mapped_column(String(300), nullable=True, unique=True, index=True)
+    # Fuzzy-duplicate fingerprints (see app.dedup).
+    dedup_key: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    description_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    description_simhash: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    duplicate_of_id: Mapped[str | None] = mapped_column(ForeignKey("jobs.id"), nullable=True, index=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Liveness bookkeeping (see app.job_liveness).
+    liveness_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    liveness_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    liveness_failures: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
+    liveness_next_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     application: Mapped[Application | None] = relationship(back_populates="job", uselist=False)
+
+
+class JobLink(Base):
+    """A duplicate link between two postings of the same role. Nothing is deleted."""
+
+    __tablename__ = "job_links"
+    __table_args__ = (UniqueConstraint("job_id", "primary_job_id", name="uq_job_link"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    job_id: Mapped[str] = mapped_column(ForeignKey("jobs.id"), index=True)
+    primary_job_id: Mapped[str] = mapped_column(ForeignKey("jobs.id"), index=True)
+    method: Mapped[str] = mapped_column(String(40))
+    score: Mapped[float] = mapped_column(Float, default=0.0)
+    status: Mapped[str] = mapped_column(String(20), default="linked", index=True)
+    detail_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class LivenessCheck(Base):
+    """Evidence for every liveness observation of a posting."""
+
+    __tablename__ = "liveness_checks"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    job_id: Mapped[str] = mapped_column(ForeignKey("jobs.id"), index=True)
+    trigger: Mapped[str] = mapped_column(String(30), default="cycle")
+    outcome: Mapped[str] = mapped_column(String(20))
+    signal: Mapped[str] = mapped_column(String(80), default="")
+    http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    detail: Mapped[str] = mapped_column(Text, default="")
+    action: Mapped[str] = mapped_column(String(30), default="none")
+    checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
 
 class Application(Base):

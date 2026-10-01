@@ -114,7 +114,31 @@ ALLOWED: dict[str, frozenset[str]] = {
         PipelineStage.preparing.value,
         PipelineStage.needs_review.value,
     }),
+    PipelineStage.duplicate.value: frozenset(),
+    PipelineStage.closed.value: frozenset(),
 }
+
+
+# Duplicate links and closed postings (see app.dedup and app.job_liveness).
+# Neither is reachable from an in-flight or submission stage.
+_DEDUP_SOURCES = (
+    PipelineStage.discovered, PipelineStage.normalized, PipelineStage.eligible, PipelineStage.review,
+    PipelineStage.scored, PipelineStage.shortlisted, PipelineStage.approved, PipelineStage.materials_generated,
+    PipelineStage.materials_reviewed, PipelineStage.ready_to_apply, PipelineStage.needs_review, PipelineStage.failed,
+)
+_CLOSE_SOURCES = (*_DEDUP_SOURCES, PipelineStage.validated, PipelineStage.duplicate)
+
+for _stage in _DEDUP_SOURCES:
+    ALLOWED[_stage.value] = ALLOWED[_stage.value] | {PipelineStage.duplicate.value}
+for _stage in _CLOSE_SOURCES:
+    ALLOWED[_stage.value] = ALLOWED.get(_stage.value, frozenset()) | {PipelineStage.closed.value}
+# The owner can unlink a duplicate (re-gated from scratch); a closed posting
+# that a later definitive check finds live again is reopened the same way.
+ALLOWED[PipelineStage.duplicate.value] = ALLOWED[PipelineStage.duplicate.value] | {PipelineStage.discovered.value}
+ALLOWED[PipelineStage.closed.value] = frozenset({PipelineStage.discovered.value})
+
+#: Stages from which a job can never again be prepared or dry-run without re-gating.
+INACTIVE_STAGES = frozenset({PipelineStage.duplicate.value, PipelineStage.closed.value})
 
 
 class IllegalTransition(ValueError):

@@ -74,8 +74,11 @@ class Settings(BaseSettings):
     excluded_titles: str = "software engineer,legal counsel,product manager"
     blacklisted_companies: str = ""
 
+    # Public job boards to discover from (comma-separated board tokens/slugs).
+    # Editable from the phone (Settings > Job sources); see examples/boards.canada.example.env.
     greenhouse_board_tokens: str = ""
     lever_companies: str = ""
+    ashby_orgs: str = ""
     generic_feed_urls: str = ""
 
     # Real-form dry-runs (read-only). The public Greenhouse API is primary;
@@ -84,10 +87,39 @@ class Settings(BaseSettings):
     greenhouse_browser_verify: bool = False
     greenhouse_browser_fallback: bool = False
     greenhouse_browser_timeout: float = 45.0
+    # Lever (server-rendered /apply page) and Ashby (public GraphQL, read via GET).
+    # Browser verification is optional and uses the same timeout as Greenhouse.
+    lever_browser_verify: bool = False
+    ashby_browser_verify: bool = False
+
+    # Liveness / closed-listing detection. A posting is closed only after two
+    # definitive "gone" answers at least ``liveness_confirm_minutes`` apart;
+    # transient errors back off exponentially and never close anything.
+    liveness_timeout: float = 15.0
+    liveness_recheck_hours: float = 24.0
+    liveness_confirm_minutes: float = 30.0
+    liveness_backoff_minutes: float = 30.0
+    liveness_backoff_max_hours: float = 24.0
+    liveness_review_after_failures: int = 5
+    liveness_max_age_prepare_hours: float = 6.0
+    liveness_max_age_dry_run_minutes: float = 30.0
+    cycle_max_liveness: int = 20
 
     @staticmethod
     def _csv(value: str) -> list[str]:
         return [item.strip() for item in value.split(",") if item.strip()]
+
+    @property
+    def greenhouse_board_list(self) -> list[str]:
+        return self._csv(self.greenhouse_board_tokens)
+
+    @property
+    def lever_company_list(self) -> list[str]:
+        return self._csv(self.lever_companies)
+
+    @property
+    def ashby_org_list(self) -> list[str]:
+        return self._csv(self.ashby_orgs)
 
     @property
     def target_location_list(self) -> list[str]:
@@ -110,10 +142,11 @@ class Settings(BaseSettings):
         return self._csv(self.blacklisted_companies)
 
     def source_counts(self) -> dict[str, int]:
-        """How many job sources are configured, without revealing them."""
+        """How many job sources are configured (feed URLs are never revealed; board slugs are public)."""
         return {
             "greenhouse_boards": len(self._csv(self.greenhouse_board_tokens)),
             "lever_companies": len(self._csv(self.lever_companies)),
+            "ashby_orgs": len(self._csv(self.ashby_orgs)),
             "generic_feeds": len(self._csv(self.generic_feed_urls)),
         }
 
