@@ -22,12 +22,13 @@ describe("API contract", () => {
   }
 
   const calls: { method: string; path: string }[] = [];
-  const pattern = /(request|post)<[^>]+>\(\s*[`"](\/api\/[^`"]*)[`"]/g;
+  const pattern = /(request|post|put)<[^>]+>\(\s*[`"](\/api\/[^`"]*)[`"]/g;
   for (const match of clientSource.matchAll(pattern)) {
     const start = match.index + match[0].length;
     const restOfLine = clientSource.slice(start, clientSource.indexOf("\n", start));
     const explicit = /method: "(\w+)"/.exec(restOfLine);
-    const method = match[1] === "post" ? "POST" : explicit ? explicit[1] : "GET";
+    const helper = match[1] === "request" ? undefined : match[1].toUpperCase();
+    const method = helper ?? (explicit ? explicit[1] : "GET");
     calls.push({ method, path: normalize(match[2]) });
   }
 

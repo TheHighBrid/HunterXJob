@@ -181,6 +181,7 @@ def dom_control(item: DomField) -> FormControl:
     if control_type is ControlType.UNKNOWN or (control_type is ControlType.AUTOCOMPLETE and not item.options):
         confidence = 0.3
     key = item.form_key
+    history = history_key(key, item.label)
     return FormControl(
         key=key,
         label=item.label or key,
@@ -192,7 +193,7 @@ def dom_control(item: DomField) -> FormControl:
         evidence=["greenhouse_dom", f"tag={item.tag}", f"id={item.id}", f"name={item.name}"],
         confidence=confidence,
         section="dom",
-        vault_keys=[key, *([history] if (history := history_key(key, item.label)) else [])],
+        vault_keys=[key, history] if history else [key],
     )
 
 

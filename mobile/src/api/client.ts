@@ -124,6 +124,10 @@ export function createClient(getConfig: () => ClientConfig, fetchImpl: FetchLike
     return request<T>(path, { method: "POST", body: payload === undefined ? undefined : JSON.stringify(payload) });
   }
 
+  function put<T>(path: string, payload: unknown): Promise<T> {
+    return request<T>(path, { method: "PUT", body: JSON.stringify(payload) });
+  }
+
   return {
     request,
     health: () => request<Health>("/api/health"),
@@ -175,7 +179,7 @@ export function createClient(getConfig: () => ClientConfig, fetchImpl: FetchLike
     addFact: (category: FactCategory, data: Record<string, unknown>, verified = false) =>
       post<ProfileFact>("/api/profile/facts", { category, data, verified }),
     editFact: (id: string, data: Record<string, unknown>, verified = false) =>
-      request<ProfileFact>(`/api/profile/facts/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ data, verified }) }),
+      put<ProfileFact>(`/api/profile/facts/${encodeURIComponent(id)}`, { data, verified }),
     verifyFact: (id: string, verified: boolean) => post<ProfileFact>(`/api/profile/facts/${encodeURIComponent(id)}/verify`, { verified }),
     removeFact: (id: string) => post<FactRemoved>(`/api/profile/facts/${encodeURIComponent(id)}/remove`),
 
