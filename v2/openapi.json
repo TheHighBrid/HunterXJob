@@ -3418,6 +3418,7 @@
             "type": "array"
           },
           "greenhouse_board_tokens": {
+            "description": "Public Greenhouse board slugs",
             "items": {
               "type": "string"
             },

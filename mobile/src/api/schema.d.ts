@@ -1960,7 +1960,10 @@ export interface components {
             excluded_locations: string[];
             /** Excluded Titles */
             excluded_titles: string[];
-            /** Greenhouse Board Tokens */
+            /**
+             * Greenhouse Board Tokens
+             * @description Public Greenhouse board slugs
+             */
             greenhouse_board_tokens: string[];
             /** Greenhouse Browser Verify */
             greenhouse_browser_verify: boolean;

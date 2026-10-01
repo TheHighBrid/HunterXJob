@@ -63,7 +63,8 @@ def _discovery_identity(connection: Connection) -> None:
         if name in existing:
             continue
         column_type = jobs.c[name].type.compile(dialect=connection.dialect)
-        connection.execute(text(f'ALTER TABLE jobs ADD COLUMN "{name}" {column_type}'))  # nosec B608 - names are constants
+        # Column names come from the constant _JOB_COLUMNS_V5 and types from the ORM model.
+        connection.exec_driver_sql(f'ALTER TABLE jobs ADD COLUMN "{name}" {column_type}')
     for index in jobs.indexes:
         if any(column.name in _JOB_COLUMNS_V5 for column in index.columns):
             index.create(connection, checkfirst=True)

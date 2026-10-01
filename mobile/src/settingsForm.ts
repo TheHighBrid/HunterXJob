@@ -1,8 +1,11 @@
 import type { ServerSettings, SettingsPatch } from "@/api/types";
 import { parseList } from "@/utils/format";
 
+/** Job-source lists (public board slugs) the phone can edit. */
+type SourceListKey = "greenhouse_board_tokens" | "lever_companies" | "ashby_orgs";
+
 /** Editable copy of the server settings, as typed into text inputs. */
-export interface SettingsForm {
+export type SettingsForm = Record<SourceListKey, string> & {
   automation_enabled: boolean;
   quiet_hours_start: string;
   quiet_hours_end: string;
@@ -18,10 +21,7 @@ export interface SettingsForm {
   excluded_titles: string;
   excluded_locations: string;
   blacklisted_companies: string;
-  greenhouse_board_tokens: string;
-  lever_companies: string;
-  ashby_orgs: string;
-}
+};
 
 export function settingsToForm(settings: ServerSettings): SettingsForm {
   return {

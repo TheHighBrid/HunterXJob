@@ -8,7 +8,7 @@ TypeScript types are generated from, so keep them in sync with the views in
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -89,7 +89,7 @@ class SettingsOut(Out):
     excluded_locations: list[str]
     excluded_titles: list[str]
     blacklisted_companies: list[str]
-    greenhouse_board_tokens: list[str]
+    greenhouse_board_tokens: Annotated[list[str], Field(description="Public Greenhouse board slugs")]
     lever_companies: list[str]
     ashby_orgs: list[str]
     sources: SourcesOut

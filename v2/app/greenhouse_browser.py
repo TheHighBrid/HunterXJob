@@ -87,6 +87,7 @@ _DOM_ALIASES = {"candidate-location": "location", "country": "phone_country"}
 _FORM_ID_PREFIX = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}_(?=.)")
 GRAPHQL_REWRITE_HOST = "jobs.ashbyhq.com"
 GRAPHQL_REWRITE_PATH = "/api/non-user-graphql"
+GRAPHQL_REWRITE_URL = "https://jobs.ashbyhq.com/api/non-user-graphql"
 
 
 class BrowserUnavailable(FormFetchError):
@@ -323,7 +324,7 @@ def graphql_get_rewrite(method: str, url: str, post_data: str | None, allowed_op
     if operation not in allowed_ops or not _is_read_only_query(query):
         return None
     params = {"op": operation, "query": query, "variables": json.dumps(body.get("variables") or {}, separators=(",", ":"))}
-    return f"https://{GRAPHQL_REWRITE_HOST}{GRAPHQL_REWRITE_PATH}?{urlencode(params)}"
+    return GRAPHQL_REWRITE_URL + "?" + urlencode(params)
 
 
 async def _inspect(url: str, timeout_ms: int, graphql_ops: Collection[str] = ()) -> dict[str, Any]:
