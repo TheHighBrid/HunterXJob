@@ -25,7 +25,7 @@ def detect_platform(url: str) -> str:
     host = urlparse(url).netloc.lower()
     path = urlparse(url).path.lower()
     hay = f"{host}{path}"
-    if "greenhouse.io" in host or "greenhouse" in hay:
+    if "greenhouse.io" in host or "greenhouse" in hay or "gh_jid=" in urlparse(url).query.lower():
         return "greenhouse"
     if "lever.co" in host:
         return "lever"
@@ -40,6 +40,16 @@ def detect_platform(url: str) -> str:
     if "mailto:" in url or url.startswith("mailto:"):
         return "email"
     return "generic"
+
+
+def platform_for_job(job: Any) -> str:
+    """Platform for a stored job; discovery source beats URL heuristics."""
+    if getattr(job, "platform", None):
+        return str(job.platform)
+    source = (getattr(job, "source", "") or "").lower()
+    if source in {"greenhouse", "lever"}:
+        return source
+    return detect_platform(getattr(job, "url", "") or "")
 
 
 class SnapshotAdapter(PlatformAdapter):
@@ -164,33 +174,6 @@ ADAPTER_CATALOG: dict[str, AdapterInfo] = {
     "icims": AdapterInfo("icims", AdapterMaturity.detect_only, feature_flag="adapter.icims"),
     "taleo": AdapterInfo("taleo", AdapterMaturity.detect_only, feature_flag="adapter.taleo"),
 }
-
-
-GREENHOUSE_FIXTURE = """
-<html><body>
-  <h1>Apply for this job</h1>
-  <form id="application">
-    <label for="first_name">First Name</label>
-    <input id="first_name" name="first_name" required>
-    <label for="last_name">Last Name</label>
-    <input id="last_name" name="last_name" required>
-    <label for="email">Email</label>
-    <input id="email" name="email" type="email" required>
-    <label for="phone">Phone</label>
-    <input id="phone" name="phone" type="tel">
-    <label for="resume">Resume</label>
-    <input id="resume" name="resume" type="file" required>
-    <label for="cover_letter">Cover Letter</label>
-    <textarea id="cover_letter" name="cover_letter"></textarea>
-    <label for="work_authorization">Work authorization</label>
-    <select id="work_authorization" name="work_authorization" required>
-      <option value="Authorized to work in Canada">Authorized to work in Canada</option>
-      <option value="Need sponsorship">Need sponsorship</option>
-    </select>
-    <button type="submit" id="submit_app">Submit Application</button>
-  </form>
-</body></html>
-"""
 
 
 def plan_for_html(html: str, vault: AnswerVault) -> tuple[str | None, FillPlan]:

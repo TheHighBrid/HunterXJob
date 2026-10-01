@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     lever_companies: str = ""
     generic_feed_urls: str = ""
 
+    # Real-form dry-runs (read-only). The public Greenhouse API is primary;
+    # the browser is optional verification/fallback and needs the [browser] extra.
+    greenhouse_form_timeout: float = 20.0
+    greenhouse_browser_verify: bool = False
+    greenhouse_browser_fallback: bool = False
+    greenhouse_browser_timeout: float = 45.0
+
     @staticmethod
     def _csv(value: str) -> list[str]:
         return [item.strip() for item in value.split(",") if item.strip()]

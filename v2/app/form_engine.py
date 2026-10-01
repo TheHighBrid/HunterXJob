@@ -33,11 +33,23 @@ SENSITIVE_PATTERNS = (
 )
 LEGAL_PATTERNS = (
     "i agree", "terms", "privacy", "consent", "certify", "acknowledge",
-    "accurate", "true and complete",
+    "accurate", "true and complete", "disclaimer", "export control",
+    "criminal", "convicted", "background check", "non-compete",
+    "post-employment restriction", "employment agreement",
 )
 AUTH_PATTERNS = (
     "work authorization", "authorized to work", "sponsorship", "visa",
-    "citizen", "permanent resident", "work permit",
+    "citizen", "permanent resident", "work permit", "eligible to work",
+    "right to work", "security clearance",
+)
+# Sections whose answers are voluntary self-identification. They are never
+# inferred; they are filled only from explicit answers or an explicit
+# decline-to-self-identify policy stored in the answer vault.
+VOLUNTARY_SECTIONS = frozenset({"eeoc", "demographic"})
+DECLINE_POLICY_KEY = "voluntary_self_identification"
+_DECLINE_OPTION_RE = re.compile(
+    r"decline|don.?t wish|do not wish|prefer not|not to (?:say|disclose|answer|self)|choose not|wish not",
+    re.IGNORECASE,
 )
 ASSESSMENT_PATTERNS = ("assessment", "hirevue", "codility", "hackerrank", "personality test")
 CAPTCHA_PATTERNS = ("captcha", "recaptcha", "hcaptcha", "verify you are human", "cf-challenge")
@@ -57,6 +69,13 @@ class FormControl:
     confidence: float = 0.5
     sensitive: bool = False
     legal: bool = False
+    # Where the control came from on the real form (e.g. "application",
+    # "location", "eeoc", "demographic", "data_compliance", "dom").
+    section: str = "application"
+    # Additional vault keys to try, most specific first, before ``key``.
+    vault_keys: list[str] = field(default_factory=list)
+    # Option label -> platform value id, when the platform exposes one.
+    option_values: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -203,6 +222,44 @@ def detect_handoff(html: str, url: str = "") -> str | None:
     return None
 
 
+def _normalize_option(value: Any) -> str:
+    return " ".join(str(value).split()).casefold()
+
+
+def _match_option(control: FormControl, value: Any) -> Any | None:
+    """Return the listed option(s) equal to ``value`` or None.
+
+    Matching is exact after case/whitespace normalization only. No fuzzy or
+    semantic matching: an answer that is not literally one of the offered
+    options goes to review instead of being guessed.
+    """
+    lookup = {_normalize_option(option): option for option in control.options}
+    if control.control_type is ControlType.MULTISELECT:
+        parts = value if isinstance(value, (list, tuple)) else [part for part in str(value).split("|") if part.strip()]
+        matched = [lookup.get(_normalize_option(part)) for part in parts]
+        if not matched or any(item is None for item in matched):
+            return None
+        return matched
+    return lookup.get(_normalize_option(value))
+
+
+def _decline_option(control: FormControl) -> str | None:
+    candidates = [option for option in control.options if _DECLINE_OPTION_RE.search(option)]
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _resolve_control(control: FormControl, vault: AnswerVault, request_sensitive: bool):
+    keys = [*control.vault_keys, control.key]
+    seen: list[str] = []
+    for key in keys:
+        if key in seen:
+            continue
+        seen.append(key)
+        if vault.has(key):
+            return vault.resolve(FieldRequest(key=key, required=control.required, sensitive=request_sensitive))
+    return vault.resolve(FieldRequest(key=control.key, required=control.required, sensitive=request_sensitive))
+
+
 def plan_fill(controls: list[FormControl], vault: AnswerVault) -> FillPlan:
     items: list[FillPlanItem] = []
     blockers: list[str] = []
@@ -213,16 +270,26 @@ def plan_fill(controls: list[FormControl], vault: AnswerVault) -> FillPlan:
             blockers.append("unsupported_control")
             items.append(FillPlanItem(control, "review", reason="unsupported or low-confidence control"))
             continue
-        request = FieldRequest(key=control.key, required=control.required, sensitive=control.sensitive or control.legal)
-        resolved = vault.resolve(request)
+        sensitive = control.sensitive or control.legal
+        resolved = _resolve_control(control, vault, sensitive)
         if resolved.status is ResolutionStatus.RESOLVED:
             value = resolved.value
-            if control.options and str(value) not in control.options:
-                blockers.append("ambiguous_question")
-                items.append(FillPlanItem(control, "review", value=value, reason="resolved value is not a listed option"))
-                continue
+            if control.options:
+                matched = _match_option(control, value)
+                if matched is None:
+                    blockers.append("ambiguous_question")
+                    items.append(FillPlanItem(control, "review", value=value, reason="resolved value is not a listed option"))
+                    continue
+                value = matched
             items.append(FillPlanItem(control, "fill", value=value, reason=resolved.reason))
             continue
+        if control.section in VOLUNTARY_SECTIONS and control.options:
+            policy = vault.resolve(FieldRequest(key=DECLINE_POLICY_KEY, required=False, sensitive=True))
+            if policy.status is ResolutionStatus.RESOLVED and _normalize_option(policy.value) == "decline":
+                option = _decline_option(control)
+                if option is not None:
+                    items.append(FillPlanItem(control, "fill", value=option, reason="explicit decline-to-self-identify policy"))
+                    continue
         if control.required or control.sensitive or control.legal:
             code = "sensitive_answer_missing" if control.sensitive else (
                 "legal_answer_missing" if control.legal else "ambiguous_question"

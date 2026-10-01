@@ -30,6 +30,9 @@ SENSITIVE_KEYS = frozenset({
     "veteran_status",
     "gender",
     "race_ethnicity",
+    "hispanic_ethnicity",
+    "pronouns",
+    "voluntary_self_identification",
 })
 
 _KEY_ALIASES = {
@@ -48,6 +51,9 @@ _KEY_ALIASES = {
     "veteran-status": "veteran_status",
     "raceethnicity": "race_ethnicity",
     "race-ethnicity": "race_ethnicity",
+    "race": "race_ethnicity",
+    "disability_status": "disability",
+    "disabilitystatus": "disability",
 }
 
 
@@ -98,6 +104,9 @@ class AnswerVault:
         if not 0.0 <= record.confidence <= 1.0:
             raise ValueError("confidence must be between 0 and 1")
         self._records[_canonical_key(record.key)] = record
+
+    def has(self, key: str) -> bool:
+        return _canonical_key(key) in self._records
 
     def resolve(self, request: FieldRequest) -> ResolvedAnswer:
         key = _canonical_key(request.key)

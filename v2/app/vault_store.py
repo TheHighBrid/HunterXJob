@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Iterable
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -7,8 +9,17 @@ from app.answer_vault import AnswerRecord, AnswerSource, AnswerVault
 from app.models import AnswerPolicy
 
 
-def load_vault(db: Session, scope: str = "global") -> AnswerVault:
-    rows = list(db.execute(select(AnswerPolicy).where(AnswerPolicy.scope.in_(["global", scope]))).scalars())
+def load_vault(db: Session, scope: str | Iterable[str] = "global") -> AnswerVault:
+    """Load answers for ``global`` plus the given scope(s).
+
+    Scopes are applied from least to most specific, so an employer- or
+    job-scoped answer overrides a global answer with the same key.
+    """
+    scopes = [scope] if isinstance(scope, str) else list(scope)
+    ordered = ["global", *[item for item in scopes if item != "global"]]
+    rows = list(db.execute(select(AnswerPolicy).where(AnswerPolicy.scope.in_(ordered))).scalars())
+    rank = {name: index for index, name in enumerate(ordered)}
+    rows.sort(key=lambda row: rank.get(row.scope, 0))
     records = []
     for row in rows:
         try:

@@ -1,0 +1,413 @@
+{
+ "id": 8165477,
+ "title": "Administrative Business Partner",
+ "absolute_url": "https://www.asana.com/jobs/apply/8165477?gh_jid=8165477",
+ "location": {
+  "name": "Vancouver, BC"
+ },
+ "company_name": "Asana",
+ "updated_at": "2026-09-18T12:50:39-04:00",
+ "application_deadline": null,
+ "questions": [
+  {
+   "description": null,
+   "label": "First Name",
+   "required": true,
+   "fields": [
+    {
+     "name": "first_name",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Last Name",
+   "required": true,
+   "fields": [
+    {
+     "name": "last_name",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Preferred First Name",
+   "required": false,
+   "fields": [
+    {
+     "name": "preferred_name",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Email",
+   "required": true,
+   "fields": [
+    {
+     "name": "email",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Phone",
+   "required": true,
+   "fields": [
+    {
+     "name": "phone",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Resume/CV",
+   "required": true,
+   "fields": [
+    {
+     "name": "resume",
+     "type": "input_file",
+     "values": []
+    },
+    {
+     "name": "resume_text",
+     "type": "textarea",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Cover Letter",
+   "required": false,
+   "fields": [
+    {
+     "name": "cover_letter",
+     "type": "input_file",
+     "values": []
+    },
+    {
+     "name": "cover_letter_text",
+     "type": "textarea",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "[Optional] Preferred Full Name (The name that you would like to be referred to as. Please input your legal name in the first and last name fields above.)",
+   "required": false,
+   "fields": [
+    {
+     "name": "question_68886291",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Current Company ",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_68886292",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Current Title ",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_68886293",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "LinkedIn Profile",
+   "required": false,
+   "fields": [
+    {
+     "name": "question_68886294",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Personal Website",
+   "required": false,
+   "fields": [
+    {
+     "name": "question_68886295",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "[Optional] Pronouns - how should we refer to you in the third person?",
+   "required": false,
+   "fields": [
+    {
+     "name": "question_68886296",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "she/her/hers",
+       "value": 749696364
+      },
+      {
+       "label": "he/him/his",
+       "value": 749696365
+      },
+      {
+       "label": "they/them/theirs",
+       "value": 749696366
+      },
+      {
+       "label": "other (my preference is not reflected by the options above)",
+       "value": 749696367
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "[Optional, if \"other\" is selected above] My pronouns are",
+   "required": false,
+   "fields": [
+    {
+     "name": "question_68886297",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Do you now, or will you in the future, require immigration sponsorship for work authorization to work in this location?",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_68886298",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "Yes",
+       "value": 1
+      },
+      {
+       "label": "No",
+       "value": 0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Have you been employed, or otherwise engaged, by an Asana entity in the past? (Previous independent contractors, select \"Yes.\")",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_68886299",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "Yes",
+       "value": 1
+      },
+      {
+       "label": "No",
+       "value": 0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Asana is seeking the below information for the exclusive and limited purpose of complying with U.S. export control laws given that the position for which you are applying may require access to technology subject to those laws. We will not use the information that you provide for any other purpose. Are you a citizen or legal permanent resident of Cuba, Iran, North Korea, Syria or Ukraine (Crimea region)?",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_68886300",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "Yes",
+       "value": 1
+      },
+      {
+       "label": "No",
+       "value": 0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Do you currently work for or have you ever worked for a U.S. government entity, either as a contractor or employee?",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_68886301",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "Yes, I do work/have worked for a U.S. government entity.",
+       "value": 749696368
+      },
+      {
+       "label": "No, I have never.",
+       "value": 749696369
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "If you answered “Yes,” please list the U.S. government entity you worked for. If not applicable, type 'N/A.'\n",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_68886302",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": "<p>Please review the <a href=\"https://drive.google.com/file/d/1SJ6k32-MS2VZRq9lSng_4M0pjIA5oCL9/view?usp=sharing\">Applicant Arbitration Agreement here.</a></p>",
+   "label": "By agreeing here: \n(1) I certify that the information I provided to Asana in connection with my application for employment is accurate and truthful; and\n(2) I acknowledge and agree that I have carefully read the mutual Applicant Arbitration Agreement set out below and agree to be bound by it",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_68886303",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "Yes",
+       "value": 1
+      },
+      {
+       "label": "No",
+       "value": 0
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "location_questions": [
+  {
+   "description": null,
+   "label": "Longitude",
+   "required": true,
+   "fields": [
+    {
+     "name": "longitude",
+     "type": "input_hidden",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Latitude",
+   "required": true,
+   "fields": [
+    {
+     "name": "latitude",
+     "type": "input_hidden",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Location",
+   "required": true,
+   "fields": [
+    {
+     "name": "location",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  }
+ ],
+ "compliance": null,
+ "demographic_questions": {
+  "header": "Voluntary Demographics Form",
+  "description": "[demographic notice removed from fixture]",
+  "questions": [
+   {
+    "id": 52921,
+    "label": "Gender Identity Options",
+    "required": true,
+    "type": "multi_value_single_select",
+    "answer_options": [
+     {
+      "id": 314124,
+      "label": "Female",
+      "free_form": false,
+      "decline_to_answer": false
+     },
+     {
+      "id": 314125,
+      "label": "Male",
+      "free_form": false,
+      "decline_to_answer": false
+     },
+     {
+      "id": 314126,
+      "label": "Other",
+      "free_form": false,
+      "decline_to_answer": false
+     },
+     {
+      "id": 314127,
+      "label": "I don't wish to answer",
+      "free_form": false,
+      "decline_to_answer": true
+     }
+    ]
+   }
+  ]
+ },
+ "data_compliance": [
+  {
+   "type": "gdpr",
+   "requires_consent": false,
+   "requires_processing_consent": false,
+   "requires_retention_consent": false,
+   "retention_period": null,
+   "demographic_data_consent_applies": true
+  }
+ ],
+ "content": "[job description removed from fixture]"
+}
