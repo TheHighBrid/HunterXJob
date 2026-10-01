@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import html
+import logging
 import re
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
-from typing import Iterable
 
 import httpx
 from sqlalchemy import select
@@ -11,6 +12,8 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.models import Job
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -27,8 +30,8 @@ class JobRecord:
 
 def clean_html(value: str) -> str:
     value = html.unescape(value or "")
-    value = re.sub(r"<br\s*/?>", "\n", value, flags=re.I)
-    value = re.sub(r"</(?:p|li|h\d)>", "\n", value, flags=re.I)
+    value = re.sub(r"<br\s*/?>", "\n", value, flags=re.IGNORECASE)
+    value = re.sub(r"</(?:p|li|h\d)>", "\n", value, flags=re.IGNORECASE)
     value = re.sub(r"<[^>]+>", " ", value)
     value = re.sub(r"[ \t]+", " ", value)
     value = re.sub(r" *\n *", "\n", value)
@@ -81,18 +84,27 @@ def lever_jobs(company: str, timeout: float = 30.0) -> list[JobRecord]:
     return records
 
 
-def discover_all(settings: Settings) -> list[JobRecord]:
+#: A failing board must not stop discovery of the others.
+SOURCE_FAILURES: tuple[type[Exception], ...] = (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError)
+
+
+def discover_all(settings: Settings, errors: list[str] | None = None) -> list[JobRecord]:
+    """Fetch postings from every configured board.
+
+    Per-board failures are logged and, when ``errors`` is given, appended to it
+    as ``"<source>:<board>: <error>"`` so callers can record them.
+    """
     records: list[JobRecord] = []
-    for token in settings._csv(settings.greenhouse_board_tokens):
+    sources = [("greenhouse", token, greenhouse_jobs) for token in settings._csv(settings.greenhouse_board_tokens)]
+    sources += [("lever", company, lever_jobs) for company in settings._csv(settings.lever_companies)]
+    for source, board, fetch in sources:
         try:
-            records.extend(greenhouse_jobs(token))
-        except Exception:
-            continue
-    for company in settings._csv(settings.lever_companies):
-        try:
-            records.extend(lever_jobs(company))
-        except Exception:
-            continue
+            records.extend(fetch(board))
+        except SOURCE_FAILURES as exc:
+            message = f"{source}:{board}: {type(exc).__name__}: {exc}"
+            logger.warning("discovery failed for %s", message)
+            if errors is not None:
+                errors.append(message)
     return records
 
 

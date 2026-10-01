@@ -9,6 +9,15 @@ import httpx
 from app.config import Settings
 
 
+class AIError(RuntimeError):
+    """The local model could not produce a usable response."""
+
+
+#: Exceptions an AI call can raise: transport/HTTP failures, unparseable JSON
+#: (``json.JSONDecodeError`` is a ``ValueError``) and malformed payloads.
+AI_FAILURES: tuple[type[Exception], ...] = (AIError, httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError)
+
+
 @dataclass(slots=True)
 class LocalAI:
     settings: Settings
@@ -41,11 +50,11 @@ class LocalAI:
                 )
                 response.raise_for_status()
                 return response.json().get("response", "").strip()
-            except Exception as exc:
+            except (httpx.HTTPError, ValueError) as exc:
                 last_error = exc
                 if attempt < self.settings.ai_max_retries:
                     time.sleep(2 ** attempt)
-        raise RuntimeError(f"Local AI failed after retries: {last_error}")
+        raise AIError(f"Local AI failed after retries: {last_error}")
 
     def health(self) -> dict[str, object]:
         try:
@@ -56,7 +65,7 @@ class LocalAI:
             response.raise_for_status()
             models = [item.get("name") for item in response.json().get("models", [])]
             return {"ok": True, "models": models}
-        except Exception as exc:
+        except (httpx.HTTPError, ValueError, AttributeError) as exc:
             return {"ok": False, "error": str(exc)}
 
     def evaluate_job(self, compact_resume: str, job_text: str) -> dict[str, object]:

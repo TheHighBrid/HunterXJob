@@ -14,7 +14,8 @@ class ControlType(str, Enum):
     EMAIL = "email"
     TEL = "tel"
     NUMBER = "number"
-    PASSWORD = "password"
+    # HTML input type name, not a credential.
+    PASSWORD = "password"  # noqa: S105  # nosec B105
     TEXTAREA = "textarea"
     SELECT = "select"
     RADIO = "radio"
@@ -304,6 +305,6 @@ def plan_fill(controls: list[FormControl], vault: AnswerVault) -> FillPlan:
 def verify_filled(control: FormControl, expected: Any, actual: Any) -> bool:
     if expected is None:
         return True
-    if control.control_type in {ControlType.CHECKBOX}:
+    if control.control_type == ControlType.CHECKBOX:
         return bool(actual) == bool(expected)
     return str(actual).strip() == str(expected).strip()

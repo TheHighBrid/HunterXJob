@@ -1,0 +1,11 @@
+# Bandit configuration (used by `bandit -c bandit.yml -r backend v2` and by
+# Codacy when "Use configuration file" is enabled for Bandit).
+# Only B101 (assert_used) is relaxed, and only for test files: pytest relies
+# on bare asserts. Application code keeps B101 and every other check.
+exclude_dirs:
+  - "*/.venv/*"
+  - "*/node_modules/*"
+assert_used:
+  skips:
+    - "tests/*"
+    - "*/tests/*"
