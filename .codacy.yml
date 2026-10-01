@@ -1,0 +1,9 @@
+---
+# Codacy configuration. See docs/CODE_QUALITY.md for the reasoning.
+engines:
+  bandit:
+    # pytest asserts are flagged by Bandit B101 (assert_used). Test code is
+    # excluded from Bandit only; application code keeps every Bandit check,
+    # and Ruff's security rules (S*) still run on tests except S101.
+    exclude_paths:
+      - "**/tests/**"

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Application, Job, PipelineStage, ReviewTask
-
 
 REASON_CODES = frozenset({
     "captcha_detected",
@@ -73,7 +72,7 @@ def resolve_task(db: Session, task_id: str, resolution: str = "resolved") -> Rev
     if task is None:
         raise ValueError("review task not found")
     task.status = resolution
-    task.resolved_at = datetime.now(timezone.utc)
+    task.resolved_at = datetime.now(UTC)
     db.add(task)
     db.commit()
     db.refresh(task)

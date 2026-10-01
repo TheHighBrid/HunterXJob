@@ -21,7 +21,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
@@ -93,7 +93,7 @@ class RealForm:
     warnings: list[str] = field(default_factory=list)
     handoff: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
-    fetched_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    fetched_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     def summary(self) -> dict[str, Any]:
         sections: dict[str, int] = {}
@@ -233,6 +233,41 @@ def _country_scoped(base: str, label: str, job_location: str) -> str | None:
     return f"{base}_{country}" if country else None
 
 
+_WORK_AUTH_RE = re.compile(
+    r"(?:legally )?(?:eligible|authori[sz]ed|permitted|entitled) to work|work authori[sz]ation|right to work|work permit"
+)
+# "Have you worked for <employer> before?" is employer-specific: never shared.
+_PRIOR_EMPLOYMENT_RE = re.compile(
+    r"previous(?:ly)? (?:worked|employed|been employed)|worked (?:at|for) .* (?:before|previously|in the past)|"
+    r"(?:employed|engaged)[^?]* in the past|consulted for"
+)
+
+# Ordered rules: (patterns that must all match, canonical key, max label length).
+_KEY_RULES: tuple[tuple[tuple[re.Pattern[str], ...], str, int | None], ...] = (
+    ((re.compile(r"linkedin"),), "linkedin_url", None),
+    ((re.compile(r"github"),), "github_url", None),
+    ((re.compile(r"portfolio|personal website|\bwebsite\b"),), "website_url", None),
+    ((re.compile(r"pronoun"),), "pronouns", None),
+    ((re.compile(r"preferred (?:full |first )?name|name you.?d prefer"),), "preferred_name", None),
+    ((re.compile(r"salary|compensation expectation|pay expectation|desired (?:pay|compensation)"),), "salary_expectation", None),
+    ((re.compile(r"current (?:company|employer)"),), "current_company", 60),
+    ((re.compile(r"current (?:job )?title|current role"),), "current_title", 60),
+    ((re.compile(r"relocat"),), "willing_to_relocate", None),
+    ((re.compile(r"how did you hear|hear(?:d)? about"),), "referral_source", None),
+    ((re.compile(r"country"), re.compile(r"resid|located|\blive\b|based")), "country_of_residence", None),
+    ((re.compile(r"time ?zone"),), "time_zone", None),
+)
+
+
+def _rule_key(text: str) -> str | None:
+    for patterns, key, max_length in _KEY_RULES:
+        if max_length is not None and len(text) > max_length:
+            continue
+        if all(pattern.search(text) for pattern in patterns):
+            return key
+    return None
+
+
 def classify_question(label: str, job_location: str = "") -> str | None:
     """Map a custom question label to a canonical answer-vault key.
 
@@ -240,44 +275,17 @@ def classify_question(label: str, job_location: str = "") -> str | None:
     unrecognized questions; those must be answered per question.
     """
     text = " ".join((label or "").split()).lower()
-    if not text:
-        return None
     # Conditional follow-ups ("if you answered yes...") depend on another
     # answer and are never shared across questions.
-    if _CONDITIONAL_RE.search(text):
+    if not text or _CONDITIONAL_RE.search(text):
         return None
     if "sponsor" in text:
         return _country_scoped("sponsorship", text, job_location)
-    if re.search(r"(?:legally )?(?:eligible|authori[sz]ed|permitted|entitled) to work|work authori[sz]ation|right to work|work permit", text):
+    if _WORK_AUTH_RE.search(text):
         return _country_scoped("work_authorization", text, job_location)
-    if re.search(r"previous(?:ly)? (?:worked|employed|been employed)|worked (?:at|for) .* (?:before|previously|in the past)|"
-                 r"(?:employed|engaged)[^?]* in the past|consulted for", text):
+    if _PRIOR_EMPLOYMENT_RE.search(text):
         return None
-    if "linkedin" in text:
-        return "linkedin_url"
-    if "github" in text:
-        return "github_url"
-    if re.search(r"portfolio|personal website|\bwebsite\b", text):
-        return "website_url"
-    if "pronoun" in text:
-        return "pronouns"
-    if re.search(r"preferred (?:full |first )?name|name you.?d prefer", text):
-        return "preferred_name"
-    if re.search(r"salary|compensation expectation|pay expectation|desired (?:pay|compensation)", text):
-        return "salary_expectation"
-    if len(text) <= 60 and re.search(r"current (?:company|employer)", text):
-        return "current_company"
-    if len(text) <= 60 and re.search(r"current (?:job )?title|current role", text):
-        return "current_title"
-    if "relocat" in text:
-        return "willing_to_relocate"
-    if re.search(r"how did you hear|hear(?:d)? about", text):
-        return "referral_source"
-    if "country" in text and re.search(r"resid|located|\blive\b|based", text):
-        return "country_of_residence"
-    if re.search(r"time ?zone", text):
-        return "time_zone"
-    return None
+    return _rule_key(text)
 
 
 _DEMOGRAPHIC_KEYS: tuple[tuple[re.Pattern[str], str], ...] = (
@@ -319,6 +327,46 @@ _TYPE_MAP = {
 }
 
 
+def _field_control_type(name: str, raw_type: str, section: str) -> ControlType:
+    control_type = _TYPE_MAP.get(raw_type, ControlType.UNKNOWN)
+    if name in _STANDARD_FIELDS and control_type is ControlType.TEXT:
+        control_type = _STANDARD_FIELDS[name]
+    if section == "location" and name == "location":
+        control_type = ControlType.AUTOCOMPLETE
+    return control_type
+
+
+def _field_options(field_data: dict[str, Any]) -> tuple[list[str], dict[str, str]]:
+    options: list[str] = []
+    option_values: dict[str, str] = {}
+    for value in field_data.get("values") or []:
+        option_label = " ".join(str(value.get("label", "")).split())
+        if option_label:
+            options.append(option_label)
+            option_values[option_label] = str(value.get("value", ""))
+    return options, option_values
+
+
+def _canonical_key(name: str, label: str, section: str, job_location: str) -> str | None:
+    if section == "eeoc":
+        return name or _demographic_key(label)
+    if name in _STANDARD_FIELDS or section == "location":
+        return name
+    if _looks_like(label, LEGAL_PATTERNS):
+        # Legal declarations are answered per question, never from a shared key.
+        return None
+    return classify_question(label, job_location)
+
+
+def _is_sensitive_field(label: str, canonical: str | None, voluntary: bool) -> bool:
+    return (
+        voluntary
+        or _is_sensitive_key(canonical)
+        or _looks_like(label, SENSITIVE_PATTERNS)
+        or _looks_like(label, AUTH_PATTERNS)
+    )
+
+
 def _control_from_field(
     field_data: dict[str, Any],
     *,
@@ -331,40 +379,10 @@ def _control_from_field(
     raw_name = str(field_data.get("name") or "")
     name = raw_name.removesuffix("[]")
     raw_type = str(field_data.get("type") or "")
-    control_type = _TYPE_MAP.get(raw_type, ControlType.UNKNOWN)
-    if name in _STANDARD_FIELDS and control_type is ControlType.TEXT:
-        control_type = _STANDARD_FIELDS[name]
-    if section == "location" and name == "location":
-        control_type = ControlType.AUTOCOMPLETE
-
-    options: list[str] = []
-    option_values: dict[str, str] = {}
-    for value in field_data.get("values") or []:
-        option_label = " ".join(str(value.get("label", "")).split())
-        if option_label:
-            options.append(option_label)
-            option_values[option_label] = str(value.get("value", ""))
-
-    if section == "eeoc":
-        canonical = name or _demographic_key(label)
-    elif name in _STANDARD_FIELDS or section == "location":
-        canonical = name
-    elif _looks_like(label, LEGAL_PATTERNS):
-        # Legal declarations are answered per question, never from a shared key.
-        canonical = None
-    else:
-        canonical = classify_question(label, job_location)
-
+    control_type = _field_control_type(name, raw_type, section)
+    options, option_values = _field_options(field_data)
+    canonical = _canonical_key(name, label, section, job_location)
     voluntary = section == "eeoc"
-    sensitive = (
-        voluntary
-        or _is_sensitive_key(canonical)
-        or _looks_like(label, SENSITIVE_PATTERNS)
-        or _looks_like(label, AUTH_PATTERNS)
-    )
-    legal = not voluntary and _looks_like(label, LEGAL_PATTERNS)
-    confidence = 0.2 if control_type is ControlType.UNKNOWN else 0.9
-
     vault_keys = [name]
     if canonical and canonical != name:
         vault_keys.append(canonical)
@@ -377,9 +395,9 @@ def _control_from_field(
         name=raw_name,
         input_type=raw_type,
         evidence=[f"greenhouse_api:{section}", f"type={raw_type}", f"name={raw_name}"],
-        confidence=confidence,
-        sensitive=sensitive,
-        legal=legal,
+        confidence=0.2 if control_type is ControlType.UNKNOWN else 0.9,
+        sensitive=_is_sensitive_field(label, canonical, voluntary),
+        legal=not voluntary and _looks_like(label, LEGAL_PATTERNS),
         section=section,
         vault_keys=vault_keys,
         option_values=option_values,

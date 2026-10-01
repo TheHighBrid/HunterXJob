@@ -7,13 +7,14 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.adapter_runtime import ADAPTER_CATALOG, platform_for_job
-from app.ai import LocalAI
+from app.adapter_runtime import ADAPTER_CATALOG, AdapterInfo, platform_for_job
+from app.ai import AI_FAILURES, LocalAI
+from app.answer_vault import AnswerVault
 from app.config import Settings
 from app.decisioning import Decision, DecisionContext, JobFacts, evaluate_job
 from app.evidence import record_evidence
 from app.flags import is_enabled, kill_switch_engaged
-from app.form_engine import FillPlan, detect_handoff, parse_controls, plan_fill
+from app.form_engine import FillPlan, FormControl, detect_handoff, parse_controls, plan_fill
 from app.greenhouse_form import FormFetchError, RealForm
 from app.models import AdapterMaturity, Application, Job, PipelineEvent, PipelineStage
 from app.review_queue import open_task
@@ -92,69 +93,84 @@ def transition(db: Session, job: Job, to_stage: PipelineStage, message: str, pay
     db.commit()
 
 
-def score_pending_jobs(db: Session, settings: Settings, resume_facts: str, use_ai: bool = True) -> int:
-    jobs = list(db.execute(select(Job).where(Job.stage.in_([
+def _route_non_shortlist(db: Session, job: Job, result: EligibilityResult) -> bool:
+    """Handle deterministic reject/review outcomes. Returns True if the job was routed."""
+    if result.decision is Decision.REJECT:
+        job.final_score = result.score
+        transition(db, job, PipelineStage.rejected, result.reason, result.report)
+        return True
+    if result.decision is Decision.REVIEW:
+        job.final_score = result.score
+        transition(db, job, PipelineStage.review, result.reason, result.report)
+        open_task(
+            db,
+            reason_code="decision_review",
+            title=f"Review {job.title} at {job.company}",
+            detail=result.reason,
+            job=job,
+            url=job.url,
+        )
+        return True
+    return False
+
+
+def _ai_evaluation(ai: LocalAI | None, resume_facts: str, job: Job) -> tuple[float | None, dict[str, object]]:
+    if ai is None:
+        return None, {}
+    try:
+        evaluation = ai.evaluate_job(resume_facts, f"{job.title}\n{job.company}\n{job.location}\n{job.description}")
+        return float(evaluation.get("score", 0)), evaluation
+    except AI_FAILURES as exc:
+        return None, {"error": str(exc)}
+
+
+def _shortlist(db: Session, settings: Settings, job: Job) -> None:
+    transition(db, job, PipelineStage.shortlisted, "score above threshold")
+    existing = db.execute(select(Application).where(Application.job_id == job.id)).scalar_one_or_none()
+    if existing is not None:
+        return
+    info = ADAPTER_CATALOG.get(job.platform or "")
+    db.add(Application(
+        job_id=job.id,
+        mode=settings.application_mode,
+        adapter_name=job.platform,
+        adapter_maturity=info.maturity.value if info else AdapterMaturity.dry_run.value,
+    ))
+    db.commit()
+
+
+def score_pending_jobs(db: Session, settings: Settings, resume_facts: str, use_ai: bool = True, limit: int | None = None) -> int:
+    """Gate and score discovered jobs. ``limit`` caps how many are processed in one call."""
+    query = select(Job).where(Job.stage.in_([
         PipelineStage.discovered.value,
         PipelineStage.normalized.value,
-    ]))).scalars())
-    ai = LocalAI(settings)
+    ])).order_by(Job.discovered_at)
+    if limit is not None:
+        query = query.limit(max(limit, 0))
+    jobs = list(db.execute(query).scalars())
+    ai = LocalAI(settings) if use_ai else None
     processed = 0
 
     for job in jobs:
+        processed += 1
         job.platform = platform_for_job(job)
         result = deterministic_gate(job, settings)
         job.eligible = result.eligible
         job.eligibility_reason = result.reason
         job.deterministic_score = result.score
-
-        if result.decision is Decision.REJECT:
-            job.final_score = result.score
-            transition(db, job, PipelineStage.rejected, result.reason, result.report)
-            processed += 1
-            continue
-
-        if result.decision is Decision.REVIEW:
-            job.final_score = result.score
-            transition(db, job, PipelineStage.review, result.reason, result.report)
-            open_task(
-                db,
-                reason_code="decision_review",
-                title=f"Review {job.title} at {job.company}",
-                detail=result.reason,
-                job=job,
-                url=job.url,
-            )
-            processed += 1
+        if _route_non_shortlist(db, job, result):
             continue
 
         transition(db, job, PipelineStage.eligible, result.reason, result.report)
-        ai_score = None
-        evaluation: dict[str, object] = {}
-        if use_ai:
-            try:
-                evaluation = ai.evaluate_job(resume_facts, f"{job.title}\n{job.company}\n{job.location}\n{job.description}")
-                ai_score = float(evaluation.get("score", 0))
-            except Exception as exc:
-                evaluation = {"error": str(exc)}
-
+        ai_score, evaluation = _ai_evaluation(ai, resume_facts, job)
         job.ai_score = ai_score
         job.final_score = round(result.score if ai_score is None else (result.score * 0.45 + ai_score * 0.55), 2)
         transition(db, job, PipelineStage.scored, "job scored", evaluation)
 
         if job.final_score >= settings.min_match_score:
-            transition(db, job, PipelineStage.shortlisted, "score above threshold")
-            existing = db.execute(select(Application).where(Application.job_id == job.id)).scalar_one_or_none()
-            if existing is None:
-                db.add(Application(
-                    job_id=job.id,
-                    mode=settings.application_mode,
-                    adapter_name=job.platform,
-                    adapter_maturity=(ADAPTER_CATALOG.get(job.platform or "generic").maturity.value if job.platform in ADAPTER_CATALOG else AdapterMaturity.dry_run.value),
-                ))
-                db.commit()
+            _shortlist(db, settings, job)
         else:
             transition(db, job, PipelineStage.rejected, "score below threshold")
-        processed += 1
     return processed
 
 
@@ -176,7 +192,7 @@ def generate_materials(db: Session, settings: Settings, application_id: str, res
         application.answers_json = json.dumps(materials.get("screening_answers", {}))
         application.stage = PipelineStage.materials_generated.value
         transition(db, job, PipelineStage.materials_generated, "application materials generated")
-    except Exception as exc:
+    except AI_FAILURES as exc:
         application.last_error = str(exc)
         application.stage = PipelineStage.failed.value
         transition(db, job, PipelineStage.failed, "material generation failed", {"error": str(exc)})
@@ -227,124 +243,112 @@ def preview_form(db: Session, form: RealForm) -> tuple[FillPlan, dict[str, objec
     return plan, form.summary()
 
 
-def execute_apply(
-    db: Session,
-    settings: Settings,
-    application_id: str,
-    html: str | None = None,
-    form_provider: FormProvider | None = None,
-) -> dict[str, object]:
-    """Run a dry-run apply cycle against the job's real application form.
+_APPLY_READY_STAGES = frozenset({
+    PipelineStage.ready_to_apply.value,
+    PipelineStage.validated.value,
+    PipelineStage.needs_review.value,
+})
 
-    The form comes from ``form_provider`` (default: live, read-only fetch of
-    the employer's posting). ``html`` lets a caller supply an explicit form
-    snapshot instead (used by tests); it is labelled ``supplied_snapshot`` in
-    the evidence. If the real form cannot be obtained the application goes to
-    review. There is no fallback to a sample form, and nothing is submitted.
-    """
-    application = db.get(Application, application_id)
-    if application is None:
-        raise ValueError("application not found")
-    job = application.job
+
+@dataclass(slots=True)
+class _LoadedForm:
+    controls: list[FormControl]
+    handoff: str | None
+    vault: AnswerVault
+    summary: dict[str, object]
+
+
+def _apply_adapter(db: Session, settings: Settings, job: Job) -> tuple[str, AdapterInfo]:
+    """Enforce every precondition for an apply cycle; return (platform, catalog entry)."""
     if kill_switch_engaged(db):
         raise RuntimeError("global kill switch is engaged")
     if not settings.automation_enabled:
         raise RuntimeError("automation is disabled")
-    if job.stage not in {
-        PipelineStage.ready_to_apply.value,
-        PipelineStage.validated.value,
-        PipelineStage.needs_review.value,
-    }:
+    if job.stage not in _APPLY_READY_STAGES:
         raise RuntimeError(f"job stage {job.stage} is not ready to apply")
-
     platform = platform_for_job(job)
     info = ADAPTER_CATALOG.get(platform)
     if info is None:
         raise RuntimeError(f"no adapter catalog entry for {platform}")
     if not is_enabled(db, info.feature_flag):
         raise RuntimeError(f"adapter {platform} is feature-flagged off")
+    return platform, info
 
-    application.adapter_name = platform
-    application.adapter_maturity = info.maturity.value
-    application.attempts += 1
 
+def _load_form(db: Session, settings: Settings, job: Job, html: str | None, form_provider: FormProvider | None) -> _LoadedForm:
+    """Load the form to plan against. Raises FormFetchError if the real form is unavailable."""
     if html is not None:
         controls = parse_controls(html)
-        handoff = detect_handoff(html)
-        vault = load_vault(db)
-        form_summary: dict[str, object] = {"source": "supplied_snapshot", "url": job.url, "fields_total": len(controls), "warnings": []}
-    else:
-        if form_provider is None:
-            from app.real_forms import LiveFormProvider
+        summary: dict[str, object] = {"source": "supplied_snapshot", "url": job.url, "fields_total": len(controls), "warnings": []}
+        return _LoadedForm(controls, detect_handoff(html), load_vault(db), summary)
+    if form_provider is None:
+        from app.real_forms import LiveFormProvider
 
-            form_provider = LiveFormProvider(settings)
-        try:
-            form = form_provider.fetch(job)
-        except FormFetchError as exc:
-            application.last_error = exc.detail
-            db.add(application)
-            db.commit()
-            open_task(
-                db,
-                reason_code=exc.reason_code,
-                title=f"Could not load the real application form for {job.title}",
-                detail=f"{exc.detail}. The dry-run was not performed; no sample form was used.",
-                application=application,
-                job=job,
-                url=job.url,
-            )
-            return {
-                "status": "needs_review",
-                "reason": exc.reason_code,
-                "detail": exc.detail,
-                "application_id": application.id,
-                "form_source": None,
-                "submitted": False,
-            }
-        controls = form.controls
-        handoff = form.handoff
-        vault = load_vault(db, form.vault_scopes)
-        form_summary = form.summary()
+        form_provider = LiveFormProvider(settings)
+    form = form_provider.fetch(job)
+    return _LoadedForm(form.controls, form.handoff, load_vault(db, form.vault_scopes), form.summary())
 
-    plan = plan_fill(controls, vault)
-    application.last_error = None
-    application.validation_json = json.dumps({"ok": False, "form": form_summary}, default=str)
-    transition(db, job, PipelineStage.applying, f"dry-run apply started on {platform} ({form_summary['source']})")
-    application.stage = PipelineStage.applying.value
 
-    if handoff:
+def _form_unavailable(db: Session, application: Application, job: Job, exc: FormFetchError) -> dict[str, object]:
+    application.last_error = exc.detail
+    db.add(application)
+    db.commit()
+    open_task(
+        db,
+        reason_code=exc.reason_code,
+        title=f"Could not load the real application form for {job.title}",
+        detail=f"{exc.detail}. The dry-run was not performed; no sample form was used.",
+        application=application,
+        job=job,
+        url=job.url,
+    )
+    return {
+        "status": "needs_review",
+        "reason": exc.reason_code,
+        "detail": exc.detail,
+        "application_id": application.id,
+        "form_source": None,
+        "submitted": False,
+    }
+
+
+def _stop_for_review(db: Session, application: Application, job: Job, plan: FillPlan, form: _LoadedForm) -> dict[str, object] | None:
+    """Open a review task and return the result if the form cannot be completed automatically."""
+    if form.handoff:
         open_task(
             db,
-            reason_code=handoff,
-            title=f"{handoff} on {job.title}",
+            reason_code=form.handoff,
+            title=f"{form.handoff} on {job.title}",
             detail="Automatic apply stopped at a manual-handoff boundary.",
             application=application,
             job=job,
             url=job.url,
         )
-        return {"status": "needs_review", "reason": handoff, "application_id": application.id, "form": form_summary, "submitted": False}
+        return {"status": "needs_review", "reason": form.handoff, "application_id": application.id, "form": form.summary, "submitted": False}
+    if plan.ready:
+        return None
+    reason = plan.blockers[0] if plan.blockers else "ambiguous_question"
+    open_task(
+        db,
+        reason_code=reason,
+        title=f"Missing answers for {job.title}",
+        detail=f"Blockers: {', '.join(plan.blockers)}\n{_blocker_detail(plan)}",
+        application=application,
+        job=job,
+        url=job.url,
+    )
+    return {
+        "status": "needs_review",
+        "reason": reason,
+        "blockers": plan.blockers,
+        "blocked_fields": [item.control.key for item in plan.items if item.status == "review"],
+        "application_id": application.id,
+        "form": form.summary,
+        "submitted": False,
+    }
 
-    if not plan.ready:
-        reason = plan.blockers[0] if plan.blockers else "ambiguous_question"
-        open_task(
-            db,
-            reason_code=reason,
-            title=f"Missing answers for {job.title}",
-            detail=f"Blockers: {', '.join(plan.blockers)}\n{_blocker_detail(plan)}",
-            application=application,
-            job=job,
-            url=job.url,
-        )
-        return {
-            "status": "needs_review",
-            "reason": reason,
-            "blockers": plan.blockers,
-            "blocked_fields": [item.control.key for item in plan.items if item.status == "review"],
-            "application_id": application.id,
-            "form": form_summary,
-            "submitted": False,
-        }
 
+def _complete_dry_run(db: Session, application: Application, job: Job, plan: FillPlan, form_summary: dict[str, object], platform: str) -> list[str]:
     filled = {item.control.key: item.value for item in plan.items if item.status == "fill"}
     application.answers_json = json.dumps(filled)
     application.stage = PipelineStage.form_filled.value
@@ -370,13 +374,57 @@ def execute_apply(
     application.stage = PipelineStage.validated.value
     db.add(application)
     db.commit()
+    return list(filled)
+
+
+def execute_apply(
+    db: Session,
+    settings: Settings,
+    application_id: str,
+    html: str | None = None,
+    form_provider: FormProvider | None = None,
+) -> dict[str, object]:
+    """Run a dry-run apply cycle against the job's real application form.
+
+    The form comes from ``form_provider`` (default: live, read-only fetch of
+    the employer's posting). ``html`` lets a caller supply an explicit form
+    snapshot instead (used by tests); it is labelled ``supplied_snapshot`` in
+    the evidence. If the real form cannot be obtained the application goes to
+    review. There is no fallback to a sample form, and nothing is submitted.
+    """
+    application = db.get(Application, application_id)
+    if application is None:
+        raise ValueError("application not found")
+    job = application.job
+    platform, info = _apply_adapter(db, settings, job)
+
+    application.adapter_name = platform
+    application.adapter_maturity = info.maturity.value
+    application.attempts += 1
+
+    try:
+        form = _load_form(db, settings, job, html, form_provider)
+    except FormFetchError as exc:
+        return _form_unavailable(db, application, job, exc)
+
+    plan = plan_fill(form.controls, form.vault)
+    application.last_error = None
+    application.validation_json = json.dumps({"ok": False, "form": form.summary}, default=str)
+    transition(db, job, PipelineStage.applying, f"dry-run apply started on {platform} ({form.summary['source']})")
+    application.stage = PipelineStage.applying.value
+
+    review = _stop_for_review(db, application, job, plan, form)
+    if review is not None:
+        return review
+
+    filled = _complete_dry_run(db, application, job, plan, form.summary, platform)
     return {
         "status": "dry_run_complete",
         "application_id": application.id,
         "adapter": platform,
         "maturity": info.maturity.value,
-        "form_source": form_summary["source"],
-        "form": form_summary,
-        "filled": list(filled),
+        "form_source": form.summary["source"],
+        "form": form.summary,
+        "filled": filled,
         "submitted": False,
     }

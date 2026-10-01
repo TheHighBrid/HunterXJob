@@ -23,7 +23,11 @@ Updated: 2026-10-01
 | Lever / email / generic | `dry_run` | Same safety gates |
 | SmartRecruiters / Workday / iCIMS / Taleo | `detect_only` | Platform detection only |
 | Government portals | Unsupported | Flag exists, adapter not implemented |
-| Unattended live submit | Blocked | Requires `certified_autonomous` + live gate + unattended flag |
+| Continuous run (v0.3) | Ready, off by default | Discover → score → prepare → dry-run on an interval inside the API process. Kill switch, pause flag, quiet hours, per-cycle and daily caps; no overlap; every cycle in the `scheduler_cycles` ledger; `GET /api/scheduler/status` |
+| API authentication (v0.3) | Ready | `X-API-Key` on every endpoint except health; refuses requests when no key is set, except loopback-only local dev mode |
+| Schema migrations and backups (v0.3) | Ready | `schema_version` table, pre-migration backup, `./hunterx backup` with retention, periodic backups, WAL |
+| Unattended hosting (v0.3) | Ready | systemd user service on a Linux VM (primary, see `docs/DEPLOY_VM.md`); Termux:Boot fallback |
+| Unattended live submit | Blocked | Requires `certified_autonomous` + live gate + unattended flag. Continuous run only dry-runs |
 
 ## Safety that stays on
 
@@ -31,6 +35,8 @@ Updated: 2026-10-01
 - Demographic / legal / work-authorization answers are never inferred from the résumé.
 - A submit click is not confirmation. Missing evidence becomes `submission_uncertain`.
 - No adapter is `certified_autonomous` in this release. Unattended mode cannot submit.
+- Continuous-run cycles never approve applications and only dry-run ones the owner approved. A result claiming a submission engages the kill switch.
+- The API refuses requests without a configured key; it is meant to sit behind a tunnel or TLS proxy, never plain public HTTP.
 
 ## Real-form dry-run findings (2026-10-01 smoke)
 

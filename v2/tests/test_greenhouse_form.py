@@ -556,10 +556,16 @@ def test_form_preview_endpoint_is_read_only_and_redacts_sensitive_values(monkeyp
         finally:
             session.close()
 
+    from app.config import get_settings
+
+    api_key = "x" * 40
     monkeypatch.setattr(main, "LiveFormProvider", _Provider)
     main.app.dependency_overrides[main.get_db] = _get_db
+    main.app.dependency_overrides[get_settings] = lambda: Settings(_env_file=None, api_key=api_key)
     try:
-        response = TestClient(main.app).get(f"/api/jobs/{job_id}/form")
+        client = TestClient(main.app)
+        assert client.get(f"/api/jobs/{job_id}/form").status_code == 401
+        response = client.get(f"/api/jobs/{job_id}/form", headers={"X-API-Key": api_key})
     finally:
         main.app.dependency_overrides.clear()
     assert response.status_code == 200

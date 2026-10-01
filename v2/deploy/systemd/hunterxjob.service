@@ -1,0 +1,32 @@
+# systemd *user* unit for HunterXJob v2 (API + background scheduler).
+#
+# Install with `./hunterx service-install` (fills in @HUNTERX_DIR@), then:
+#   systemctl --user enable --now hunterxjob
+#   sudo loginctl enable-linger "$USER"     # keep it running without a login session
+# Logs: journalctl --user -u hunterxjob -f
+#
+# Dry-run only: nothing in this service can submit an application while
+# ALLOW_LIVE_SUBMISSION=false and no adapter is certified.
+
+[Unit]
+Description=HunterXJob v2 API and scheduler (dry-run only)
+Documentation=https://github.com/TheHighBrid/HunterXJob/blob/main/docs/DEPLOY_VM.md
+# User managers cannot order against the system network-online.target, so the
+# service simply restarts until the network (and port) is available.
+StartLimitIntervalSec=600
+StartLimitBurst=10
+
+[Service]
+Type=exec
+WorkingDirectory=@HUNTERX_DIR@
+ExecStart=@HUNTERX_DIR@/hunterx serve
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=30
+Environment=PYTHONUNBUFFERED=1
+# Files it creates (database, backups, logs) are private to this user.
+UMask=0077
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target

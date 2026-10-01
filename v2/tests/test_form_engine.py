@@ -30,7 +30,7 @@ def test_plan_stops_on_missing_sensitive_answer():
         AnswerRecord("first_name", "Mo", AnswerSource.USER),
         AnswerRecord("last_name", "Alem", AnswerSource.USER),
         AnswerRecord("email", "mo@example.test", AnswerSource.USER),
-        AnswerRecord("resume", "/tmp/resume.pdf", AnswerSource.USER),
+        AnswerRecord("resume", "~/hunterx/resume.pdf", AnswerSource.USER),
     ])
     plan = plan_fill(controls, vault)
     assert plan.ready is False
@@ -44,7 +44,7 @@ def test_plan_fills_when_policy_answers_exist():
         AnswerRecord("last_name", "Alem", AnswerSource.USER),
         AnswerRecord("email", "mo@example.test", AnswerSource.USER),
         AnswerRecord("phone", "555-0100", AnswerSource.USER),
-        AnswerRecord("resume", "/tmp/resume.pdf", AnswerSource.USER),
+        AnswerRecord("resume", "~/hunterx/resume.pdf", AnswerSource.USER),
         AnswerRecord("cover_letter", "Hello", AnswerSource.USER),
         AnswerRecord("work_authorization", "Authorized to work in Canada", AnswerSource.POLICY),
     ])
@@ -71,7 +71,7 @@ def test_plan_for_html_ready_path():
         AnswerRecord("last_name", "Alem", AnswerSource.USER),
         AnswerRecord("email", "mo@example.test", AnswerSource.USER),
         AnswerRecord("phone", "555-0100", AnswerSource.USER),
-        AnswerRecord("resume", "/tmp/resume.pdf", AnswerSource.USER),
+        AnswerRecord("resume", "~/hunterx/resume.pdf", AnswerSource.USER),
         AnswerRecord("cover_letter", "Hello", AnswerSource.USER),
         AnswerRecord("work_authorization", "Authorized to work in Canada", AnswerSource.POLICY),
     ])

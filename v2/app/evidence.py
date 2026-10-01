@@ -30,9 +30,7 @@ def evidence_is_sufficient(*, confirmation_text: str | None, candidate_id: str |
         return True
     if any(marker in text for marker in CONFIRMATION_MARKERS):
         return True
-    if final_url and any(token in final_url.lower() for token in ("confirmation", "thank", "success", "submitted")):
-        return True
-    return False
+    return bool(final_url) and any(token in final_url.lower() for token in ("confirmation", "thank", "success", "submitted"))
 
 
 def record_evidence(

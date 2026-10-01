@@ -8,6 +8,9 @@ from app.models import FeatureFlag
 DEFAULT_FLAGS = {
     "global_kill_switch": False,
     "unattended_mode": False,
+    # Pauses scheduled continuous-run cycles without a restart (the kill switch
+    # stops everything; this only stops new cycles).
+    "scheduler_paused": False,
     "allow_live_submission": False,
     "adapter.greenhouse": True,
     "adapter.lever": True,

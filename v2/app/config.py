@@ -20,6 +20,29 @@ class Settings(BaseSettings):
     min_match_score: int = 60
     quiet_hours_start: str = "23:00"
     quiet_hours_end: str = "07:00"
+    # IANA zone used for quiet hours and for "today" in the daily caps.
+    timezone: str = "America/Toronto"
+
+    # API authentication. Every endpoint except /api/health and the static
+    # dashboard needs the X-API-Key header. With no key the API refuses
+    # requests, unless LOCAL_DEV_MODE=true and HOST is a loopback address.
+    api_key: str = ""
+    local_dev_mode: bool = False
+
+    # Continuous run: discover -> score -> prepare -> dry-run on an interval.
+    # Off by default. Dry-runs never submit; live submission stays locked.
+    continuous_run_enabled: bool = False
+    cycle_interval_minutes: int = Field(default=60, ge=5, le=1440)
+    cycle_startup_delay_seconds: int = Field(default=60, ge=0, le=3600)
+    cycle_max_score: int = Field(default=50, ge=0, le=500)
+    cycle_max_prepare: int = Field(default=2, ge=0, le=20)
+    cycle_max_dry_runs: int = Field(default=3, ge=0, le=20)
+    max_dry_runs_per_day: int = Field(default=10, ge=0, le=100)
+
+    # SQLite backups (timestamped copies; oldest beyond the retention are pruned).
+    backup_dir: str = "./data/backups"
+    backup_retention: int = Field(default=14, ge=1, le=365)
+    backup_interval_hours: int = Field(default=24, ge=0, le=720)
 
     llm_provider: str = "ollama"
     ollama_base_url: str = "http://127.0.0.1:11434"
@@ -70,6 +93,10 @@ class Settings(BaseSettings):
     @property
     def blacklisted_company_list(self) -> list[str]:
         return self._csv(self.blacklisted_companies)
+
+    @property
+    def database_file(self) -> Path:
+        return Path(self.database_path).expanduser().resolve()
 
     @property
     def database_url(self) -> str:

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from conftest import load_sample_form
 from sqlalchemy import create_engine
@@ -49,10 +49,10 @@ def test_quiet_hours_and_uncertified_adapter_block_unattended():
     db = _db()
     settings = Settings(automation_enabled=True, application_mode="dry_run", max_applications_per_day=5)
     set_flag(db, "unattended_mode", True)
-    now = datetime(2026, 9, 15, 23, 30, tzinfo=timezone.utc)
+    now = datetime(2026, 9, 15, 23, 30, tzinfo=UTC)
     assert in_quiet_hours(now, "23:00", "07:00") is True
     job, _ = _job_app(db)
-    decision = can_run_unattended(db, settings, job, now=datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc))
+    decision = can_run_unattended(db, settings, job, now=datetime(2026, 9, 15, 12, 0, tzinfo=UTC))
     assert decision.allowed is False
     assert "certified_autonomous" in decision.reason
 
@@ -70,7 +70,7 @@ def test_dry_run_apply_never_marks_submitted():
         "last_name": "Alem",
         "email": "mo@example.test",
         "phone": "555-0100",
-        "resume": "/tmp/resume.pdf",
+        "resume": "~/hunterx/resume.pdf",
         "cover_letter": "Hello",
         "work_authorization": "Authorized to work in Canada",
     }.items():
@@ -98,7 +98,7 @@ def test_live_submission_flags_do_not_claim_submission_without_adapter_execution
         "last_name": "Alem",
         "email": "mo@example.test",
         "phone": "555-0100",
-        "resume": "/tmp/resume.pdf",
+        "resume": "~/hunterx/resume.pdf",
         "cover_letter": "Hello",
         "work_authorization": "Authorized to work in Canada",
     }.items():

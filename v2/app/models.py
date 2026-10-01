@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import enum
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -11,7 +11,7 @@ from app.db import Base
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class PipelineStage(str, enum.Enum):
@@ -78,7 +78,7 @@ class Job(Base):
     discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
-    application: Mapped["Application | None"] = relationship(back_populates="job", uselist=False)
+    application: Mapped[Application | None] = relationship(back_populates="job", uselist=False)
 
 
 class Application(Base):
@@ -104,8 +104,8 @@ class Application(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     job: Mapped[Job] = relationship(back_populates="application")
-    evidence: Mapped[list["SubmissionEvidence"]] = relationship(back_populates="application")
-    review_tasks: Mapped[list["ReviewTask"]] = relationship(back_populates="application")
+    evidence: Mapped[list[SubmissionEvidence]] = relationship(back_populates="application")
+    review_tasks: Mapped[list[ReviewTask]] = relationship(back_populates="application")
 
 
 class PipelineEvent(Base):
@@ -181,3 +181,28 @@ class FeatureFlag(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     note: Mapped[str] = mapped_column(Text, default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class SchedulerCycle(Base):
+    """Ledger of continuous-run cycles (one row per cycle, including skips)."""
+
+    __tablename__ = "scheduler_cycles"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    trigger: Mapped[str] = mapped_column(String(20), default="scheduled")
+    status: Mapped[str] = mapped_column(String(30), default="running", index=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    steps_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class SchemaVersion(Base):
+    """Applied schema migrations (see app.migrations)."""
+
+    __tablename__ = "schema_version"
+
+    version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    description: Mapped[str] = mapped_column(String(200), default="")
+    applied_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
