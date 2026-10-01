@@ -51,6 +51,7 @@ def _create_tables(*names: str) -> Callable[[Connection], None]:
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(1, "baseline schema (v0.2)", _create_tables(*BASELINE_TABLES)),
     Migration(2, "scheduler cycle ledger", _create_tables("scheduler_cycles")),
+    Migration(3, "runtime setting overrides", _create_tables("setting_overrides")),
 )
 LATEST_VERSION = MIGRATIONS[-1].version
 

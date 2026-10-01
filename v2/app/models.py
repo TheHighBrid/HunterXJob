@@ -14,6 +14,13 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+def iso_utc(value: datetime | None) -> str | None:
+    """ISO-8601 with an explicit UTC offset (SQLite hands back naive UTC datetimes)."""
+    if value is None:
+        return None
+    return (value if value.tzinfo else value.replace(tzinfo=UTC)).isoformat()
+
+
 class PipelineStage(str, enum.Enum):
     discovered = "discovered"
     normalized = "normalized"
@@ -196,6 +203,16 @@ class SchedulerCycle(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class SettingOverride(Base):
+    """Runtime overrides for the safe, phone-editable subset of settings (see app.runtime_settings)."""
+
+    __tablename__ = "setting_overrides"
+
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    value_json: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class SchemaVersion(Base):

@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     # requests, unless LOCAL_DEV_MODE=true and HOST is a loopback address.
     api_key: str = ""
     local_dev_mode: bool = False
+    # Comma-separated browser origins allowed to call the API (CORS). Only the
+    # Expo *web* preview needs this (e.g. http://localhost:8081); the Android
+    # app does not. Empty = no CORS headers. The API key is still required.
+    cors_origins: str = ""
 
     # Continuous run: discover -> score -> prepare -> dry-run on an interval.
     # Off by default. Dry-runs never submit; live submission stays locked.
@@ -93,6 +97,18 @@ class Settings(BaseSettings):
     @property
     def blacklisted_company_list(self) -> list[str]:
         return self._csv(self.blacklisted_companies)
+
+    def source_counts(self) -> dict[str, int]:
+        """How many job sources are configured, without revealing them."""
+        return {
+            "greenhouse_boards": len(self._csv(self.greenhouse_board_tokens)),
+            "lever_companies": len(self._csv(self.lever_companies)),
+            "generic_feeds": len(self._csv(self.generic_feed_urls)),
+        }
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [origin for origin in self._csv(self.cors_origins) if origin != "*"]
 
     @property
     def database_file(self) -> Path:

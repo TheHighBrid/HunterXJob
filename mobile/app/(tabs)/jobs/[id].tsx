@@ -1,195 +1,255 @@
-import { useLocalSearchParams, useNavigation } from "expo-router";
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { Alert, Linking, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useState } from "react";
+import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { api, describeError, isConnectivityError } from "@/api/client";
+import { api, describeError } from "@/api/client";
+import type { FormPreview, FormStatus, JobDetail } from "@/api/types";
 import { Badge } from "@/components/Badge";
+import { Banner } from "@/components/Banner";
+import { Card, Muted, Row } from "@/components/Card";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ScreenContainer } from "@/components/ScreenContainer";
-import { EmptyView, ErrorView, LoadingView } from "@/components/StatusViews";
-import { mockJobs } from "@/mock/data";
-import { useDataCacheStore } from "@/store/dataCache";
-import { matchScoreColor, useTheme } from "@/theme";
-import type { JobPosting } from "@/types";
-import { formatDateTime } from "@/utils/format";
+import { ErrorView, LoadingView } from "@/components/StatusViews";
+import { useApiResource } from "@/hooks/useApiResource";
+import { matchScoreColor, stageColor, useTheme } from "@/theme";
+import { formatDateTime, formatScore, humanize } from "@/utils/format";
+
+const FORM_STATE_COPY: Record<FormStatus["state"], string> = {
+  no_application: "Not shortlisted yet, so no form has been checked.",
+  not_checked: "The application form hasn't been dry-run yet.",
+  validated: "Dry-run passed: every field was resolved. Nothing was submitted.",
+  unavailable: "The real form couldn't be loaded. See the review task.",
+  blocked: "The dry-run stopped: some answers need you.",
+  in_progress: "A dry-run started but hasn't finished.",
+};
+
+function ScoreBlock({ job }: { job: JobDetail }) {
+  const theme = useTheme();
+  const items: [string, number | null | undefined][] = [
+    ["Final", job.scores.final],
+    ["Rules", job.scores.deterministic],
+    ["AI", job.scores.ai],
+  ];
+  return (
+    <View style={styles.scores}>
+      {items.map(([label, value]) => (
+        <View key={label} style={[styles.scoreBox, { borderColor: theme.border, backgroundColor: theme.surfaceAlt }]}>
+          <Text style={[styles.scoreValue, { color: matchScoreColor(theme, value) }]}>{formatScore(value)}</Text>
+          <Text style={[styles.scoreLabel, { color: theme.textMuted }]}>{label}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function FormStatusCard({ status, preview }: { status: FormStatus; preview?: FormPreview }) {
+  const theme = useTheme();
+  const color = status.state === "validated" ? theme.success : status.state === "blocked" || status.state === "unavailable" ? theme.warning : theme.textMuted;
+  return (
+    <Card title="Application form" right={<Badge label={humanize(status.state)} color={color} />}>
+      <Muted>{FORM_STATE_COPY[status.state]}</Muted>
+      {status.source ? <Row label="Source" value={humanize(status.source)} /> : null}
+      {status.fields_total != null ? <Row label="Fields" value={`${status.fields_total} total · ${status.fields_required ?? "?"} required`} /> : null}
+      {status.fields_filled != null ? <Row label="Resolved" value={String(status.fields_filled)} valueColor={theme.success} /> : null}
+      {status.blockers.length ? <Row label="Blockers" value={status.blockers.map(humanize).join(", ")} valueColor={theme.warning} /> : null}
+      {status.blocked_fields.map((field) => (
+        <View key={field.key} style={[styles.blocked, { borderColor: theme.border }]}>
+          <Text style={[styles.blockedLabel, { color: theme.text }]}>
+            {field.label || field.key}
+            {field.required ? " *" : ""}
+          </Text>
+          <Text style={[styles.blockedReason, { color: theme.textMuted }]}>
+            {humanize(field.section)} · {field.reason}
+          </Text>
+        </View>
+      ))}
+      {status.warnings.length ? <Muted>Warnings: {status.warnings.join("; ")}</Muted> : null}
+      {status.last_error ? <Banner tone="warning" message={status.last_error} /> : null}
+      {preview ? (
+        <View style={{ gap: 6 }}>
+          <Text style={[styles.blockedLabel, { color: theme.text }]}>
+            Live check: {preview.fields.length} fields, {preview.fields.filter((f) => f.status === "fill").length} resolvable
+            {preview.ready ? " — ready" : ` — blocked by ${preview.blockers.map(humanize).join(", ") || "review"}`}
+          </Text>
+          {preview.fields.filter((f) => f.status !== "fill").slice(0, 12).map((f) => (
+            <Muted key={f.key}>• {f.label || f.key}: {f.reason}</Muted>
+          ))}
+        </View>
+      ) : null}
+    </Card>
+  );
+}
+
+function JobHeader({ job }: { job: JobDetail }) {
+  const theme = useTheme();
+  return (
+    <View style={{ gap: 6 }}>
+      <Text style={[styles.title, { color: theme.text }]}>{job.title}</Text>
+      <Text style={[styles.meta, { color: theme.textMuted }]}>
+        {job.company} · {job.location || "—"}
+        {job.remote ? " · Remote" : ""}
+      </Text>
+      <View style={styles.badges}>
+        <Badge label={humanize(job.stage)} color={stageColor(theme, job.stage)} />
+        {job.platform ? <Badge label={job.platform} color={theme.info} /> : null}
+      </View>
+    </View>
+  );
+}
+
+function ScoreCard({ job }: { job: JobDetail }) {
+  const decision = job.decision;
+  return (
+    <Card title="Score">
+      <ScoreBlock job={job} />
+      {job.reason ? <Muted>{job.reason}</Muted> : null}
+      {decision ? (
+        <View style={{ gap: 6 }}>
+          {decision.dimensions.map((dimension) => (
+            <Row
+              key={dimension.name}
+              label={humanize(dimension.name)}
+              value={`${Math.round(dimension.score)} × ${dimension.weight} = ${dimension.weighted_points.toFixed(1)}`}
+            />
+          ))}
+          {decision.matched_keywords.length ? <Muted>Matched: {decision.matched_keywords.join(", ")}</Muted> : null}
+          {decision.review_flags.length ? <Muted>Review flags: {decision.review_flags.join(", ")}</Muted> : null}
+          {decision.vetoes.length ? <Muted>Vetoes: {decision.vetoes.join(", ")}</Muted> : null}
+        </View>
+      ) : null}
+    </Card>
+  );
+}
+
+function OpenTasksCard({ tasks }: { tasks: JobDetail["review_tasks"] }) {
+  const theme = useTheme();
+  const router = useRouter();
+  if (!tasks.length) return null;
+  return (
+    <Card title={`Open review tasks (${tasks.length})`}>
+      {tasks.map((task) => (
+        <Pressable
+          key={task.id}
+          accessibilityRole="button"
+          onPress={() => {
+            router.push({ pathname: "/review/[id]", params: { id: task.id } });
+          }}
+          style={({ pressed }) => [styles.task, { borderColor: theme.border, opacity: pressed ? 0.7 : 1 }]}
+        >
+          <Text style={[styles.blockedLabel, { color: theme.text }]}>{task.title}</Text>
+          <Text style={[styles.blockedReason, { color: theme.warning }]}>{humanize(task.reason_code)} ›</Text>
+        </Pressable>
+      ))}
+    </Card>
+  );
+}
+
+function ApplicationCard({ application }: { application: JobDetail["application"] }) {
+  const theme = useTheme();
+  if (!application) return null;
+  return (
+    <Card title="Application">
+      <Row label="Stage" value={humanize(application.stage)} valueColor={stageColor(theme, application.stage)} />
+      <Row label="Mode" value={humanize(application.mode)} />
+      <Row label="Adapter" value={`${application.adapter ?? "—"} (${humanize(application.maturity)})`} />
+      <Row label="Attempts" value={String(application.attempts)} />
+      <Row label="Cover letter" value={application.has_cover_letter ? "Drafted" : "Not yet"} />
+    </Card>
+  );
+}
+
+function TimelineCard({ events }: { events: JobDetail["events"] }) {
+  const theme = useTheme();
+  return (
+    <Card title="Timeline">
+      {events.length === 0 ? <Muted>No events.</Muted> : null}
+      {events.slice(0, 15).map((event) => (
+        <View key={`${event.created_at}-${event.from_stage ?? ""}-${event.to_stage}`} style={styles.event}>
+          <Text style={[styles.eventStage, { color: stageColor(theme, event.to_stage) }]}>{humanize(event.to_stage)}</Text>
+          <Text style={[styles.blockedReason, { color: theme.textMuted }]}>
+            {formatDateTime(event.created_at)} · {event.message}
+          </Text>
+        </View>
+      ))}
+    </Card>
+  );
+}
+
+function DescriptionCard({ description }: { description: string | null | undefined }) {
+  const theme = useTheme();
+  if (!description) return null;
+  return (
+    <Card title="Description">
+      <Text style={[styles.description, { color: theme.text }]} numberOfLines={30}>
+        {description.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()}
+      </Text>
+    </Card>
+  );
+}
+
+function useFormPreview(id: string) {
+  const [preview, setPreview] = useState<FormPreview>();
+  const [previewError, setPreviewError] = useState<string>();
+  const [checking, setChecking] = useState(false);
+  async function checkForm() {
+    setChecking(true);
+    setPreviewError(undefined);
+    try {
+      setPreview(await api.previewForm(id));
+    } catch (err) {
+      setPreviewError(describeError(err));
+    } finally {
+      setChecking(false);
+    }
+  }
+  return { preview, previewError, checking, checkForm };
+}
 
 export default function JobDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const jobId = id;
   const theme = useTheme();
-  const navigation = useNavigation();
-  const cachedJobs = useDataCacheStore((s) => s.jobs);
-  const applications = useDataCacheStore((s) => s.applications);
-  const upsertApplication = useDataCacheStore((s) => s.upsertApplication);
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const { data: job, loading, refreshing, error, refresh, reload } = useApiResource(() => api.job(String(id)), [id]);
+  const { preview, previewError, checking, checkForm } = useFormPreview(String(id));
 
-  const cached = useMemo(() => cachedJobs.find((j) => j.id === jobId), [cachedJobs, jobId]);
-
-  const [job, setJob] = useState<JobPosting | null | undefined>(cached);
-  const [loading, setLoading] = useState(!cached);
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  useLayoutEffect(() => {
-    navigation.setOptions({ title: job?.title ?? "Job Details" });
-  }, [navigation, job?.title]);
-
-  useEffect(() => {
-    if (cached) {
-      setJob(cached);
-      setLoading(false);
-      return;
-    }
-    // Deep link / cold start without a warm list cache — refetch.
-    let cancelled = false;
-    setLoading(true);
-    api
-      .getJobs()
-      .then((jobs) => {
-        if (cancelled) return;
-        setJob(jobs.find((j) => j.id === jobId) ?? null);
-        setLoading(false);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        if (isConnectivityError(err)) {
-          setJob(mockJobs.find((j) => j.id === jobId) ?? null);
-          setError(`${describeError(err)} (showing demo data)`);
-        } else {
-          setError(describeError(err));
-        }
-        setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [cached, jobId]);
-
-  const existingApplication = applications.find((a) => a.job_posting_id === jobId);
-
-  if (loading) {
-    return (
-      <ScreenContainer>
-        <LoadingView label="Loading job…" />
-      </ScreenContainer>
-    );
-  }
-
-  if (!job) {
-    return (
-      <ScreenContainer>
-        {error ? <ErrorView message={error} /> : <EmptyView message="Job not found." />}
-      </ScreenContainer>
-    );
-  }
-
-  const handleApply = async () => {
-    setSubmitting(true);
-    try {
-      const created = await api.createApplication({ job_posting_id: job.id });
-      upsertApplication(created);
-      Alert.alert("Queued", `${job.title} at ${job.company} was queued for application.`);
-    } catch (err) {
-      Alert.alert("Couldn't queue application", describeError(err));
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  if (loading && !job) return <ScreenContainer><LoadingView /></ScreenContainer>;
+  if (!job) return <ScreenContainer><ErrorView message={error ?? "Job not found."} onRetry={reload} /></ScreenContainer>;
 
   return (
     <ScreenContainer>
-      <ScrollView contentContainerStyle={styles.content}>
-        {error ? (
-          <View style={[styles.noticeBanner, { backgroundColor: theme.warning + "22", borderColor: theme.warning }]}>
-            <Text style={{ color: theme.text, fontSize: 12 }}>{error}</Text>
-          </View>
-        ) : null}
-
-        <Text style={[styles.title, { color: theme.text }]}>{job.title}</Text>
-        <Text style={[styles.company, { color: theme.textMuted }]}>{job.company}</Text>
-
-        <View style={styles.badgeRow}>
-          {job.match_score !== null ? (
-            <Badge label={`Match ${job.match_score}`} color={matchScoreColor(theme, job.match_score)} />
-          ) : null}
-          <Badge label={job.source} color={theme.info} />
-          {job.remote ? <Badge label="Remote" color={theme.success} /> : null}
-        </View>
-
-        <Text style={[styles.meta, { color: theme.textFaint }]}>
-          {job.location ?? "Location unknown"} · discovered {formatDateTime(job.discovered_at)}
-        </Text>
-
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>Description</Text>
-        <Text style={[styles.description, { color: theme.textMuted }]}>{job.description}</Text>
-
-        <View style={styles.linkRow}>
-          <PrimaryButton
-            title="View original posting"
-            variant="secondary"
-            onPress={() => Linking.openURL(job.url).catch(() => Alert.alert("Couldn't open link", job.url))}
-          />
-        </View>
-
-        <View style={styles.applyRow}>
-          {existingApplication ? (
-            <Badge label={`Already ${existingApplication.status.replace("_", " ")}`} color={theme.info} />
-          ) : (
-            <PrimaryButton
-              title="Apply / queue application"
-              onPress={handleApply}
-              loading={submitting}
-            />
-          )}
-        </View>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.primary} />}
+      >
+        {error ? <Banner tone="danger" message={error} /> : null}
+        <JobHeader job={job} />
+        <ScoreCard job={job} />
+        <FormStatusCard status={job.form_status} preview={preview} />
+        {previewError ? <Banner tone="danger" message={previewError} /> : null}
+        <PrimaryButton title="Check the live form now (read-only)" variant="secondary" loading={checking} onPress={() => void checkForm()} />
+        <OpenTasksCard tasks={job.review_tasks.filter((task) => task.status === "open")} />
+        <ApplicationCard application={job.application} />
+        <TimelineCard events={job.events} />
+        <DescriptionCard description={job.description} />
+        <PrimaryButton title="Open posting in browser" variant="secondary" onPress={() => void Linking.openURL(job.url)} />
       </ScrollView>
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
-    padding: 16,
-    paddingBottom: 40,
-    gap: 6,
-  },
-  noticeBanner: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 8,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: "800",
-  },
-  company: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  badgeRow: {
-    flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap",
-    marginBottom: 6,
-  },
-  meta: {
-    fontSize: 12,
-    marginBottom: 14,
-  },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    marginBottom: 6,
-  },
-  description: {
-    fontSize: 14,
-    lineHeight: 21,
-  },
-  linkRow: {
-    marginTop: 20,
-  },
-  applyRow: {
-    marginTop: 14,
-  },
+  content: { padding: 16, gap: 14 },
+  title: { fontSize: 22, fontWeight: "800" },
+  meta: { fontSize: 14 },
+  badges: { flexDirection: "row", gap: 6, flexWrap: "wrap" },
+  scores: { flexDirection: "row", gap: 10 },
+  scoreBox: { flex: 1, borderWidth: 1, borderRadius: 12, alignItems: "center", paddingVertical: 10 },
+  scoreValue: { fontSize: 24, fontWeight: "800" },
+  scoreLabel: { fontSize: 12, fontWeight: "600" },
+  blocked: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 6, gap: 2 },
+  blockedLabel: { fontSize: 14, fontWeight: "600" },
+  blockedReason: { fontSize: 12, lineHeight: 17 },
+  task: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 8, gap: 2 },
+  event: { gap: 2 },
+  eventStage: { fontSize: 13, fontWeight: "700" },
+  description: { fontSize: 14, lineHeight: 20 },
 });

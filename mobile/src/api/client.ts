@@ -1,13 +1,25 @@
-import { getConnectionConfig } from "@/store/settings";
+import { getConnection } from "@/store/connection";
+
 import type {
-  ApplicationRecord,
-  AutomationSettings,
-  CreateApplicationPayload,
-  HealthResponse,
-  JobPosting,
-  PatchApplicationPayload,
-  Report,
-} from "@/types";
+  AuthCheck,
+  Backups,
+  Cycle,
+  FormPreview,
+  Health,
+  Job,
+  JobDetail,
+  KillSwitch,
+  KillSwitchRequest,
+  ReviewAction,
+  ReviewResolution,
+  ReviewTask,
+  ReviewTaskDetail,
+  RunCycle,
+  SchedulerStatus,
+  ServerSettings,
+  SettingsPatch,
+  Summary,
+} from "./types";
 
 export type ApiErrorKind = "config" | "timeout" | "network" | "http" | "parse";
 
@@ -24,123 +36,139 @@ export class ApiError extends Error {
   }
 }
 
-const DEFAULT_TIMEOUT_MS = 12000;
+export interface ClientConfig {
+  baseUrl: string;
+  apiKey: string;
+}
 
-async function request<T>(
-  path: string,
-  options: RequestInit = {},
-  timeoutMs: number = DEFAULT_TIMEOUT_MS
-): Promise<T> {
-  const { baseUrl, apiKey } = getConnectionConfig();
+export type FetchLike = typeof fetch;
 
-  if (!baseUrl) {
-    throw new ApiError(
-      "Backend URL isn't configured yet. Set it in Settings.",
-      "config"
-    );
+const DEFAULT_TIMEOUT_MS = 15000;
+
+function detailText(body: unknown): string {
+  if (!body || typeof body !== "object" || !("detail" in body)) return "";
+  const detail = (body as { detail: unknown }).detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    // FastAPI validation errors: [{loc, msg}, ...]
+    return detail
+      .map((item) => (item && typeof item === "object" && "msg" in item ? String((item as { msg: unknown }).msg) : ""))
+      .filter(Boolean)
+      .join("; ");
   }
+  if (detail && typeof detail === "object" && "detail" in detail) return String((detail as { detail: unknown }).detail);
+  return "";
+}
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-  let response: Response;
-  try {
-    response = await fetch(`${baseUrl}${path}`, {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...(apiKey ? { "X-API-Key": apiKey } : {}),
-        ...(options.headers ?? {}),
-      },
-      signal: controller.signal,
-    });
-  } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") {
-      throw new ApiError(
-        `Timed out reaching ${baseUrl}. Check the backend URL and that it's running.`,
-        "timeout"
-      );
-    }
-    throw new ApiError(
-      `Couldn't reach ${baseUrl}. Check the backend URL and your network connection.`,
-      "network"
-    );
-  } finally {
-    clearTimeout(timer);
+export function errorForStatus(status: number, path: string, detail: string): ApiError {
+  if (status === 401) return new ApiError("The server rejected the API key. Check it in Connection.", "http", status);
+  if (status === 503) {
+    return new ApiError(`The server's API authentication isn't configured${detail ? `: ${detail}` : ""}.`, "http", status);
   }
+  return new ApiError(detail || `Request to ${path} failed (${status}).`, "http", status);
+}
 
-  if (!response.ok) {
-    let detail = "";
+export function createClient(getConfig: () => ClientConfig, fetchImpl: FetchLike = fetch) {
+  async function request<T>(path: string, init: RequestInit = {}, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
+    const { baseUrl, apiKey } = getConfig();
+    if (!baseUrl) throw new ApiError("Set the server URL in Connection first.", "config");
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
+    let response: Response;
     try {
-      const body = await response.json();
-      if (typeof body?.detail === "string") detail = `: ${body.detail}`;
-    } catch {
-      // response body wasn't JSON (or was empty) — ignore
+      response = await fetchImpl(`${baseUrl}${path}`, {
+        ...init,
+        headers: {
+          Accept: "application/json",
+          ...(init.body ? { "Content-Type": "application/json" } : {}),
+          ...(apiKey ? { "X-API-Key": apiKey } : {}),
+          ...(init.headers ?? {}),
+        },
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        throw new ApiError(`Timed out reaching ${baseUrl}. Is the server running and reachable (Tailscale on)?`, "timeout");
+      }
+      throw new ApiError(`Couldn't reach ${baseUrl}. Check the URL and that this phone is on your tailnet.`, "network");
+    } finally {
+      clearTimeout(timer);
     }
-    const kind: ApiErrorKind = "http";
-    if (response.status === 401 || response.status === 403) {
-      throw new ApiError(
-        `Authentication failed (${response.status}). Check your API key in Settings.`,
-        kind,
-        response.status
-      );
+
+    let body: unknown;
+    const text = await response.text();
+    if (text) {
+      try {
+        body = JSON.parse(text);
+      } catch {
+        if (response.ok) throw new ApiError(`Received a malformed response from ${path}.`, "parse");
+      }
     }
-    throw new ApiError(
-      `Request to ${path} failed (${response.status})${detail}`,
-      kind,
-      response.status
-    );
+    if (!response.ok) throw errorForStatus(response.status, path, detailText(body));
+    return body as T;
   }
 
-  if (response.status === 204) {
-    return undefined as T;
+  function post<T>(path: string, payload?: unknown): Promise<T> {
+    return request<T>(path, { method: "POST", body: payload === undefined ? undefined : JSON.stringify(payload) });
   }
 
-  try {
-    return (await response.json()) as T;
-  } catch {
-    throw new ApiError(`Received a malformed response from ${path}.`, "parse");
-  }
+  return {
+    request,
+    health: () => request<Health>("/api/health"),
+    authCheck: () => request<AuthCheck>("/api/auth/check"),
+
+    settings: () => request<ServerSettings>("/api/settings"),
+    updateSettings: (patch: SettingsPatch) =>
+      request<ServerSettings>("/api/settings", { method: "PATCH", body: JSON.stringify(patch) }),
+
+    summary: () => request<Summary>("/api/reports/summary"),
+
+    jobs: (params: { q?: string; stage?: string; limit?: number } = {}) => {
+      const query = new URLSearchParams();
+      if (params.q) query.set("q", params.q);
+      if (params.stage) query.set("stage", params.stage);
+      query.set("limit", String(params.limit ?? 200));
+      return request<Job[]>(`/api/jobs?${query.toString()}`);
+    },
+    job: (id: string) => request<JobDetail>(`/api/jobs/${encodeURIComponent(id)}`),
+    previewForm: (id: string) => request<FormPreview>(`/api/jobs/${encodeURIComponent(id)}/form`, {}, 60000),
+
+    reviewTasks: (status: "open" | "closed" | "all" = "open") => request<ReviewTask[]>(`/api/review-tasks?status=${status}`),
+    reviewTask: (id: string) => request<ReviewTaskDetail>(`/api/review-tasks/${encodeURIComponent(id)}`),
+    approveTask: (id: string) => post<ReviewAction>(`/api/review-tasks/${encodeURIComponent(id)}/approve`),
+    rejectTask: (id: string) => post<ReviewAction>(`/api/review-tasks/${encodeURIComponent(id)}/reject`),
+    resolveTask: (id: string, resolution: ReviewResolution = "resolved") =>
+      post<ReviewAction>(`/api/review-tasks/${encodeURIComponent(id)}/resolve`, { resolution }),
+
+    schedulerStatus: () => request<SchedulerStatus>("/api/scheduler/status"),
+    cycles: (limit = 10) => request<Cycle[]>(`/api/scheduler/cycles?limit=${limit}`),
+    pauseScheduler: () => post<SchedulerStatus>("/api/scheduler/pause", { note: "paused from the phone" }),
+    resumeScheduler: () => post<SchedulerStatus>("/api/scheduler/resume", { note: "resumed from the phone" }),
+    runCycleNow: async (): Promise<RunCycle> => {
+      try {
+        return await post<RunCycle>("/api/scheduler/run");
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 409) return { started: false, reason: "A cycle is already running.", status_url: null };
+        throw err;
+      }
+    },
+
+    killSwitch: () => request<KillSwitch>("/api/kill-switch"),
+    setKillSwitch: (body: KillSwitchRequest) => post<KillSwitch>("/api/kill-switch", body),
+
+    backups: () => request<Backups>("/api/backups"),
+  };
 }
 
-export const api = {
-  getHealth: () => request<HealthResponse>("/api/health"),
+export type Api = ReturnType<typeof createClient>;
 
-  getSettings: () => request<AutomationSettings>("/api/settings"),
-  updateSettings: (patch: Partial<AutomationSettings>) =>
-    request<AutomationSettings>("/api/settings", {
-      method: "PUT",
-      body: JSON.stringify(patch),
-    }),
-
-  getJobs: () => request<JobPosting[]>("/api/jobs"),
-
-  getApplications: () => request<ApplicationRecord[]>("/api/applications"),
-  createApplication: (payload: CreateApplicationPayload) =>
-    request<ApplicationRecord>("/api/applications", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
-  updateApplication: (id: string, patch: PatchApplicationPayload) =>
-    request<ApplicationRecord>(`/api/applications/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(patch),
-    }),
-
-  getReports: () => request<Report[]>("/api/reports"),
-  getLatestReport: () => request<Report>("/api/reports/latest"),
-};
-
-/** True for errors it makes sense to silently fall back to demo data for. */
-export function isConnectivityError(err: unknown): boolean {
-  return (
-    err instanceof ApiError &&
-    (err.kind === "config" || err.kind === "timeout" || err.kind === "network")
-  );
-}
+/** The app-wide client, bound to the saved connection. */
+export const api: Api = createClient(getConnection);
 
 export function describeError(err: unknown): string {
-  if (err instanceof ApiError) return err.message;
   if (err instanceof Error) return err.message;
   return "Something went wrong.";
 }

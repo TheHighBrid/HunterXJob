@@ -102,6 +102,14 @@ mobile_typecheck() {
   npm run typecheck
 }
 
+mobile_api_types() {
+  cd "$MOBILE_DIR" && npm run --silent api:check
+}
+
+mobile_tests() {
+  cd "$MOBILE_DIR" && npm test -- --ci
+}
+
 if BACKEND_PYTHON="$(resolve_python python3.11 3.11.15)"; then
   if [[ -x "$BACKEND_DIR/.venv/bin/python" ]] && "$BACKEND_DIR/.venv/bin/python" -c 'import pytest' >/dev/null 2>&1; then
     BACKEND_TEST_PYTHON="$BACKEND_DIR/.venv/bin/python"
@@ -129,6 +137,8 @@ if [[ -d "$V2_DIR" ]]; then
 fi
 
 run_step "Mobile TypeScript check" mobile_typecheck
+run_step "Mobile API types vs v2/openapi.json" mobile_api_types
+run_step "Mobile unit tests" mobile_tests
 
 echo
 echo "==> Summary"

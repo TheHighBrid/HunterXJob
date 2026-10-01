@@ -4,4 +4,4 @@
 metadata (pyproject.toml), the API and the CLI all read it from here.
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

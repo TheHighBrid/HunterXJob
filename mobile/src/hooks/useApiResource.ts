@@ -1,65 +1,64 @@
-import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useRef, useState } from "react";
 
-import { describeError, isConnectivityError } from "@/api/client";
+import { describeError } from "@/api/client";
+import { useConnection } from "@/store/connection";
+
+const NOT_CONNECTED = "Not connected. Open Connection to set the server URL and API key.";
 
 interface ResourceState<T> {
   data: T | null;
   loading: boolean;
   refreshing: boolean;
   error: string | null;
-  /** True when `data` is bundled demo data rather than a live API response. */
-  isDemo: boolean;
 }
 
 /**
- * Fetches a resource on mount, supports pull-to-refresh, and — only for
- * connectivity-shaped failures (unconfigured backend, network error,
- * timeout) — falls back to bundled demo data so the screen stays useful
- * without a running backend. HTTP errors (e.g. bad API key, 500s) are
- * surfaced as real error states instead of being papered over with demo
- * data, since silently showing fake data there would hide a real
- * misconfiguration.
+ * Fetch a resource when the screen gains focus (and optionally every
+ * `pollMs` while focused), with pull-to-refresh. Errors are shown as-is;
+ * there is no demo/offline data, so the phone never shows made-up state.
  */
-export function useApiResource<T>(fetcher: () => Promise<T>, demoData: T) {
-  const [state, setState] = useState<ResourceState<T>>({
-    data: null,
-    loading: true,
-    refreshing: false,
-    error: null,
-    isDemo: false,
-  });
+export function useApiResource<T>(fetcher: () => Promise<T>, deps: unknown[] = [], pollMs?: number) {
+  const [state, setState] = useState<ResourceState<T>>({ data: null, loading: true, refreshing: false, error: null });
+  const baseUrl = useConnection((s) => s.baseUrl);
+  const apiKey = useConnection((s) => s.apiKey);
+  const ready = useConnection((s) => s.ready);
+  const fetcherRef = useRef(fetcher);
+  fetcherRef.current = fetcher;
 
-  const load = useCallback(
-    async (isRefresh: boolean) => {
-      setState((s) => ({ ...s, loading: !isRefresh, refreshing: isRefresh, error: null }));
-      try {
-        const data = await fetcher();
-        setState({ data, loading: false, refreshing: false, error: null, isDemo: false });
-      } catch (err) {
-        const message = describeError(err);
-        if (isConnectivityError(err)) {
-          setState({ data: demoData, loading: false, refreshing: false, error: message, isDemo: true });
-        } else {
-          setState((s) => ({ ...s, loading: false, refreshing: false, error: message }));
-        }
+  const load = useCallback(async (mode: "initial" | "refresh" | "silent") => {
+    setState((s) => ({ ...s, loading: mode === "initial" && s.data === null, refreshing: mode === "refresh", error: mode === "silent" ? s.error : null }));
+    try {
+      const data = await fetcherRef.current();
+      setState({ data, loading: false, refreshing: false, error: null });
+    } catch (err) {
+      setState((s) => ({ ...s, loading: false, refreshing: false, error: describeError(err) }));
+    }
+  }, []);
+
+  // Runs when the screen gains focus and whenever the connection or `deps` change.
+  useFocusEffect(
+    useCallback(() => {
+      if (!ready) return undefined;
+      if (!baseUrl || !apiKey) {
+        setState({ data: null, loading: false, refreshing: false, error: NOT_CONNECTED });
+        return undefined;
       }
-    },
-    // fetcher/demoData are expected to be stable (module-level or useCallback'd by the caller)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
+      void load("initial");
+      if (!pollMs) return undefined;
+      const timer = setInterval(() => void load("silent"), pollMs);
+      return () => {
+        clearInterval(timer);
+      };
+    }, [ready, baseUrl, apiKey, load, pollMs, ...deps])
   );
 
-  useEffect(() => {
-    load(false);
-  }, [load]);
-
   return {
-    data: state.data,
-    loading: state.loading,
-    refreshing: state.refreshing,
-    error: state.error,
-    isDemo: state.isDemo,
-    reload: () => load(false),
-    refresh: () => load(true),
+    ...state,
+    setData: (data: T) => {
+      setState((s) => ({ ...s, data }));
+    },
+    reload: () => load("initial"),
+    refresh: () => load("refresh"),
   };
 }

@@ -47,6 +47,7 @@ Open `http://127.0.0.1:8011`, paste the `API_KEY` from `.env` into the key box, 
 ./hunterx migrate          # apply schema migrations (also automatic on start)
 ./hunterx api-key          # print a new random API key
 ./hunterx version
+./hunterx openapi [--check] # write (or verify) the committed API schema v2/openapi.json
 ./hunterx service-install  # systemd user unit (Linux VM)
 ./hunterx boot-install     # Termux:Boot script (Android fallback)
 ```
@@ -82,7 +83,40 @@ Every cycle, including skips, is a row in `scheduler_cycles` with per-step count
 
 - `GET /api/scheduler/status`: on/off, paused, kill switch, in-progress cycle, next run, quiet hours, limits, today's counts, last cycle, last backup.
 - `GET /api/scheduler/cycles?limit=20`: the ledger.
-- `POST /api/scheduler/run`: start one cycle now (same gates); `409` if one is running.
+- `POST /api/scheduler/run`: start one cycle now (same gates). The response says whether it started, and why not if it didn't (`409` if a cycle is already running).
+- `POST /api/scheduler/pause` / `POST /api/scheduler/resume`: set or clear the `scheduler_paused` flag.
+
+## Phone remote control (API)
+
+The mobile app (`../mobile`) is a remote control for these routes. All of them need the API key. Full schema: `openapi.json`, regenerated with `./hunterx openapi` and checked by `tests/test_openapi_snapshot.py`.
+
+| Route | What it does |
+|---|---|
+| `GET /api/auth/check` | Confirms the key; returns the server version |
+| `GET /api/settings` | Current configuration. Never includes secrets: no API key, local service URLs or database path, and job sources only as counts. `live_submission.locked` is always `true` |
+| `PATCH /api/settings` | Changes the safe subset (below). Unknown or locked keys get `422` |
+| `GET /api/reports/summary` | Jobs discovered/scored, dry-runs, submissions (always 0), review tasks, cycles, 7-day history |
+| `GET /api/jobs?q=&stage=&offset=&limit=` | Job list with scores and open review counts |
+| `GET /api/jobs/{id}` | Score breakdown, form status and blockers, application, review tasks, timeline |
+| `GET /api/jobs/{id}/form` | Read-only preview of the live form and fill plan |
+| `GET /api/review-tasks?status=open\|closed\|all`, `GET /api/review-tasks/{id}` | Review queue; the detail lists allowed actions and what approval would do |
+| `POST /api/review-tasks/{id}/approve` | Shortlists a `review` job, approves a prepared application, or re-queues a blocked one for the next **dry-run**. Refused (`409`) while the kill switch is engaged, for blacklisted companies, or once an application is in a submission stage. Never submits |
+| `POST /api/review-tasks/{id}/reject` | Closes the task and rejects (or withdraws) the job |
+| `POST /api/review-tasks/{id}/resolve` | Closes the task as `resolved` or `dismissed` without changing the job |
+| `GET /api/kill-switch`, `POST /api/kill-switch` | Engaging is always allowed. Disengaging needs `"confirm": true` (`428` otherwise) |
+| `GET /api/flags`, `PUT /api/flags/{key}` | `allow_live_submission` and `unattended_mode` can only be turned **off** (`403` when enabling). Unknown flags get `404` |
+| `GET /api/backups` | Backup names, sizes and times only |
+
+Settings the phone can change (stored in the `setting_overrides` table and applied over `.env` at startup):
+- `automation_enabled` (dry-runs only)
+- `max_applications_per_day` (0–50), `max_dry_runs_per_day`, `min_match_score`
+- `quiet_hours_start` / `quiet_hours_end` (`HH:MM`)
+- `cycle_interval_minutes`, `cycle_max_score`, `cycle_max_prepare`, `cycle_max_dry_runs`
+- `target_locations`, `target_keywords`, `excluded_locations`, `excluded_titles`, `blacklisted_companies`
+
+Everything else needs `.env` and a restart: `APPLICATION_MODE`, `ALLOW_LIVE_SUBMISSION`, `CONTINUOUS_RUN_ENABLED`, `API_KEY`, job sources, the AI model and the database.
+
+`CORS_ORIGINS` (comma-separated, empty by default) lets a browser front end such as the Expo web preview call the API. The native app doesn't need it.
 
 ## Backups and migrations
 

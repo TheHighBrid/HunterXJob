@@ -18,11 +18,11 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen
-            name="settings"
+            name="connection"
             options={{
               presentation: "modal",
               headerShown: true,
-              title: "Settings",
+              title: "Connection",
               headerRight: () => <CloseButton />,
               headerStyle: { backgroundColor: theme.surface },
               headerTintColor: theme.text,

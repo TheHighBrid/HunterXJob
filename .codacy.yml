@@ -7,3 +7,9 @@ engines:
     # and Ruff's security rules (S*) still run on tests except S101.
     exclude_paths:
       - "**/tests/**"
+# Generated files: v2/openapi.json comes from `./hunterx openapi` and
+# mobile/src/api/schema.d.ts from `npm run api:generate`. CI checks both are in
+# sync with the server code, so they are not analysed by hand.
+exclude_paths:
+  - "v2/openapi.json"
+  - "mobile/src/api/schema.d.ts"

@@ -1,13 +1,15 @@
 {
   "name": "hunterxjob-mobile",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "main": "expo-router/entry",
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~57.0.4",
+    "expo-build-properties": "~57.0.22",
     "expo-constants": "~57.0.3",
     "expo-linking": "~57.0.2",
     "expo-router": "~57.0.4",
+    "expo-secure-store": "~57.0.4",
     "expo-status-bar": "~57.0.0",
     "react": "19.2.3",
     "react-native": "0.86.0",
@@ -17,8 +19,13 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@react-native/jest-preset": "0.86.0",
+    "@types/jest": "^30.0.0",
     "@types/react": "~19.2.2",
     "babel-preset-expo": "^57.0.2",
+    "jest": "^30.5.2",
+    "jest-expo": "^57.0.5",
+    "openapi-typescript": "^7.13.0",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -29,7 +36,20 @@
     "typecheck": "tsc --noEmit",
     "export": "expo export",
     "prebuild:android": "expo prebuild -p android",
-    "build:android:debug": "npm run prebuild:android && cd android && ./gradlew assembleDebug"
+    "build:android:debug": "npm run prebuild:android && cd android && ./gradlew assembleDebug",
+    "test": "jest",
+    "api:generate": "openapi-typescript ../v2/openapi.json -o src/api/schema.d.ts",
+    "api:check": "openapi-typescript ../v2/openapi.json -o src/api/schema.d.ts --check"
   },
-  "private": true
+  "private": true,
+  "jest": {
+    "preset": "jest-expo",
+    "setupFiles": [
+      "<rootDir>/jest.setup.js"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/dist/"
+    ]
+  }
 }

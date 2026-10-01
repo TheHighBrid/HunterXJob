@@ -27,6 +27,9 @@ Updated: 2026-10-01
 | API authentication (v0.3) | Ready | `X-API-Key` on every endpoint except health; refuses requests when no key is set, except loopback-only local dev mode |
 | Schema migrations and backups (v0.3) | Ready | `schema_version` table, pre-migration backup, `./hunterx backup` with retention, periodic backups, WAL |
 | Unattended hosting (v0.3) | Ready | systemd user service on a Linux VM (primary, see `docs/DEPLOY_VM.md`); Termux:Boot fallback |
+| Phone remote-control API (v0.4) | Ready | Settings (safe subset, no secrets), reports summary, jobs with score and form status, review approve/reject/resolve, scheduler pause/resume/run, kill switch, backups list. No route can unlock live submission or record a submission. Schema committed as `v2/openapi.json` |
+| Mobile app on v2 (v2.0.0) | Ready | Configurable server URL (Tailscale), API key in secure store, connection test, Dashboard, Jobs, Review, Reports and Settings screens. Types generated from the OpenAPI schema; jest unit tests |
+| v1 `backend/` | Legacy / donor | Nothing depends on it, including the mobile app. Kept for reference; deletion deferred to a later milestone |
 | Unattended live submit | Blocked | Requires `certified_autonomous` + live gate + unattended flag. Continuous run only dry-runs |
 
 ## Safety that stays on
@@ -36,6 +39,7 @@ Updated: 2026-10-01
 - A submit click is not confirmation. Missing evidence becomes `submission_uncertain`.
 - No adapter is `certified_autonomous` in this release. Unattended mode cannot submit.
 - Continuous-run cycles never approve applications and only dry-run ones the owner approved. A result claiming a submission engages the kill switch.
+- The phone can change only a bounded settings subset. Approving a review task at most queues another dry-run. Live-submission flags can only be turned off through the API.
 - The API refuses requests without a configured key; it is meant to sit behind a tunnel or TLS proxy, never plain public HTTP.
 
 ## Real-form dry-run findings (2026-10-01 smoke)

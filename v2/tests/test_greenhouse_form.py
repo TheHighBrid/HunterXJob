@@ -559,7 +559,9 @@ def test_form_preview_endpoint_is_read_only_and_redacts_sensitive_values(monkeyp
     from app.config import get_settings
 
     api_key = "x" * 40
-    monkeypatch.setattr(main, "LiveFormProvider", _Provider)
+    from app import remote_api
+
+    monkeypatch.setattr(remote_api, "LiveFormProvider", _Provider)
     main.app.dependency_overrides[main.get_db] = _get_db
     main.app.dependency_overrides[get_settings] = lambda: Settings(_env_file=None, api_key=api_key)
     try:

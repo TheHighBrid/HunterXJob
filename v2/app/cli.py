@@ -86,6 +86,30 @@ def _cmd_check_auth(_: argparse.Namespace) -> int:
     return {"api_key": 0, "local_dev": 2}.get(posture.mode, 1)
 
 
+OPENAPI_SNAPSHOT = Path(__file__).resolve().parent.parent / "openapi.json"
+
+
+def openapi_text() -> str:
+    """The API schema as stable, pretty JSON (what the mobile types are generated from)."""
+    from app.main import app
+
+    return json.dumps(app.openapi(), indent=2, sort_keys=True) + "\n"
+
+
+def _cmd_openapi(args: argparse.Namespace) -> int:
+    text = openapi_text()
+    target = Path(args.output) if args.output else OPENAPI_SNAPSHOT
+    if args.check:
+        if not target.is_file() or target.read_text(encoding="utf-8") != text:
+            print(f"{target} is out of date; run: ./hunterx openapi", file=sys.stderr)
+            return 1
+        print(f"{target} is up to date")
+        return 0
+    target.write_text(text, encoding="utf-8")
+    print(f"wrote {target}")
+    return 0
+
+
 COMMANDS = {
     "version": (_cmd_version, "print the version"),
     "migrate": (_cmd_migrate, "apply pending database migrations (backs up first)"),
@@ -95,6 +119,7 @@ COMMANDS = {
     "cycle": (_cmd_cycle, "run one discover/score/prepare/dry-run cycle now"),
     "api-key": (_cmd_api_key, "print a new random API key"),
     "check-auth": (_cmd_check_auth, "report the API authentication posture"),
+    "openapi": (_cmd_openapi, "write (or --check) the OpenAPI snapshot used for the mobile types"),
 }
 
 
@@ -105,6 +130,9 @@ def main(argv: list[str] | None = None) -> int:
         command = sub.add_parser(name, help=help_text)
         if name in {"backup", "backups"}:
             command.add_argument("--dir", help="backup directory (default: BACKUP_DIR)")
+        if name == "openapi":
+            command.add_argument("--output", help="file to write (default: v2/openapi.json)")
+            command.add_argument("--check", action="store_true", help="exit 1 if the snapshot is out of date")
         if name == "backup":
             command.add_argument("--keep", type=int, help="number of backups to keep (default: BACKUP_RETENTION)")
     args = parser.parse_args(argv)

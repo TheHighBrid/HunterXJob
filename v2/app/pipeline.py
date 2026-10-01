@@ -124,8 +124,9 @@ def _ai_evaluation(ai: LocalAI | None, resume_facts: str, job: Job) -> tuple[flo
         return None, {"error": str(exc)}
 
 
-def _shortlist(db: Session, settings: Settings, job: Job) -> None:
-    transition(db, job, PipelineStage.shortlisted, "score above threshold")
+def shortlist_job(db: Session, settings: Settings, job: Job, message: str = "score above threshold") -> None:
+    """Move a job to shortlisted and make sure it has a (dry-run mode) application."""
+    transition(db, job, PipelineStage.shortlisted, message)
     existing = db.execute(select(Application).where(Application.job_id == job.id)).scalar_one_or_none()
     if existing is not None:
         return
@@ -168,7 +169,7 @@ def score_pending_jobs(db: Session, settings: Settings, resume_facts: str, use_a
         transition(db, job, PipelineStage.scored, "job scored", evaluation)
 
         if job.final_score >= settings.min_match_score:
-            _shortlist(db, settings, job)
+            shortlist_job(db, settings, job)
         else:
             transition(db, job, PipelineStage.rejected, "score below threshold")
     return processed
@@ -312,9 +313,24 @@ def _form_unavailable(db: Session, application: Application, job: Job, exc: Form
     }
 
 
+def _record_blockers(application: Application, form: _LoadedForm, blockers: list[str], plan: FillPlan | None) -> None:
+    """Keep a structured copy of why the dry-run stopped (shown in the job detail)."""
+    blocked = [] if plan is None else [{
+        "key": item.control.key,
+        "label": item.control.label,
+        "section": item.control.section,
+        "required": item.control.required,
+        "reason": item.reason,
+    } for item in plan.items if item.status == "review"]
+    application.validation_json = json.dumps(
+        {"ok": False, "form": form.summary, "blockers": blockers, "blocked_fields": blocked}, default=str
+    )
+
+
 def _stop_for_review(db: Session, application: Application, job: Job, plan: FillPlan, form: _LoadedForm) -> dict[str, object] | None:
     """Open a review task and return the result if the form cannot be completed automatically."""
     if form.handoff:
+        _record_blockers(application, form, [form.handoff], None)
         open_task(
             db,
             reason_code=form.handoff,
@@ -328,6 +344,7 @@ def _stop_for_review(db: Session, application: Application, job: Job, plan: Fill
     if plan.ready:
         return None
     reason = plan.blockers[0] if plan.blockers else "ambiguous_question"
+    _record_blockers(application, form, list(plan.blockers) or [reason], plan)
     open_task(
         db,
         reason_code=reason,

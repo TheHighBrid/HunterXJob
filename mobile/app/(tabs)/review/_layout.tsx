@@ -1,9 +1,9 @@
 import { Stack } from "expo-router";
 
-import { SettingsButton } from "@/components/SettingsButton";
+import { ConnectionButton } from "@/components/ConnectionButton";
 import { useTheme } from "@/theme";
 
-export default function ReportsStackLayout() {
+export default function ReviewLayout() {
   const theme = useTheme();
   return (
     <Stack
@@ -11,10 +11,11 @@ export default function ReportsStackLayout() {
         headerStyle: { backgroundColor: theme.surface },
         headerTintColor: theme.text,
         headerShadowVisible: false,
+        headerRight: () => <ConnectionButton />,
       }}
     >
-      <Stack.Screen name="index" options={{ title: "Reports", headerRight: () => <SettingsButton /> }} />
-      <Stack.Screen name="[id]" options={{ title: "Report" }} />
+      <Stack.Screen name="index" options={{ title: "Review queue" }} />
+      <Stack.Screen name="[id]" options={{ title: "Review task" }} />
     </Stack>
   );
 }

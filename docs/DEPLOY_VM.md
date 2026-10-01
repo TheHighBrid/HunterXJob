@@ -97,8 +97,15 @@ sudo tailscale serve --bg 8011     # https://<vm-name>.<tailnet>.ts.net -> 127.0
 ```
 
 Install Tailscale on the phone, sign in to the same tailnet, and use
-`https://<vm-name>.<tailnet>.ts.net` as the backend URL with your API key. Do **not**
+`https://<vm-name>.<tailnet>.ts.net` as the server URL in the app, together with your API key. Do **not**
 use `tailscale funnel`, which publishes the service to the internet.
+
+Alternative without `tailscale serve`: set `HOST` in `.env` to the VM's
+Tailscale address (`tailscale ip -4`, a `100.x.y.z` address), restart, and use
+`http://<vm-name>.<tailnet>.ts.net:8011` in the app. Tailscale's WireGuard
+tunnel encrypts that traffic, which is why the Android app allows cleartext
+HTTP. `./hunterx doctor` will warn that `HOST` isn't loopback; that's expected
+here. Never bind to `0.0.0.0` or to a public IP.
 
 ### B. Cloudflare Tunnel
 
@@ -147,22 +154,39 @@ Use either these rules or `ufw`, not both.
 
 ## 6. Everyday control from the phone
 
-With `BASE` set to the URL from section 5 and `KEY` to your API key:
+Install the HunterXJob app (`mobile/`, see [mobile/README.md](../mobile/README.md)).
+On first launch it opens **Connection**:
+
+1. **Server URL**: the URL from section 5, e.g. `https://<vm-name>.<tailnet>.ts.net`
+   or `http://<vm-name>.<tailnet>.ts.net:8011`. There is no built-in default.
+2. **API key**: `API_KEY` from `v2/.env`. It is kept in Android's secure storage (Keystore).
+3. **Test connection**: checks that the URL is valid, that the server is
+   reachable, that the key is accepted, and that the server version is at least 0.4.0.
+
+From then on:
+
+* **Dashboard** shows status, the kill switch, scheduler pause/resume/run-now, today's caps and recent cycles.
+* **Jobs** and **Review** let you approve, reject or resolve tasks.
+* **Reports** shows counts.
+* **Settings** lets you change caps, score threshold, quiet hours, cycle limits and targeting.
+
+Live submission is shown as locked, and nothing in the app can unlock it.
+
+The same calls with curl, with `BASE` set to the server URL and `KEY` to your API key:
 
 ```bash
 curl -H "X-API-Key: $KEY" $BASE/api/scheduler/status            # what is it doing?
 curl -H "X-API-Key: $KEY" "$BASE/api/scheduler/cycles?limit=5"  # recent cycles
 curl -X POST -H "X-API-Key: $KEY" $BASE/api/scheduler/run       # run a cycle now
-curl -X PUT -H "X-API-Key: $KEY" -H 'Content-Type: application/json' \
-     -d '{"enabled": true, "note": "pause"}' $BASE/api/flags/scheduler_paused       # pause cycles
-curl -X PUT -H "X-API-Key: $KEY" -H 'Content-Type: application/json' \
-     -d '{"enabled": true, "note": "stop"}' $BASE/api/flags/global_kill_switch      # stop everything
+curl -X POST -H "X-API-Key: $KEY" $BASE/api/scheduler/pause     # pause cycles (resume: /resume)
+curl -X POST -H "X-API-Key: $KEY" -H 'Content-Type: application/json' \
+     -d '{"engaged": true, "note": "stop"}' $BASE/api/kill-switch   # stop everything
 curl -H "X-API-Key: $KEY" $BASE/api/review-tasks                # what needs you
+curl -H "X-API-Key: $KEY" $BASE/api/reports/summary             # counts
 ```
 
-The browser dashboard at `$BASE/` does the same (paste the key once). The mobile
-app already sends `X-API-Key`, but its screens currently target the legacy
-`backend/` API; v2 screens are a follow-up.
+Disengaging the kill switch needs `"confirm": true` in the body. The browser
+dashboard at `$BASE/` covers the operator routes (paste the key once).
 
 ## 7. Backups and updates
 
