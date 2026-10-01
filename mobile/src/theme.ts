@@ -56,33 +56,30 @@ export function useTheme(): Theme {
   return scheme === "dark" ? dark : light;
 }
 
-/** Status badge colors, keyed by ApplicationStatus. Kept here so every
- * screen that renders a status badge agrees on the same palette. */
-export function statusColor(theme: Theme, status: string): string {
-  switch (status) {
-    case "applied":
-      return theme.info;
-    case "queued":
-    case "discovered":
-      return theme.textMuted;
-    case "interview":
-      return theme.success;
-    case "offer":
-      return theme.success;
-    case "blocked":
-    case "rejected":
-      return theme.danger;
-    case "needs_review":
-      return theme.warning;
-    case "withdrawn":
-      return theme.textFaint;
-    default:
-      return theme.textMuted;
-  }
+const GOOD_STAGES = new Set(["shortlisted", "approved", "materials_generated", "materials_reviewed", "ready_to_apply", "validated", "form_filled"]);
+const ATTENTION_STAGES = new Set(["review", "needs_review", "submission_uncertain", "applying", "preparing"]);
+const BAD_STAGES = new Set(["rejected", "failed"]);
+
+/** Badge color for a v2 pipeline stage, shared by every screen. */
+export function stageColor(theme: Theme, stage: string | null | undefined): string {
+  if (!stage) return theme.textFaint;
+  if (GOOD_STAGES.has(stage)) return theme.success;
+  if (ATTENTION_STAGES.has(stage)) return theme.warning;
+  if (BAD_STAGES.has(stage)) return theme.danger;
+  if (stage === "withdrawn") return theme.textFaint;
+  return theme.info;
 }
 
-export function matchScoreColor(theme: Theme, score: number | null): string {
-  if (score === null) return theme.textFaint;
+/** Badge color for a scheduler cycle status. */
+export function cycleColor(theme: Theme, status: string): string {
+  if (status === "completed") return theme.success;
+  if (status === "completed_with_errors" || status === "skipped" || status === "interrupted") return theme.warning;
+  if (status === "running") return theme.info;
+  return theme.danger;
+}
+
+export function matchScoreColor(theme: Theme, score: number | null | undefined): string {
+  if (score === null || score === undefined) return theme.textFaint;
   if (score >= 75) return theme.success;
   if (score >= 50) return theme.warning;
   return theme.danger;

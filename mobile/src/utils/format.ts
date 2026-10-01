@@ -2,44 +2,46 @@ export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-export function formatDate(iso: string | null | undefined): string {
+export function formatRelativeToNow(iso: string | null | undefined, now: number = Date.now()): string {
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-export function formatRelativeToNow(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  const diffMs = date.getTime() - Date.now();
-  const diffMin = Math.round(diffMs / 60000);
+  const diffMin = Math.round((date.getTime() - now) / 60000);
   const abs = Math.abs(diffMin);
-
   if (abs < 1) return "just now";
   if (abs < 60) return diffMin > 0 ? `in ${abs}m` : `${abs}m ago`;
-  const diffHr = Math.round(diffMin / 60);
-  if (Math.abs(diffHr) < 24) return diffMin > 0 ? `in ${Math.abs(diffHr)}h` : `${Math.abs(diffHr)}h ago`;
-  const diffDay = Math.round(diffHr / 24);
-  return diffMin > 0 ? `in ${Math.abs(diffDay)}d` : `${Math.abs(diffDay)}d ago`;
+  const hours = Math.round(abs / 60);
+  if (hours < 24) return diffMin > 0 ? `in ${hours}h` : `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return diffMin > 0 ? `in ${days}d` : `${days}d ago`;
 }
 
-export function titleCase(input: string): string {
-  return input
-    .split("_")
-    .map((word) => (word.length ? word[0].toUpperCase() + word.slice(1) : word))
-    .join(" ");
+/** "materials_generated" -> "Materials generated" */
+export function humanize(input: string | null | undefined): string {
+  if (!input) return "—";
+  const text = input.replace(/[._]/g, " ").trim();
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+export function formatScore(score: number | null | undefined): string {
+  return score === null || score === undefined ? "—" : String(Math.round(score));
+}
+
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Split a comma/newline separated list typed by the user. */
+export function parseList(text: string): string[] {
+  const seen: string[] = [];
+  for (const raw of text.split(/[,\n]/)) {
+    const item = raw.trim();
+    if (item && !seen.includes(item)) seen.push(item);
+  }
+  return seen;
 }

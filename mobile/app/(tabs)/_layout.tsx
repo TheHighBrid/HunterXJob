@@ -2,79 +2,63 @@ import { Tabs, useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
 import { Text, type ColorValue } from "react-native";
 
-import { SettingsButton } from "@/components/SettingsButton";
-import { useSettingsStore } from "@/store/settings";
+import { ConnectionButton } from "@/components/ConnectionButton";
+import { isConfigured, useConnection } from "@/store/connection";
 import { useTheme } from "@/theme";
 
 function TabIcon({ symbol, focused, color }: { symbol: string; focused: boolean; color: ColorValue }) {
-  return (
-    <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.6, color }}>{symbol}</Text>
-  );
+  return <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.6, color }}>{symbol}</Text>;
 }
 
 export default function TabsLayout() {
   const theme = useTheme();
   const router = useRouter();
-  const hasHydrated = useSettingsStore((s) => s.hasHydrated);
-  const baseUrl = useSettingsStore((s) => s.baseUrl);
-  const hasCompletedSetup = useSettingsStore((s) => s.hasCompletedSetup);
+  const ready = useConnection((s) => s.ready);
+  const configured = useConnection(isConfigured);
   const redirected = useRef(false);
 
-  // First-run: send the user to Settings before they hit a wall of API
-  // errors on every tab. Only happens once per app launch.
+  // First run (no server URL or key yet): open the Connection screen once.
   useEffect(() => {
-    if (!hasHydrated || redirected.current) return;
-    if (!baseUrl && !hasCompletedSetup) {
-      redirected.current = true;
-      router.push("/settings");
-    }
-  }, [hasHydrated, baseUrl, hasCompletedSetup, router]);
+    if (!ready || redirected.current || configured) return;
+    redirected.current = true;
+    router.push("/connection");
+  }, [ready, configured, router]);
+
+  const header = {
+    headerRight: () => <ConnectionButton />,
+    headerStyle: { backgroundColor: theme.surface },
+    headerTintColor: theme.text,
+    headerShadowVisible: false,
+  };
 
   return (
     <Tabs
       screenOptions={{
-        headerRight: () => <SettingsButton />,
+        ...header,
         tabBarActiveTintColor: theme.primary,
         tabBarInactiveTintColor: theme.textFaint,
-        tabBarStyle: {
-          backgroundColor: theme.surface,
-          borderTopColor: theme.border,
-        },
-        headerStyle: { backgroundColor: theme.surface },
-        headerTintColor: theme.text,
-        headerShadowVisible: false,
+        tabBarStyle: { backgroundColor: theme.surface, borderTopColor: theme.border },
       }}
     >
       <Tabs.Screen
         name="index"
-        options={{
-          title: "Dashboard",
-          tabBarIcon: ({ focused, color }) => <TabIcon symbol="🏠" focused={focused} color={color} />,
-        }}
+        options={{ title: "Dashboard", tabBarIcon: ({ focused, color }) => <TabIcon symbol="🏠" focused={focused} color={color} /> }}
       />
       <Tabs.Screen
         name="jobs"
-        options={{
-          title: "Jobs",
-          headerShown: false,
-          tabBarIcon: ({ focused, color }) => <TabIcon symbol="🔍" focused={focused} color={color} />,
-        }}
+        options={{ title: "Jobs", headerShown: false, tabBarIcon: ({ focused, color }) => <TabIcon symbol="🔍" focused={focused} color={color} /> }}
       />
       <Tabs.Screen
-        name="applications"
-        options={{
-          title: "Applications",
-          headerShown: false,
-          tabBarIcon: ({ focused, color }) => <TabIcon symbol="📋" focused={focused} color={color} />,
-        }}
+        name="review"
+        options={{ title: "Review", headerShown: false, tabBarIcon: ({ focused, color }) => <TabIcon symbol="📝" focused={focused} color={color} /> }}
       />
       <Tabs.Screen
         name="reports"
-        options={{
-          title: "Reports",
-          headerShown: false,
-          tabBarIcon: ({ focused, color }) => <TabIcon symbol="📊" focused={focused} color={color} />,
-        }}
+        options={{ title: "Reports", tabBarIcon: ({ focused, color }) => <TabIcon symbol="📊" focused={focused} color={color} /> }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{ title: "Settings", tabBarIcon: ({ focused, color }) => <TabIcon symbol="⚙️" focused={focused} color={color} /> }}
       />
     </Tabs>
   );
