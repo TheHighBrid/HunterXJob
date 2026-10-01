@@ -104,7 +104,8 @@ def env(tmp_path, monkeypatch):
     # Scoring and material drafting construct LocalAI internally; keep them offline.
     monkeypatch.setattr(pipeline, "LocalAI", FakeAI)
     provider = SimpleFormProvider()
-    discovered = {"records": [_record("101"), _record("102")]}
+    # Two distinct roles (identical postings would be linked as duplicates).
+    discovered = {"records": [_record("101"), _record("102", "Bilingual Compliance Analyst")]}
 
     def discover(settings, errors):
         return list(discovered["records"])
@@ -396,3 +397,69 @@ def test_quiet_hours_and_daily_window_use_the_configured_timezone():
     assert in_quiet_hours(local_now(settings, noon_utc), "23:00", "07:00") is False
     assert day_start_utc(settings, noon_utc) == datetime(2026, 10, 1, 4, 0, tzinfo=UTC)
     assert local_now(Settings(_env_file=None, timezone="Not/AZone"), noon_utc).utcoffset() == timedelta(0)
+
+
+# --- liveness and duplicates in the cycle -----------------------------------------------------
+
+def test_cycle_runs_a_liveness_step_and_closes_only_on_confirmed_gone(env):
+    from app.job_liveness import GONE, Observation
+
+    runner = env["make_runner"]()
+    runner.run_once("scheduled")
+    _approve_one(env["Session"])
+    gone = Observation(GONE, "ats_api_not_found", 404, "posting does not exist")
+    runner.deps.liveness_probe = lambda job: gone
+    # Every queued posting is due once; the first "gone" only marks it suspect and defers the dry-run.
+    with env["Session"]() as db:
+        for job in db.execute(select(Job)).scalars():
+            job.liveness_next_check_at = None
+        db.commit()
+    result = runner.run_once("scheduled")
+    assert result["steps"]["liveness"]["checked"] == 2 and result["steps"]["liveness"]["closed"] == []
+    assert [r["status"] for r in result["steps"]["dry_run"]["results"]] == ["deferred"]
+    assert env["provider"].fetched == []
+    with env["Session"]() as db:
+        assert {job.liveness for job in db.execute(select(Job)).scalars()} == {"suspect"}
+        # The confirmation window passes; the next definitive answer closes them.
+        for job in db.execute(select(Job)).scalars():
+            job.liveness_checked_at = datetime.now(UTC) - timedelta(hours=1)
+            job.liveness_next_check_at = None
+        db.commit()
+    result = runner.run_once("scheduled")
+    assert len(result["steps"]["liveness"]["closed"]) == 2
+    with env["Session"]() as db:
+        assert {job.stage for job in db.execute(select(Job)).scalars()} == {PipelineStage.closed.value}
+
+
+def test_cycle_never_closes_on_transient_liveness_errors(env):
+    from app.job_liveness import UNKNOWN, Observation
+
+    runner = env["make_runner"]()
+    runner.run_once("scheduled")
+    runner.deps.liveness_probe = lambda job: Observation(UNKNOWN, "network_error", None, "timeout")
+    for _ in range(3):
+        with env["Session"]() as db:
+            for job in db.execute(select(Job)).scalars():
+                job.liveness_next_check_at = None
+            db.commit()
+        runner.run_once("scheduled")
+    with env["Session"]() as db:
+        jobs = db.execute(select(Job)).scalars().all()
+        assert all(job.stage != PipelineStage.closed.value for job in jobs)
+        assert all(job.liveness == "unknown" and job.liveness_failures == 3 for job in jobs)
+
+
+def test_identical_postings_from_two_boards_are_linked_and_prepared_once(env):
+    env["discovered"]["records"] = [
+        _record("101"),
+        JobRecord(source="ashby", external_id="5d7a0d9e-1111-4c4c-8d8d-000000000001", title="Bilingual Fraud Analyst",
+                  company="maplebank", location="Ottawa, Ontario, Canada", remote=False,
+                  url="https://jobs.ashbyhq.com/maplebank/5d7a0d9e-1111-4c4c-8d8d-000000000001", description=DESCRIPTION,
+                  board="maplebank"),
+    ]
+    result = env["make_runner"](ashby_orgs="maplebank").run_once("scheduled")
+    assert result["steps"]["discover"]["added"] == 2 and result["steps"]["discover"]["duplicates"] == 1
+    assert len(result["steps"]["prepare"]["prepared"]) == 1
+    with env["Session"]() as db:
+        stages = sorted(job.stage for job in db.execute(select(Job)).scalars())
+    assert stages == [PipelineStage.duplicate.value, PipelineStage.materials_generated.value]

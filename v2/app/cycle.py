@@ -1,10 +1,14 @@
-"""Continuous-run cycles: discover -> score -> prepare -> dry-run.
+"""Continuous-run cycles: discover -> liveness -> score -> prepare -> dry-run.
 
 A cycle is bounded and conservative:
 
 * It is skipped when the global kill switch is engaged, when the owner paused
   the scheduler (``scheduler_paused`` flag) or during quiet hours, and it stops
   early if the kill switch is engaged mid-cycle.
+* "liveness" re-checks queued postings whose check is due (bounded by
+  ``CYCLE_MAX_LIVENESS``); see :mod:`app.job_liveness`. Prepare and dry-run
+  also confirm the posting is live first, and linked duplicates are never
+  prepared or dry-run (:mod:`app.dedup`).
 * "prepare" only drafts materials with the local model for shortlisted jobs.
   The owner still approves each application; the cycle never approves.
 * "dry-run" only runs for applications the owner already approved
@@ -36,8 +40,9 @@ from sqlalchemy.orm import Session
 from app.ai import LocalAI
 from app.backup import create_backup, latest_backup_time
 from app.config import Settings
-from app.discovery import JobRecord, discover_all, upsert_jobs
+from app.discovery import JobRecord, configured_sources, discover_all, upsert_records
 from app.flags import is_enabled, kill_switch_engaged, set_flag
+from app.job_liveness import CheckContext, Probe, ensure_live, hint_missing_from_feed, run_due_checks
 from app.material_store import MaterialsError
 from app.material_workflow import generate_for_application
 from app.models import Application, ApplicationMaterial, Job, PipelineStage, SchedulerCycle, iso_utc
@@ -56,7 +61,7 @@ except ImportError:  # pragma: no cover
 
 logger = logging.getLogger(__name__)
 
-STEPS = ("discover", "score", "prepare", "dry_run")
+STEPS = ("discover", "liveness", "score", "prepare", "dry_run")
 TICK_SECONDS = 30.0
 
 
@@ -117,6 +122,7 @@ class CycleDeps:
     resume_loader: Callable[[], str] = read_resume_facts
     ai_factory: Callable[[Settings], LocalAI] = LocalAI
     form_provider: FormProvider | None = None
+    liveness_probe: Probe | None = None
 
 
 @dataclass(slots=True)
@@ -235,7 +241,8 @@ class CycleRunner:
         ctx = _Context(resume=self.deps.resume_loader().strip())
         if ctx.resume:
             ctx.ai_ok = bool(self.deps.ai_factory(self.settings).health().get("ok"))
-        handlers = {"discover": self._discover, "score": self._score, "prepare": self._prepare, "dry_run": self._dry_run}
+        handlers = {"discover": self._discover, "liveness": self._liveness, "score": self._score,
+                    "prepare": self._prepare, "dry_run": self._dry_run}
         steps: dict[str, Any] = {}
         for name in STEPS:
             if ctx.aborted or kill_switch_engaged(db):
@@ -264,12 +271,27 @@ class CycleRunner:
 
     def _discover(self, db: Session, _ctx: _Context) -> dict[str, Any]:
         s = self.settings
-        if not (s._csv(s.greenhouse_board_tokens) or s._csv(s.lever_companies)):
-            return _skipped("no job sources configured (GREENHOUSE_BOARD_TOKENS / LEVER_COMPANIES)")
+        sources = configured_sources(s)
+        if not sources:
+            return _skipped("no job sources configured (GREENHOUSE_BOARD_TOKENS / LEVER_COMPANIES / ASHBY_ORGS)")
         errors: list[str] = []
         records = self.deps.discover(s, errors)
-        added = upsert_jobs(db, records)
-        return {"status": "ok", "discovered": len(records), "added": added, "errors": errors[:20]}
+        result = upsert_records(db, records)
+        # Boards that answered completely: queued postings they no longer list get an early liveness check.
+        failed = {error.split(": ", 1)[0] for error in errors}
+        seen = {record.canonical_id for record in records}
+        hinted = sum(
+            hint_missing_from_feed(db, source, board.lower(), seen)
+            for source, board in sources if f"{source}:{board}" not in failed
+        )
+        return {"status": "ok", "discovered": len(records), "added": result.added, "duplicates": result.duplicates,
+                "missing_from_feed": hinted, "errors": errors[:20]}
+
+    def _liveness(self, db: Session, _ctx: _Context) -> dict[str, Any]:
+        if self.settings.cycle_max_liveness == 0:
+            return _skipped("CYCLE_MAX_LIVENESS=0")
+        summary = run_due_checks(db, self.settings, CheckContext(probe=self.deps.liveness_probe))
+        return {"status": "ok", **summary}
 
     def _score(self, db: Session, ctx: _Context) -> dict[str, Any]:
         if not ctx.resume:
@@ -299,6 +321,12 @@ class CycleRunner:
             if kill_switch_engaged(db):
                 ctx.aborted = True
                 break
+            gate = ensure_live(db, self.settings, application.job, action="prepare",
+                               ctx=CheckContext(probe=self.deps.liveness_probe))
+            if not gate.allowed:
+                results.append({"application_id": application.id, "stage": application.stage,
+                                "error": f"not prepared: posting liveness is {gate.status} ({gate.reason})"})
+                continue
             try:
                 rows = generate_for_application(db, self.settings, application.id)
             except MaterialsError as exc:
@@ -340,6 +368,12 @@ class CycleRunner:
         return {"status": "ok", "attempted": len(results), "results": results, "submitted": 0}
 
     def _dry_run_one(self, db: Session, application_id: str) -> dict[str, Any]:
+        application = db.get(Application, application_id)
+        if application is not None:
+            gate = ensure_live(db, self.settings, application.job, action="dry_run",
+                               ctx=CheckContext(probe=self.deps.liveness_probe))
+            if not gate.allowed:
+                return {"application_id": application_id, "status": "deferred", "reason": f"liveness_{gate.status}"}
         try:
             result = execute_apply(db, self.settings, application_id, form_provider=self.deps.form_provider)
         except (RuntimeError, ValueError) as exc:
