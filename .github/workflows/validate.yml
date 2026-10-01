@@ -8,6 +8,7 @@ on:
     paths:
       - "backend/**"
       - "mobile/**"
+      - "v2/openapi.json"
       - "scripts/test-all.sh"
       - ".github/workflows/validate.yml"
   pull_request:
@@ -15,6 +16,7 @@ on:
     paths:
       - "backend/**"
       - "mobile/**"
+      - "v2/openapi.json"
       - "scripts/test-all.sh"
       - ".github/workflows/validate.yml"
 
@@ -70,3 +72,9 @@ jobs:
 
       - name: Type-check mobile app
         run: npm run typecheck
+
+      - name: Check generated API types match v2/openapi.json
+        run: npm run api:check
+
+      - name: Run mobile unit tests
+        run: npm test -- --ci

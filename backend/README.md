@@ -1,4 +1,10 @@
-# HunterXJob Backend
+# HunterXJob Backend (legacy v1, donor only)
+
+> **Legacy.** This is the original v1 engine. HunterXJob now runs on [`../v2`](../v2),
+> and the mobile app talks only to v2. This directory is kept only as a donor of
+> code and ideas and will be removed in a later milestone. Don't deploy it or add
+> features here. Its "fully autonomous" design is retired; see
+> [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md).
 
 Self-hosted automated job-application engine. Python 3.11 / FastAPI / SQLAlchemy
 (SQLite) / APScheduler / Playwright / Jinja2. See `/docs/ARCHITECTURE.md` (repo
