@@ -2,7 +2,7 @@
 
 Tracking issue: [#9](https://github.com/TheHighBrid/HunterXJob/issues/9)
 
-Updated: 2026-09-15
+Updated: 2026-10-01
 
 ## Honest readiness
 
@@ -17,8 +17,9 @@ Updated: 2026-09-15
 | Idempotency / duplicate guard | Ready | Unique application-per-job and idempotency key |
 | Manual-review queue | Ready | Reason codes from the roadmap |
 | Feature flags / kill switch | Ready | Global and per-adapter |
-| Universal form engine | Ready against fixtures | Text, select, file, radio/checkbox, required, sensitive/legal classification |
-| Greenhouse adapter | `human_reviewed_submit` | Local fixture dry-run certified. Live submit locked |
+| Universal form engine | Ready against real Greenhouse forms (plan only) | Text, select, multi-select, file, checkbox, autocomplete; sensitive/legal/voluntary classification; exact option matching |
+| Greenhouse real-form dry-run | Working (read-only) | Real form from the public boards API, with optional headless-browser verification. Fetch failures are flagged, never faked. No sample-form fallback |
+| Greenhouse adapter | `human_reviewed_submit` (catalog label) | Plans against the real form. Nothing fills or submits in a browser yet. Live submit locked |
 | Lever / email / generic | `dry_run` | Same safety gates |
 | SmartRecruiters / Workday / iCIMS / Taleo | `detect_only` | Platform detection only |
 | Government portals | Unsupported | Flag exists, adapter not implemented |
@@ -31,9 +32,15 @@ Updated: 2026-09-15
 - A submit click is not confirmation. Missing evidence becomes `submission_uncertain`.
 - No adapter is `certified_autonomous` in this release. Unattended mode cannot submit.
 
+## Real-form dry-run findings (2026-10-01 smoke)
+
+- The boards API is not always complete. Some boards' hosted forms require an employment/education history section or a phone-country picker that the API doesn't list. Browser verification catches these and stops for review, so certification dry-runs should run with `GREENHOUSE_BROWSER_VERIFY=true`.
+- Most real forms carry employer-specific questions, legal attestations, and verbose yes/no options. They stop for review until the owner answers them per question.
+- Greenhouse embed pages load reCAPTCHA. Dry-runs record it as `submit_boundary=captcha_detected`, so any future live submit would need a manual handoff.
+
 ## What still needs a real device
 
-1. Greenhouse live dry-runs against actual employer boards.
+1. Greenhouse live dry-runs against actual employer boards (30 browser-verified real-form plans across employers for certification).
 2. Supervised real submissions with owner approval.
 3. Session continuity after a manual CAPTCHA or MFA.
 4. Inbox-derived confirmation matching.
