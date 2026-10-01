@@ -7,20 +7,26 @@ from sqlalchemy.orm import Session
 
 from app.answer_vault import AnswerRecord, AnswerSource, AnswerVault
 from app.models import AnswerPolicy
+from app.profile import verified_profile
+from app.profile_vault import profile_records
 
 
-def load_vault(db: Session, scope: str | Iterable[str] = "global") -> AnswerVault:
+def load_vault(db: Session, scope: str | Iterable[str] = "global", *, profile: bool = True) -> AnswerVault:
     """Load answers for ``global`` plus the given scope(s).
 
-    Scopes are applied from least to most specific, so an employer- or
-    job-scoped answer overrides a global answer with the same key.
+    Verified profile facts (contact, current role, work authorization by
+    country, employment/education history) come first; stored answers then
+    override them. Scopes are applied from least to most specific, so an
+    employer- or job-scoped answer overrides a global answer with the same key.
     """
     scopes = [scope] if isinstance(scope, str) else list(scope)
     ordered = ["global", *[item for item in scopes if item != "global"]]
     rows = list(db.execute(select(AnswerPolicy).where(AnswerPolicy.scope.in_(ordered))).scalars())
     rank = {name: index for index, name in enumerate(ordered)}
     rows.sort(key=lambda row: rank.get(row.scope, 0))
-    records = []
+    records: list[AnswerRecord] = []
+    if profile:
+        records.extend(profile_records(verified_profile(db)))
     for row in rows:
         try:
             source = AnswerSource(row.source)

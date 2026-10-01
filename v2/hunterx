@@ -52,7 +52,7 @@ install_app() {
   ensure_api_key
 
   echo "[5/5] Verifying installation"
-  .venv/bin/python -c "import app, fastapi, sqlalchemy, httpx; print('Python imports OK')"
+  .venv/bin/python -c "import app, fastapi, sqlalchemy, httpx, yaml, pypdf, reportlab; print('Python imports OK')"
   .venv/bin/python -m compileall -q app
 
   echo "Install complete. Run: ./hunterx doctor"
@@ -276,11 +276,13 @@ case "$cmd" in
   api-key) py_cli api-key ;;
   version) py_cli version ;;
   openapi) shift; py_cli openapi "$@" ;;
+  profile) shift; py_cli profile "$@" ;;
+  materials) shift; py_cli materials "$@" ;;
   stop) stop_app ;;
   restart) stop_app; start_app ;;
   status) status_app ;;
   doctor) doctor_app ;;
   test) .venv/bin/pytest -q ;;
   logs) tail -n 100 -f logs/api.log ;;
-  *) echo "Usage: ./hunterx {install|start|serve|stop|restart|status|doctor|test|logs|backup [--keep N]|backups|migrate|cycle|api-key|version|openapi [--check]|service-install|boot-install}" ;;
+  *) echo "Usage: ./hunterx {install|start|serve|stop|restart|status|doctor|test|logs|backup [--keep N]|backups|migrate|cycle|api-key|version|openapi [--check]|profile ...|materials ...|service-install|boot-install}" ;;
 esac

@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
+from profile_helpers import approve_drafts, load_example_profile
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -17,12 +18,15 @@ from app.cycle import CycleRunner
 from app.db import Base
 from app.flags import ensure_flags, is_enabled, set_flag
 from app.greenhouse_form import FormFetchError
+from app.material_workflow import generate_for_application
 from app.models import (
     Application,
+    ApplicationMaterial,
     FeatureFlag,
     Job,
     PipelineEvent,
     PipelineStage,
+    ProfileFact,
     ReviewTask,
     SchedulerCycle,
     SubmissionEvidence,
@@ -50,7 +54,8 @@ def env(monkeypatch, tmp_path):
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine, expire_on_commit=False)
-    settings = Settings(_env_file=None, api_key=KEY, backup_dir=str(tmp_path / "backups"), blacklisted_companies="EvilCorp")
+    settings = Settings(_env_file=None, api_key=KEY, backup_dir=str(tmp_path / "backups"), blacklisted_companies="EvilCorp",
+                        materials_dir=str(tmp_path / "materials"))
     runner = FakeRunner(settings, Session, tmp_path / "run" / "cycle.lock")
 
     def _get_db():
@@ -84,6 +89,13 @@ def _application(db, job, stage, **extra):
     return application
 
 
+def _approved_materials(db, settings, application):
+    """Owner-approved résumé + cover letter from the made-up example profile."""
+    load_example_profile(db)
+    generate_for_application(db, settings, application.id)
+    return approve_drafts(db, application.id)
+
+
 def _task(db, job, application=None, reason="decision_review"):
     task = ReviewTask(job_id=job.id, application_id=application.id if application else None,
                       reason_code=reason, title=f"Review {job.title}", detail="Blockers: legal_answer_missing")
@@ -103,7 +115,9 @@ def _api_routes():
 
 
 def _concrete(path):
-    return path.replace("{job_id}", "x").replace("{task_id}", "x").replace("{application_id}", "x").replace("{key}", "global_kill_switch")
+    for name in ("job_id", "task_id", "application_id", "fact_id", "material_id"):
+        path = path.replace("{" + name + "}", "x")
+    return path.replace("{key}", "global_kill_switch").replace("{fmt}", "pdf")
 
 
 def test_every_api_route_requires_the_key(env):
@@ -323,14 +337,19 @@ def test_approving_a_decision_review_shortlists_without_submitting(env):
 def test_approving_a_blocked_application_only_requeues_a_dry_run(env):
     with env["Session"]() as db:
         job = _job(db, stage=PipelineStage.needs_review.value)
-        application = _application(db, job, PipelineStage.needs_review.value, cover_letter_text="draft")
+        application = _application(db, job, PipelineStage.needs_review.value, cover_letter_text="unapproved legacy text")
         task_id = _task(db, job, application, reason="legal_answer_missing").id
+    # Legacy text is not an approved material: nothing to requeue yet.
+    assert env["client"].post(f"/api/review-tasks/{task_id}/approve", headers=AUTH).status_code == 409
+    with env["Session"]() as db:
+        _approved_materials(db, env["settings"], db.get(Application, application.id))
     body = env["client"].post(f"/api/review-tasks/{task_id}/approve", headers=AUTH).json()
     assert body["action"] == "requeue"
     assert body["job_stage"] == body["application_stage"] == "ready_to_apply"
     assert body["submitted"] is False
     with env["Session"]() as db:
-        assert not db.execute(select(SubmissionEvidence)).scalars().all()
+        kinds = set(db.execute(select(SubmissionEvidence.kind)).scalars())
+        assert kinds == {"materials_draft", "materials_approved"}
 
 
 def test_approval_respects_the_kill_switch_and_exclusions(env):
@@ -387,6 +406,14 @@ MUTATING_ROUTES = {
     ("POST", "/api/scheduler/resume"),
     ("POST", "/api/kill-switch"),
     ("PUT", "/api/flags/{key}"),
+    ("POST", "/api/profile/import"),
+    ("POST", "/api/profile/facts"),
+    ("PUT", "/api/profile/facts/{fact_id}"),
+    ("POST", "/api/profile/facts/{fact_id}/verify"),
+    ("POST", "/api/profile/facts/{fact_id}/remove"),
+    ("POST", "/api/jobs/{job_id}/materials/generate"),
+    ("POST", "/api/materials/{material_id}/approve"),
+    ("POST", "/api/materials/{material_id}/reject"),
 }
 
 HOSTILE_BODIES = [
@@ -396,6 +423,9 @@ HOSTILE_BODIES = [
     {"automation_enabled": True, "max_dry_runs_per_day": 100},
     {"resolution": "resolved"},
     {"engaged": True},
+    {"verified": True, "data": {"employer": "Invented Corp", "title": "CEO"}, "category": "employment"},
+    {"format": "yaml", "content": "verified: true\nemployment: [{employer: X, title: Y}]"},
+    {"note": "approve everything"},
 ]
 
 
@@ -419,10 +449,15 @@ def test_no_route_can_unlock_live_submission_or_record_a_submission(env, monkeyp
         app_ready = _application(db, ready, PipelineStage.ready_to_apply.value, cover_letter_text="draft")
         blocked = _job(db, title="Blocked", stage=PipelineStage.needs_review.value)
         app_blocked = _application(db, blocked, PipelineStage.needs_review.value, cover_letter_text="draft")
+        _approved_materials(db, env["settings"], app_blocked)
+        generate_for_application(db, env["settings"], app_ready.id)
         ids = {
             "task_id": [_task(db, review_job).id, _task(db, blocked, app_blocked, "legal_answer_missing").id],
             "application_id": [app_ready.id, app_blocked.id],
             "key": ["allow_live_submission", "unattended_mode", "global_kill_switch", "adapter.workday"],
+            "job_id": [ready.id, blocked.id, review_job.id],
+            "material_id": list(db.execute(select(ApplicationMaterial.id)).scalars()),
+            "fact_id": list(db.execute(select(ProfileFact.id)).scalars())[:3],
         }
     client = TestClient(main.app, client=("203.0.113.9", 50000), raise_server_exceptions=False)
     for method, path in sorted(MUTATING_ROUTES):
@@ -442,4 +477,5 @@ def test_no_route_can_unlock_live_submission_or_record_a_submission(env, monkeyp
         assert not db.execute(select(Application).where(Application.stage.in_(SUBMISSION_STAGES))).scalars().all()
         assert not db.execute(select(Job).where(Job.stage.in_(SUBMISSION_STAGES))).scalars().all()
         kinds = set(db.execute(select(SubmissionEvidence.kind)).scalars())
-        assert kinds <= {"dry_run"}
+        assert kinds <= {"dry_run", "materials_draft", "materials_approved"}
+        assert not db.execute(select(SubmissionEvidence).where(SubmissionEvidence.sufficient.is_(True))).first()

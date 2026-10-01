@@ -262,6 +262,7 @@ class JobApplicationOut(Out):
     adapter: str | None = None
     maturity: str | None = None
     has_cover_letter: bool
+    materials_ready: bool
     updated_at: str | None = None
 
 
@@ -339,6 +340,124 @@ class FormPreviewOut(Out):
     fields: list[FormFieldOut]
 
 
+# -------------------------------------------------------------------- materials
+
+
+class MaterialOut(Out):
+    id: str
+    application_id: str
+    job_id: str
+    kind: Literal["resume", "cover_letter"]
+    version: int
+    status: Literal["draft", "approved", "rejected", "superseded"]
+    generator: str
+    content_sha256: str
+    pdf_sha256: str | None = None
+    docx_sha256: str | None = None
+    profile_sha256: str
+    has_pdf: bool
+    has_docx: bool
+    llm: str
+    decision_note: str
+    created_at: str | None = None
+    decided_at: str | None = None
+
+
+class MaterialDetailOut(MaterialOut):
+    text: str
+    facts_used: list[str]
+    llm_report: dict[str, Any]
+    guard: dict[str, Any]
+    render_warnings: list[str]
+
+
+class JobMaterialsOut(Out):
+    job_id: str
+    application_id: str | None = None
+    job_stage: str
+    can_generate: bool
+    generate_blockers: list[str]
+    llm_enabled: bool
+    approved: dict[str, str]
+    items: list[MaterialOut]
+    live_submission_locked: Literal[True]
+
+
+class MaterialDecisionIn(BaseModel):
+    note: str = Field(default="", max_length=500)
+
+
+class MaterialActionOut(Out):
+    material: MaterialOut
+    job_stage: str
+    application_stage: str
+    materials_ready: bool
+    submitted: Literal[False]
+
+
+# ---------------------------------------------------------------------- profile
+
+
+class ProfileFactOut(Out):
+    id: str
+    key: str
+    category: str
+    data: dict[str, Any]
+    verified: bool
+    source: str
+    provenance: str
+    verified_at: str | None = None
+    updated_at: str | None = None
+
+
+class ProfileOut(Out):
+    facts: list[ProfileFactOut]
+    total: int
+    verified: int
+    unverified: int
+    ready: bool
+    missing: list[str]
+    categories: list[str]
+
+
+class ProfileImportIn(BaseModel):
+    format: Literal["yaml", "json", "resume_text"]
+    content: str = Field(min_length=1, max_length=200_000)
+    filename: str = Field(default="", max_length=120)
+
+
+class ProfileImportOut(Out):
+    created: int
+    updated: int
+    unchanged: int
+    verified: int
+    unverified: int
+    keys: list[str]
+    warnings: list[str]
+
+
+class FactCreateIn(BaseModel):
+    category: Literal[
+        "contact", "summary", "work_authorization", "employment", "education",
+        "skill", "certification", "language", "project", "achievement",
+    ]
+    data: dict[str, Any]
+    verified: bool = False
+
+
+class FactEditIn(BaseModel):
+    data: dict[str, Any]
+    verified: bool = False
+
+
+class FactVerifyIn(BaseModel):
+    verified: bool
+
+
+class FactRemovedOut(Out):
+    removed: str
+
+
 # ----------------------------------------------------------------------- review
 
 
@@ -367,6 +486,7 @@ class ReviewApplicationOut(Out):
 class ReviewTaskDetailOut(ReviewTaskOut):
     job: ReviewJobOut | None = None
     application: ReviewApplicationOut | None = None
+    materials: list[MaterialOut] = Field(default_factory=list)
     blocked_fields: list[BlockedFieldOut] = Field(default_factory=list)
     actions: list[Literal["approve", "reject", "resolve"]]
     approve_effect: str | None = None

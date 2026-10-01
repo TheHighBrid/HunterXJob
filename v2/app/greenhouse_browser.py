@@ -21,6 +21,7 @@ from typing import Any
 
 from app.form_engine import ControlType, FormControl
 from app.greenhouse_form import FormFetchError, GreenhouseJobRef, RealForm
+from app.profile_vault import history_key
 
 # Runs in the page. Reads DOM structure only; never mutates the page.
 DOM_EXTRACT_JS = r"""
@@ -191,7 +192,7 @@ def dom_control(item: DomField) -> FormControl:
         evidence=["greenhouse_dom", f"tag={item.tag}", f"id={item.id}", f"name={item.name}"],
         confidence=confidence,
         section="dom",
-        vault_keys=[key],
+        vault_keys=[key, *([history] if (history := history_key(key, item.label)) else [])],
     )
 
 
