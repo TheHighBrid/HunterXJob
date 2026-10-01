@@ -48,6 +48,8 @@ Open `http://127.0.0.1:8011`, paste the `API_KEY` from `.env` into the key box, 
 ./hunterx api-key          # print a new random API key
 ./hunterx version
 ./hunterx openapi [--check] # write (or verify) the committed API schema v2/openapi.json
+./hunterx profile import FILE | import-resume FILE | list [--unverified] | verify KEYS | unverify KEYS
+./hunterx materials generate APP_ID | list APP_ID | approve MID | reject MID | preview ...
 ./hunterx service-install  # systemd user unit (Linux VM)
 ./hunterx boot-install     # Termux:Boot script (Android fallback)
 ```
@@ -140,12 +142,65 @@ Default is `dry_run`. `ALLOW_LIVE_SUBMISSION` and `unattended_mode` stay false.
 
 ## Usable now
 
-1. `PUT /api/resume-facts`
-2. `POST /api/answers` for explicit policies. Work authorization must be `user` or `policy`.
-3. Set Greenhouse board tokens / Lever slugs in `.env`.
-4. `POST /api/discovery/run` then `POST /api/scoring/run`.
-5. Generate materials, approve, then `POST /api/applications/{id}/apply` for a dry-run.
-6. Watch `/api/review-tasks` instead of hoping the bot guessed.
+1. Load and verify your profile (see [Profile and application materials](#profile-and-application-materials)).
+2. `PUT /api/resume-facts` (free-text summary used only for AI scoring).
+3. `POST /api/answers` for explicit policies. Work authorization must be `user` or `policy`.
+4. Set Greenhouse board tokens / Lever slugs in `.env`.
+5. `POST /api/discovery/run` then `POST /api/scoring/run`.
+6. Generate materials, approve them, then `POST /api/applications/{id}/apply` for a dry-run.
+7. Watch `/api/review-tasks` instead of hoping the bot guessed.
+
+## Profile and application materials
+
+Résumés, cover letters and profile-derived form answers come only from a **verified-facts profile**. Every fact (one contact field, one employer, one degree, one skill, one achievement, ...) records its `source`, its `provenance` (for example `profile.yaml#employment[1]`) and whether you have confirmed it (`verified`). Unverified facts are never used anywhere.
+
+### 1. Load the profile
+
+```bash
+cp examples/profile.example.yaml data/profile.yaml    # made-up sample; replace every value with your own
+./hunterx profile import data/profile.yaml            # facts start UNVERIFIED (top-level `verified: false`)
+./hunterx profile import-resume ~/resume.pdf          # optional: .pdf, .docx, .txt or .md -> UNVERIFIED drafts
+./hunterx profile list --unverified
+```
+
+The YAML/JSON file has these sections (see `examples/profile.example.yaml`): `contact` (first_name, last_name, email, phone, location, linkedin_url, website_url, github_url), `summary`, `work_authorization` (one entry per country: ISO-2 `country`, `authorized`, `requires_sponsorship`), `employment` (employer, title, location, `start`/`end` as `YYYY-MM`, `current`, nested `achievements` with exact `metrics` and `skills`), `education` (institution, degree, field_of_study, dates), `skills` (name, aliases), `certifications` (name, issuer, date), `languages` (name, proficiency) and `projects`.
+
+Résumé import is heuristic: it reads sections, date ranges and bullets into draft facts and prints warnings for anything it could not place. It never overwrites a fact you already verified. Check every draft.
+
+### 2. Verify facts
+
+```bash
+./hunterx profile verify contact:first_name contact:last_name contact:email skill:sql   # keys (or ids) from `profile list`
+./hunterx profile unverify skill:sql
+```
+
+Or use the phone app (**Settings → Profile & verified facts**): verify/unverify, edit (an edited fact becomes unverified unless you choose *Save and verify*), remove, or paste YAML/JSON/résumé text to import. Setting `verified: true` in your own YAML file and re-importing also verifies, because that file is your own attestation. Materials need at least a verified first and last name, an email and one employment or education fact.
+
+### 3. Generate, review, approve
+
+```bash
+./hunterx materials generate <application_id>    # new DRAFT résumé + cover letter (PDF, DOCX, text)
+./hunterx materials list <application_id>
+./hunterx materials approve <material_id> [--note "..."]
+./hunterx materials reject <material_id>
+./hunterx materials preview --title "Fraud Analyst" --company "Example Bank" --description-file job.txt --out /tmp/preview
+```
+
+- Generation is deterministic: skills that match the job description come first, achievements are ranked by skill and keyword overlap (at most four per role), and employment is listed newest first. Employers, titles, dates, degrees, metrics and skills are copied verbatim from verified facts. Nothing is invented.
+- The **truthfulness guard** checks every output line against the facts it cites: structural fields must equal the fact exactly, every number must appear in the source fact, capitalized names must exist in the verified profile, and skills, credentials, months or spelled-out numbers that are not in your facts are rejected. If the deterministic output itself fails the guard, generation stops.
+- The scheduler cycle generates drafts automatically for shortlisted/approved jobs once the profile is ready, and opens a `materials_review` task. Drafts are never attached. Approve them per version on the phone (**Job → Résumé & cover letter**) or approve the review task, which approves the pending drafts as-is.
+- An approved résumé is required before a dry-run. The cover letter is optional, but only an approved one is ever used. The dry-run evidence records which approved version (id, version, content hash, file hashes) would be attached. Each draft and approval writes `materials_draft` / `materials_approved` entries with hashes to the evidence ledger. If a file or its content changes on disk, or a fact it used is no longer verified, the version is refused and you must regenerate.
+- Files are stored per job and version under `MATERIALS_DIR` (default `./data/materials`), and can be downloaded with `GET /api/materials/{id}/file/pdf|docx`.
+
+PDF rendering uses ReportLab with the Bitstream Vera fonts that ship inside the ReportLab wheel. It needs no browser and produces a one-column, ATS-friendly layout with a real, extractable text layer; output is byte-identical for the same input. DOCX output is a minimal hand-built document (no extra dependency). On Termux, Pillow (a ReportLab dependency) may need `pkg install python-pillow` or the libjpeg/zlib headers before `pip install`.
+
+### Optional LLM rewording (off by default)
+
+Set `MATERIALS_LLM_ENABLED=true`, `MATERIALS_LLM_PROVIDER=ollama|openai`, `MATERIALS_LLM_BASE_URL`, `MATERIALS_LLM_MODEL` and (for OpenAI-compatible servers) `MATERIALS_LLM_API_KEY`. The model may only reword the summary and bullets of the facts it is given. Its JSON reply must keep the same ids, and every reworded line goes through the truthfulness guard. On any rejection, error or timeout the deterministic template is used, and the material records the result as `accepted`, `rejected`, `error` or `disabled`.
+
+### Profile answers on real forms
+
+Verified facts also feed the answer vault: `first_name`, `last_name`, `email`, `phone`, `location`, link fields, `current_company`, `current_title`, `work_authorization_{cc}` / `sponsorship_{cc}` (Yes/No per country) and Greenhouse employment/education history rows (`employment_0_company`, `employment_0_title`, `employment_0_start_month` = month name, `employment_0_start_year`, `education_0_school`, `education_0_degree`, ...). Answers you store explicitly in the vault always override profile-derived ones. A history field whose row or section can't be identified unambiguously, or a dropdown whose options don't contain the exact value, goes to review.
 
 ## Real-form dry-runs (Greenhouse)
 

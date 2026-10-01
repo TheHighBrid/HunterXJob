@@ -98,6 +98,8 @@ and pruned to the retention count.
 | `feature_flags` | Kill switch, pause, per-adapter flags, live-submission flags (all default off) |
 | `scheduler_cycles` | Continuous-run ledger |
 | `setting_overrides` | Phone-edited values for the safe settings subset |
+| `profile_facts` | Verified-facts candidate profile: one fact per row with category, data, `verified`, source and provenance |
+| `application_materials` | Versioned résumé/cover-letter drafts per application: status (`draft`/`approved`/`rejected`/`superseded`), text, content/profile/PDF/DOCX SHA-256 hashes, generator and decision note |
 | `schema_version` | Applied migrations |
 
 ## 5. API
@@ -129,6 +131,29 @@ Phone remote-control routes (`app/remote_api.py`):
 | `GET /api/flags`, `PUT /api/flags/{key}` | Feature flags (policy below) |
 | `GET /api/backups` | Backup names, sizes and times (never contents or paths) |
 
+Profile and materials routes (`app/materials_api.py`):
+
+| Route | Purpose |
+|---|---|
+| `GET /api/profile` | All facts with verified/unverified counts, readiness and what is missing |
+| `POST /api/profile/import` | Import YAML/JSON or plain résumé text as facts (résumé text always unverified) |
+| `POST /api/profile/facts`, `PUT /api/profile/facts/{id}` | Add or edit a fact (edits un-verify unless `verified: true`) |
+| `POST /api/profile/facts/{id}/verify` / `remove` | Verify/unverify, remove |
+| `GET /api/jobs/{id}/materials`, `POST /api/jobs/{id}/materials/generate` | Versions for a job, generate blockers; create new drafts |
+| `GET /api/materials/{id}`, `GET /api/materials/{id}/file/{pdf\|docx}` | Text preview, facts used, guard/LLM report; download |
+| `POST /api/materials/{id}/approve` / `reject` | Owner decision on one version (never submits) |
+
+Materials pipeline: `profile.py` (facts, import, readiness) → `materials.py`
+(deterministic selection and ordering from verified facts and the job text) →
+optional `material_llm.py` rewording → `truth_guard.py` (every line must map
+to a verified fact; numbers, dates and names must match exactly) →
+`render.py` (ReportLab PDF, minimal DOCX) → `material_store.py` (versioned
+drafts, approvals, integrity and staleness checks, evidence entries) →
+`material_workflow.py` (stage moves and the `materials_review` task).
+`profile_vault.py` turns verified facts into answer-vault records (contact,
+current role, per-country work authorization, employment/education history
+rows); explicit vault answers override them.
+
 Operator routes in `app/main.py` (discovery, scoring, materials, manual
 dry-run, résumé facts, answers, adapters, events) are unchanged and need the same key.
 
@@ -145,18 +170,24 @@ These are enforced on the server and covered by `v2/tests/test_remote_api.py`,
    * Unknown flags return 404.
 2. **No route can record a real submission.** A test sends hostile payloads to
    every mutating route, then checks that no application or job reached
-   `submitted`/`confirmed`/`submission_uncertain` and that the only evidence kind is `dry_run`.
+   `submitted`/`confirmed`/`submission_uncertain` and that the only evidence kinds are `dry_run`,
+   `materials_draft` and `materials_approved` (none of which can be marked sufficient; only `submission` can).
    A route-inventory test fails if a new mutating route is added without updating that sweep.
 3. **Approving never applies.**
    * What approval does depends on the job:
      * A `review` job is shortlisted.
-     * A blocked application (one that has materials) goes back to `ready_to_apply` for the next dry-run.
-     * A shortlisted application or one with materials is approved.
+     * A blocked application (one with an approved résumé) goes back to `ready_to_apply` for the next dry-run.
+     * A shortlisted application or one with an approved résumé is approved.
+     * A `materials_review` task approves the pending drafts as-is (integrity and staleness checked first).
    * Approval is refused while the kill switch is engaged, for excluded
      employers, and for anything already in a submission stage.
 4. **Kill switch.** Engaging is always allowed; disengaging needs `confirm: true` (428 otherwise).
 5. **Settings view has no secrets.** It never includes the API key, local service URLs or the database path. Job sources are reported as counts.
 6. **Dry-runs are checked.** If a dry-run claims a submission, the kill switch engages.
+7. **Truthful materials.** Résumés, cover letters and profile answers use only
+   verified facts. Generated materials are drafts until approved per version;
+   unapproved, tampered or stale (a used fact was un-verified) versions are never
+   attached, and the dry-run evidence records exactly which approved version would be.
 
 The editable settings subset is: `automation_enabled`, the daily dry-run and
 application caps, `min_match_score`, quiet hours, cycle interval and per-cycle
@@ -165,7 +196,11 @@ and layered over `.env` at startup. Everything else needs `.env` and a restart.
 
 ## 7. Mobile app
 
-Expo Router with tabs for Dashboard, Jobs, Review, Reports and Settings, plus a Connection modal.
+Expo Router with tabs for Dashboard, Jobs, Review, Reports and Settings, plus a
+Connection modal and two pushed screens: **Profile** (facts by category,
+verify/unverify, edit, paste-import, readiness) and **Materials** for a job
+(latest résumé and cover-letter versions, status, hashes, text preview,
+approve/reject, regenerate).
 
 * **Connection:** the server URL has no built-in default, only a placeholder. The
   URL is kept in AsyncStorage and the API key in `expo-secure-store` (Android

@@ -30,6 +30,8 @@ cd v2
 
 Open `http://127.0.0.1:8011`. Every API call except `/api/health` needs the `X-API-Key` header (the key is in `v2/.env`; `./hunterx install` generates it).
 
+Before any résumé or cover letter is generated, load your profile and verify its facts (`./hunterx profile import data/profile.yaml`, then verify on the phone or with `./hunterx profile verify ...`). Generated materials are drafts until you approve them; only approved versions are ever attached to a dry-run. See [v2/README.md → Profile and application materials](v2/README.md#profile-and-application-materials).
+
 To run it unattended, use the systemd service on a small Linux VM (primary) or Termux:Boot on the phone (fallback): see [docs/DEPLOY_VM.md](docs/DEPLOY_VM.md). Continuous discover → score → prepare → dry-run cycles are off by default; see `v2/README.md`.
 
 ## Legacy backend (v1, donor only)
