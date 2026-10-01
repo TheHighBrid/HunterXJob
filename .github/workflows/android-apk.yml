@@ -1,0 +1,180 @@
+name: Android APK
+
+# Builds an installable APK of the mobile app on the GitHub runner with
+# `expo prebuild` + Gradle. No EAS account or paid service is needed.
+#
+# - Pull requests that change the build inputs, and pushes that edit this
+#   workflow, build the APK and keep it as a workflow artifact.
+# - A published GitHub release (or a call from release.yml) also attaches the
+#   APK and its SHA-256 to that release.
+# - Manual runs can attach to an existing release by naming its tag.
+#
+# Signing: without secrets the APK is signed with the stock Expo/React Native
+# debug key (installable, but anyone can sign updates with that key). Add the
+# ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and
+# ANDROID_KEY_PASSWORD repository secrets to sign with your own key instead.
+# See mobile/README.md ("Building an Android APK").
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Attach the APK to this existing release tag (leave empty to only keep the artifact)"
+        required: false
+        default: ""
+  workflow_call:
+    inputs:
+      release_tag:
+        type: string
+        required: false
+        default: ""
+    secrets:
+      ANDROID_KEYSTORE_BASE64:
+        required: false
+      ANDROID_KEYSTORE_PASSWORD:
+        required: false
+      ANDROID_KEY_ALIAS:
+        required: false
+      ANDROID_KEY_PASSWORD:
+        required: false
+  release:
+    types: [published]
+  push:
+    branches-ignore: [main]
+    paths:
+      - ".github/workflows/android-apk.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "mobile/app.json"
+      - "mobile/package.json"
+      - "mobile/package-lock.json"
+      - "mobile/assets/**"
+      - ".github/workflows/android-apk.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-apk-${{ github.ref }}-${{ inputs.release_tag || github.event.release.tag_name || 'build' }}
+  cancel-in-progress: true
+
+env:
+  RELEASE_TAG: ${{ inputs.release_tag || github.event.release.tag_name || '' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    defaults:
+      run:
+        working-directory: mobile
+    outputs:
+      apk_name: ${{ steps.package.outputs.apk_name }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG || github.ref }}
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Install mobile dependencies
+        run: npm ci
+
+      - name: Generate the native Android project (expo prebuild)
+        run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Set version code and name
+        run: |
+          app_version=$(node -p "require('./app.json').expo.version")
+          if [ -n "$RELEASE_TAG" ]; then version_name="${app_version} (${RELEASE_TAG})"; else version_name="${app_version}-ci.${GITHUB_RUN_NUMBER}"; fi
+          sed -i -E "s/versionCode [0-9]+/versionCode ${GITHUB_RUN_NUMBER}/; s/versionName \"[^\"]*\"/versionName \"${version_name}\"/" android/app/build.gradle
+          grep -E "versionCode|versionName" android/app/build.gradle
+
+      - name: Build release APK (Gradle)
+        working-directory: mobile/android
+        run: ./gradlew assembleRelease --no-daemon --stacktrace -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
+
+      - name: Sign with the repository keystore (optional)
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret: the APK stays signed with the public debug key."
+            echo "SIGNING=debug key (public)" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          keystore="$RUNNER_TEMP/release.keystore"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$keystore"
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n 1)
+          "$apksigner" sign --ks "$keystore" --ks-pass env:ANDROID_KEYSTORE_PASSWORD \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" --key-pass env:ANDROID_KEY_PASSWORD "$apk"
+          rm -f "$keystore"
+          echo "SIGNING=repository keystore" >> "$GITHUB_ENV"
+
+      - name: Verify and package the APK
+        id: package
+        run: |
+          src=android/app/build/outputs/apk/release/app-release.apk
+          label="${RELEASE_TAG:-ci-${GITHUB_RUN_NUMBER}}"
+          name="hunterxjob-mobile-${label}.apk"
+          mkdir -p ../apk-out
+          cp "$src" "../apk-out/${name}"
+          build_tools=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
+          "$build_tools/apksigner" verify --print-certs "../apk-out/${name}" | head -n 3
+          "$build_tools/aapt2" dump badging "../apk-out/${name}" | head -n 1
+          (cd ../apk-out && sha256sum "${name}" > "${name}.sha256" && cat "${name}.sha256")
+          {
+            echo "### Android APK"
+            echo ""
+            echo "- File: \`${name}\` ($(du -h "../apk-out/${name}" | cut -f1))"
+            echo "- Signing: ${SIGNING}"
+            echo "- SHA-256: \`$(cut -d' ' -f1 "../apk-out/${name}.sha256")\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "apk_name=${name}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: hunterxjob-mobile-apk
+          path: apk-out/
+          if-no-files-found: error
+          retention-days: 30
+
+  attach:
+    needs: build
+    if: ${{ inputs.release_tag != '' || github.event_name == 'release' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download APK artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: hunterxjob-mobile-apk
+          path: apk-out
+
+      - name: Attach the APK to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "$RELEASE_TAG" apk-out/* --clobber

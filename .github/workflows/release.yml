@@ -1,0 +1,100 @@
+name: Release
+
+# Tag a version (`git tag v0.6.0 && git push origin v0.6.0`) to publish a
+# GitHub release with: release notes (CHANGELOG.md section + commits since the
+# previous tag), a source tarball of the v2 server and docs, SHA-256 sums,
+# and the Android APK (built by android-apk.yml). The tag must match
+# v2/app/__init__.py's __version__. Nothing here deploys anything.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)publish, e.g. v0.6.0"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: v2/pyproject.toml
+
+      - name: Tag must match the v2 version
+        run: |
+          version=$(python -c "import re,pathlib; print(re.search(r'__version__ = \"([^\"]+)\"', pathlib.Path('v2/app/__init__.py').read_text()).group(1))")
+          if [ "v${version}" != "$TAG" ]; then
+            echo "::error::Tag $TAG does not match v2 __version__ ${version}"
+            exit 1
+          fi
+
+      - name: Run v2 tests
+        working-directory: v2
+        run: |
+          python -m pip install -e ".[test]"
+          python -m pytest -q
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the tag with history
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0
+
+      - name: Release notes
+        run: scripts/release-notes.sh "$TAG" > "$RUNNER_TEMP/notes.md" && cat "$RUNNER_TEMP/notes.md"
+
+      - name: Source tarball and checksums
+        run: |
+          mkdir -p dist
+          name="hunterxjob-${TAG}"
+          git archive --format=tar.gz --prefix="${name}/" -o "dist/${name}-source.tar.gz" "$TAG" \
+            v2 docs scripts README.md CHANGELOG.md LICENSE THIRD_PARTY_NOTICES.md ruff.toml bandit.yml
+          (cd dist && sha256sum ./*.tar.gz > SHA256SUMS && cat SHA256SUMS)
+
+      - name: Create or update the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release edit "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* --verify-tag --title "HunterXJob $TAG" --notes-file "$RUNNER_TEMP/notes.md"
+          fi
+
+  apk:
+    needs: publish
+    permissions:
+      contents: write
+    uses: ./.github/workflows/android-apk.yml
+    with:
+      release_tag: ${{ inputs.tag || github.ref_name }}
+    secrets: inherit
