@@ -6,11 +6,15 @@ on:
     paths:
       - "v2/**"
       - ".github/workflows/v2-tests.yml"
+      - "ruff.toml"
+      - "bandit.yml"
   pull_request:
     branches: [main]
     paths:
       - "v2/**"
       - ".github/workflows/v2-tests.yml"
+      - "ruff.toml"
+      - "bandit.yml"
 
 permissions:
   contents: read
@@ -24,10 +28,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -41,3 +45,9 @@ jobs:
 
       - name: Run v2 tests
         run: python -m pytest -q
+
+      - name: Lint v2 (Ruff and Bandit, repo-root config)
+        run: |
+          python -m pip install "ruff==0.16.9" "bandit==1.9.4"
+          ruff check .
+          bandit -q -c ../bandit.yml -r app scripts tests

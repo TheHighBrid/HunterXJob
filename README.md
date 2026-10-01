@@ -23,15 +23,14 @@ Live unattended submission is intentionally locked. See [`docs/ROADMAP_STATUS.md
 
 ```bash
 cd v2
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[test]"
-cp .env.example .env
+./hunterx install    # venv, dependencies, .env with a random API_KEY
 ./hunterx doctor
 ./hunterx start
 ```
 
-Open `http://127.0.0.1:8011`.
+Open `http://127.0.0.1:8011`. Every API call except `/api/health` needs the `X-API-Key` header (the key is in `v2/.env`; `./hunterx install` generates it).
+
+To run it unattended, use the systemd service on a small Linux VM (primary) or Termux:Boot on the phone (fallback): see [docs/DEPLOY_VM.md](docs/DEPLOY_VM.md). Continuous discover → score → prepare → dry-run cycles are off by default; see `v2/README.md`.
 
 ## Legacy backend
 
