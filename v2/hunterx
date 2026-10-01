@@ -120,8 +120,18 @@ doctor_app() {
     echo "Python          FAIL"
     failures=$((failures+1))
   fi
-  [ -x .venv/bin/python ] && echo "Virtualenv       OK" || { echo "Virtualenv       FAIL"; failures=$((failures+1)); }
-  [ -f .env ] && echo "Configuration    OK" || { echo "Configuration    FAIL"; failures=$((failures+1)); }
+  if [ -x .venv/bin/python ]; then
+    if .venv/bin/python -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)' >/dev/null 2>&1; then
+      echo "Virtualenv       OK ($(.venv/bin/python --version 2>&1))"
+    else
+      echo "Virtualenv       FAIL ($(.venv/bin/python --version 2>&1); need Python 3.12+, run ./hunterx install)"
+      failures=$((failures+1))
+    fi
+  else
+    echo "Virtualenv       FAIL (run ./hunterx install)"
+    failures=$((failures+1))
+  fi
+  [ -f .env ] && echo "Configuration    OK" || { echo "Configuration    FAIL (cp .env.example .env)"; failures=$((failures+1)); }
   mkdir -p data && touch data/.write-test && rm data/.write-test && echo "Storage          OK" || { echo "Storage          FAIL"; failures=$((failures+1)); }
 
   if [ -x .venv/bin/python ]; then
