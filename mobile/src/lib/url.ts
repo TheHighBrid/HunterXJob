@@ -9,7 +9,11 @@ export const MIN_API_KEY_LENGTH = 32;
 
 export type UrlCheck = { ok: true; url: string } | { ok: false; error: string };
 
-const URL_PATTERN = /^(https?):\/\/([^/?#:\s]+|\[[0-9a-f:]+\])(?::(\d{1,5}))?(\/[^?#\s]*)?$/i;
+const SCHEME = /^https?:\/\//i;
+const HOST_NAME = /^[^/?#:\s[\]]+$/;
+const IPV6_HOST = /^\[[0-9a-f:]+\]$/i;
+const PORT = /^\d{1,5}$/;
+const PATH_CHARS = /^[^?#\s]*$/;
 
 function withScheme(value: string): string {
   return /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `http://${value}`;
@@ -21,18 +25,37 @@ function precheck(value: string): string | null {
   return null;
 }
 
+/** Split "host[:port]" (host may be a bracketed IPv6 literal). */
+function splitHostPort(authority: string): { host: string; port: string | null } {
+  const close = authority.startsWith("[") ? authority.indexOf("]") : -1;
+  const colon = authority.indexOf(":", close + 1);
+  if (colon === -1) return { host: authority, port: null };
+  return { host: authority.slice(0, colon), port: authority.slice(colon + 1) };
+}
+
+/** Error message for an http(s) URL with the scheme already checked, or null when valid. */
+function authorityError(rest: string): string | null {
+  const slash = rest.indexOf("/");
+  const authority = slash === -1 ? rest : rest.slice(0, slash);
+  const path = slash === -1 ? "" : rest.slice(slash);
+  const { host, port } = splitHostPort(authority);
+  const hostOk = HOST_NAME.test(host) || IPV6_HOST.test(host);
+  if (!hostOk || !PATH_CHARS.test(path) || (port !== null && !PORT.test(port))) return "That doesn't look like a valid URL.";
+  const portNumber = port === null ? 1 : Number(port);
+  if (portNumber < 1 || portNumber > 65535) return "The port must be 1-65535.";
+  return null;
+}
+
 /** Trim, add http:// when no scheme is given, drop trailing slashes, validate. */
 export function normalizeServerUrl(input: string): UrlCheck {
   const trimmed = input.trim();
   const problem = precheck(trimmed);
   if (problem) return { ok: false, error: problem };
   const value = withScheme(trimmed).replace(/\/+$/, "");
-  if (!/^https?:\/\//i.test(value)) return { ok: false, error: "Use an http:// or https:// URL." };
-  const match = URL_PATTERN.exec(value);
-  if (!match) return { ok: false, error: "That doesn't look like a valid URL." };
-  const port = match[3] ? Number(match[3]) : 1;
-  if (port < 1 || port > 65535) return { ok: false, error: "The port must be 1-65535." };
-  return { ok: true, url: value };
+  const scheme = SCHEME.exec(value);
+  if (!scheme) return { ok: false, error: "Use an http:// or https:// URL." };
+  const error = authorityError(value.slice(scheme[0].length));
+  return error ? { ok: false, error } : { ok: true, url: value };
 }
 
 /** True when traffic to this URL is unencrypted and not obviously private. */

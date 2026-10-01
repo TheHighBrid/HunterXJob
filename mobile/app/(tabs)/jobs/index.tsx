@@ -29,7 +29,9 @@ function JobRow({ job }: { job: Job }) {
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={() => router.push({ pathname: "/jobs/[id]", params: { id: job.id } })}
+      onPress={() => {
+        router.push({ pathname: "/jobs/[id]", params: { id: job.id } });
+      }}
       style={({ pressed }) => [styles.row, { backgroundColor: theme.surface, borderColor: theme.border, opacity: pressed ? 0.85 : 1 }]}>
         <View style={[styles.score, { borderColor: matchScoreColor(theme, job.score) }]}>
           <Text style={[styles.scoreText, { color: matchScoreColor(theme, job.score) }]}>{formatScore(job.score)}</Text>
@@ -56,8 +58,12 @@ export default function JobsScreen() {
   const [stage, setStage] = useState<string | undefined>(undefined);
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebounced(query.trim()), 350);
-    return () => clearTimeout(timer);
+    const timer = setTimeout(() => {
+      setDebounced(query.trim());
+    }, 350);
+    return () => {
+      clearTimeout(timer);
+    };
   }, [query]);
 
   const { data, loading, refreshing, error, refresh, reload } = useApiResource(
@@ -79,7 +85,9 @@ export default function JobsScreen() {
         />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
           {STAGE_FILTERS.map((filter) => (
-            <Chip key={filter.label} label={filter.label} selected={stage === filter.stage} onPress={() => setStage(filter.stage)} />
+            <Chip key={filter.label} label={filter.label} selected={stage === filter.stage} onPress={() => {
+              setStage(filter.stage);
+            }} />
           ))}
         </ScrollView>
       </View>

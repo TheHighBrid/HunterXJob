@@ -41,7 +41,7 @@ export interface ClientConfig {
   apiKey: string;
 }
 
-export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+export type FetchLike = typeof fetch;
 
 const DEFAULT_TIMEOUT_MS = 15000;
 
@@ -68,13 +68,15 @@ export function errorForStatus(status: number, path: string, detail: string): Ap
   return new ApiError(detail || `Request to ${path} failed (${status}).`, "http", status);
 }
 
-export function createClient(getConfig: () => ClientConfig, fetchImpl: FetchLike = (input, init) => fetch(input, init)) {
+export function createClient(getConfig: () => ClientConfig, fetchImpl: FetchLike = fetch) {
   async function request<T>(path: string, init: RequestInit = {}, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
     const { baseUrl, apiKey } = getConfig();
     if (!baseUrl) throw new ApiError("Set the server URL in Connection first.", "config");
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
     let response: Response;
     try {
       response = await fetchImpl(`${baseUrl}${path}`, {
@@ -96,7 +98,7 @@ export function createClient(getConfig: () => ClientConfig, fetchImpl: FetchLike
       clearTimeout(timer);
     }
 
-    let body: unknown = undefined;
+    let body: unknown;
     const text = await response.text();
     if (text) {
       try {
@@ -109,8 +111,9 @@ export function createClient(getConfig: () => ClientConfig, fetchImpl: FetchLike
     return body as T;
   }
 
-  const post = <T>(path: string, payload?: unknown) =>
-    request<T>(path, { method: "POST", body: payload === undefined ? undefined : JSON.stringify(payload) });
+  function post<T>(path: string, payload?: unknown): Promise<T> {
+    return request<T>(path, { method: "POST", body: payload === undefined ? undefined : JSON.stringify(payload) });
+  }
 
   return {
     request,

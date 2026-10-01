@@ -20,28 +20,30 @@ export interface ConnectionReport {
   steps: ConnectionStep[];
 }
 
+function versionParts(version: string): number[] {
+  const parts = version.split(/[.+-]/).slice(0, 3).map((part) => Number.parseInt(part, 10) || 0);
+  return [...parts, 0, 0, 0].slice(0, 3);
+}
+
 export function compareVersions(a: string, b: string): number {
-  const parse = (v: string) => v.split(/[.+-]/).slice(0, 3).map((part) => Number.parseInt(part, 10) || 0);
-  const [x, y] = [parse(a), parse(b)];
-  for (let i = 0; i < 3; i += 1) {
-    if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
-  }
-  return 0;
+  const other = versionParts(b);
+  const diff = versionParts(a).map((part, index) => part - (other.at(index) ?? 0)).find((d) => d !== 0);
+  return diff ?? 0;
 }
 
 type StepId = ConnectionStep["id"];
 type Client = ReturnType<typeof createClient>;
 
-const STEP_LABELS: Record<StepId, string> = {
-  url: "Server URL",
-  reach: "Server reachable",
-  auth: "API key accepted",
-  version: "Server version",
-};
+const STEP_LABELS = new Map<StepId, string>([
+  ["url", "Server URL"],
+  ["reach", "Server reachable"],
+  ["auth", "API key accepted"],
+  ["version", "Server version"],
+]);
 const STEP_ORDER: StepId[] = ["url", "reach", "auth", "version"];
 
 function step(id: StepId, status: StepStatus, detail: string): ConnectionStep {
-  return { id, label: STEP_LABELS[id], status, detail };
+  return { id, label: STEP_LABELS.get(id) ?? id, status, detail };
 }
 
 /** The finished steps, padded with "skipped" for every step that didn't run. */

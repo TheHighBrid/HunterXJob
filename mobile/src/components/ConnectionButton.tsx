@@ -11,7 +11,9 @@ export function ConnectionButton() {
     <Pressable
       accessibilityLabel="Open connection settings"
       hitSlop={12}
-      onPress={() => router.push("/connection")}
+      onPress={() => {
+        router.push("/connection");
+      }}
       style={{ paddingHorizontal: 12, paddingVertical: 6 }}
     >
       <Text style={{ fontSize: 18, color: theme.text }}>🔌</Text>

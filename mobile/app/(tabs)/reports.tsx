@@ -9,10 +9,22 @@ import { ScreenContainer } from "@/components/ScreenContainer";
 import { StatCard } from "@/components/StatCard";
 import { ErrorView, LoadingView } from "@/components/StatusViews";
 import { useApiResource } from "@/hooks/useApiResource";
-import { cycleColor, stageColor, useTheme } from "@/theme";
+import { cycleColor, stageColor, useTheme, type Theme } from "@/theme";
 import { formatDateTime, humanize } from "@/utils/format";
 
-function Bars({ entries, colorFor }: { entries: [string, number][]; colorFor: (key: string) => string }) {
+type Palette = "stage" | "cycle" | "warning";
+
+function barColor(theme: Theme, palette: Palette, key: string): string {
+  if (palette === "stage") return stageColor(theme, key);
+  if (palette === "cycle") return cycleColor(theme, key);
+  return theme.warning;
+}
+
+function byCount(record: Record<string, number>): [string, number][] {
+  return Object.entries(record).sort((a, b) => b[1] - a[1]);
+}
+
+function Bars({ entries, palette }: { entries: [string, number][]; palette: Palette }) {
   const theme = useTheme();
   const max = Math.max(1, ...entries.map(([, n]) => n));
   if (entries.length === 0) return <Muted>Nothing yet.</Muted>;
@@ -22,7 +34,7 @@ function Bars({ entries, colorFor }: { entries: [string, number][]; colorFor: (k
         <View key={key} style={styles.barRow}>
           <Text style={[styles.barLabel, { color: theme.textMuted }]} numberOfLines={1}>{humanize(key)}</Text>
           <View style={[styles.barTrack, { backgroundColor: theme.surfaceAlt }]}>
-            <View style={[styles.barFill, { width: `${(count / max) * 100}%`, backgroundColor: colorFor(key) }]} />
+            <View style={[styles.barFill, { width: `${(count / max) * 100}%`, backgroundColor: barColor(theme, palette, key) }]} />
           </View>
           <Text style={[styles.barCount, { color: theme.text }]}>{count}</Text>
         </View>
@@ -56,8 +68,6 @@ export default function ReportsScreen() {
   if (loading && !data) return <ScreenContainer><LoadingView /></ScreenContainer>;
   if (!data) return <ScreenContainer><ErrorView message={error ?? "No data."} onRetry={reload} /></ScreenContainer>;
 
-  const byCount = (record: Record<string, number>) => Object.entries(record).sort((a, b) => b[1] - a[1]);
-
   return (
     <ScreenContainer>
       <ScrollView
@@ -84,15 +94,15 @@ export default function ReportsScreen() {
         </Card>
 
         <Card title="Jobs by stage">
-          <Bars entries={byCount(data.jobs.by_stage)} colorFor={(stage) => stageColor(theme, stage)} />
+          <Bars entries={byCount(data.jobs.by_stage)} palette="stage" />
         </Card>
 
         <Card title="Open review reasons">
-          <Bars entries={byCount(data.review.open_by_reason)} colorFor={() => theme.warning} />
+          <Bars entries={byCount(data.review.open_by_reason)} palette="warning" />
         </Card>
 
         <Card title="Cycles (24h)">
-          <Bars entries={byCount(data.cycles.last_24h)} colorFor={(status) => cycleColor(theme, status)} />
+          <Bars entries={byCount(data.cycles.last_24h)} palette="cycle" />
           {data.cycles.last ? (
             <Row label="Last cycle" value={`${humanize(data.cycles.last.status)} · ${formatDateTime(data.cycles.last.started_at)}`} />
           ) : null}

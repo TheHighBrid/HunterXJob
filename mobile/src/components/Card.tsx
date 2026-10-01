@@ -5,9 +5,10 @@ import { useTheme } from "@/theme";
 
 export function Card({ title, right, children, style }: PropsWithChildren<{ title?: string; right?: ReactNode; style?: ViewStyle }>) {
   const theme = useTheme();
+  const hasHeader = (title !== undefined && title !== "") || (right !== undefined && right !== null);
   return (
     <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }, style]}>
-      {title || right ? (
+      {hasHeader ? (
         <View style={styles.header}>
           {title ? <Text style={[styles.title, { color: theme.textMuted }]}>{title}</Text> : <View />}
           {right}

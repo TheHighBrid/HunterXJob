@@ -4,6 +4,8 @@ import { useCallback, useRef, useState } from "react";
 import { describeError } from "@/api/client";
 import { useConnection } from "@/store/connection";
 
+const NOT_CONNECTED = "Not connected. Open Connection to set the server URL and API key.";
+
 interface ResourceState<T> {
   data: T | null;
   loading: boolean;
@@ -38,17 +40,24 @@ export function useApiResource<T>(fetcher: () => Promise<T>, deps: unknown[] = [
   useFocusEffect(
     useCallback(() => {
       if (!ready) return undefined;
+      if (!baseUrl || !apiKey) {
+        setState({ data: null, loading: false, refreshing: false, error: NOT_CONNECTED });
+        return undefined;
+      }
       void load("initial");
       if (!pollMs) return undefined;
       const timer = setInterval(() => void load("silent"), pollMs);
-      return () => clearInterval(timer);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+      return () => {
+        clearInterval(timer);
+      };
     }, [ready, baseUrl, apiKey, load, pollMs, ...deps])
   );
 
   return {
     ...state,
-    setData: (data: T) => setState((s) => ({ ...s, data })),
+    setData: (data: T) => {
+      setState((s) => ({ ...s, data }));
+    },
     reload: () => load("initial"),
     refresh: () => load("refresh"),
   };

@@ -3,20 +3,23 @@ import type { FetchLike } from "@/api/client";
 
 const KEY = "k".repeat(40);
 
-function server(options: { version?: string; auth?: string; keyOk?: boolean }): FetchLike {
-  return async (url, init) => {
-    const headers = (init?.headers ?? {}) as Record<string, string>;
-    if (url.endsWith("/api/health")) {
-      return new Response(JSON.stringify({ ok: true, version: options.version ?? "0.4.0", auth: options.auth ?? "api_key" }), { status: 200 });
+type ServerOptions = { version?: string; auth?: string; keyOk?: boolean };
+
+function serverResponse(options: ServerOptions, url: string, headers: Record<string, string>): Response {
+  if (url.endsWith("/api/health")) {
+    return new Response(JSON.stringify({ ok: true, version: options.version ?? "0.4.0", auth: options.auth ?? "api_key" }), { status: 200 });
+  }
+  if (url.endsWith("/api/auth/check")) {
+    if (options.keyOk === false || headers["X-API-Key"] !== KEY) {
+      return new Response(JSON.stringify({ detail: "missing or invalid X-API-Key header" }), { status: 401 });
     }
-    if (url.endsWith("/api/auth/check")) {
-      if (options.keyOk === false || headers["X-API-Key"] !== KEY) {
-        return new Response(JSON.stringify({ detail: "missing or invalid X-API-Key header" }), { status: 401 });
-      }
-      return new Response(JSON.stringify({ ok: true, version: options.version ?? "0.4.0", auth: "api_key" }), { status: 200 });
-    }
-    return new Response("{}", { status: 404 });
-  };
+    return new Response(JSON.stringify({ ok: true, version: options.version ?? "0.4.0", auth: "api_key" }), { status: 200 });
+  }
+  return new Response("{}", { status: 404 });
+}
+
+function server(options: ServerOptions): FetchLike {
+  return (url, init) => Promise.resolve(serverResponse(options, String(url), (init?.headers ?? {}) as Record<string, string>));
 }
 
 describe("testConnection", () => {

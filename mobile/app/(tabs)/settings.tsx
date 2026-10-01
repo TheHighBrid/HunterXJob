@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 
 import { api, describeError } from "@/api/client";
-import type { Backups, ServerSettings, SettingsPatch } from "@/api/types";
+import type { Backups, ServerSettings } from "@/api/types";
 import { Banner } from "@/components/Banner";
 import { Card, Muted, Row } from "@/components/Card";
 import { LockBanner } from "@/components/LockBanner";
@@ -43,7 +43,7 @@ const LIST_FIELDS: { key: "target_keywords" | "target_locations" | "excluded_tit
   { key: "blacklisted_companies", label: "Excluded employers" },
 ];
 
-type FormProps = { form: SettingsForm; set: (changes: Partial<SettingsForm>) => void };
+type FormProps = { form: SettingsForm; set: ReturnType<typeof useSettingsEditor>["set"] };
 
 function useInputStyle() {
   const theme = useTheme();
@@ -56,7 +56,9 @@ function ConnectionCard() {
   return (
     <Card title="Connection">
       <Row label="Server" value={baseUrl || "Not set"} mono />
-      <PrimaryButton title="Connection & test" variant="secondary" onPress={() => router.push("/connection")} />
+      <PrimaryButton title="Connection & test" variant="secondary" onPress={() => {
+        router.push("/connection");
+      }} />
     </Card>
   );
 }
@@ -83,16 +85,22 @@ function AutomationCard({ form, set, timezone }: FormProps & { timezone: string 
           <Text style={[styles.label, { color: theme.text }]}>Dry-runs enabled</Text>
           <Muted>Lets cycles fill approved applications' forms in memory. Never submits.</Muted>
         </View>
-        <Switch value={form.automation_enabled} onValueChange={(value) => set({ automation_enabled: value })} />
+        <Switch value={form.automation_enabled} onValueChange={(value) => {
+          set({ automation_enabled: value });
+        }} />
       </View>
       <View style={styles.pair}>
         <View style={{ flex: 1, gap: 4 }}>
           <Text style={[styles.label, { color: theme.text }]}>Quiet from</Text>
-          <TextInput value={form.quiet_hours_start} onChangeText={(v) => set({ quiet_hours_start: v })} placeholder="23:00" placeholderTextColor={theme.textFaint} style={input} />
+          <TextInput value={form.quiet_hours_start} onChangeText={(v) => {
+            set({ quiet_hours_start: v });
+          }} placeholder="23:00" placeholderTextColor={theme.textFaint} style={input} />
         </View>
         <View style={{ flex: 1, gap: 4 }}>
           <Text style={[styles.label, { color: theme.text }]}>until</Text>
-          <TextInput value={form.quiet_hours_end} onChangeText={(v) => set({ quiet_hours_end: v })} placeholder="07:00" placeholderTextColor={theme.textFaint} style={input} />
+          <TextInput value={form.quiet_hours_end} onChangeText={(v) => {
+            set({ quiet_hours_end: v });
+          }} placeholder="07:00" placeholderTextColor={theme.textFaint} style={input} />
         </View>
       </View>
       <Muted>Times in {timezone}.</Muted>
@@ -113,7 +121,9 @@ function LimitsCard({ form, set }: FormProps) {
           </View>
           <TextInput
             value={form[field.key]}
-            onChangeText={(v) => set({ [field.key]: v.replace(/[^0-9]/g, "") } as Partial<SettingsForm>)}
+            onChangeText={(v) => {
+              set({ [field.key]: v.replace(/[^0-9]/g, "") } as Partial<SettingsForm>);
+            }}
             keyboardType="number-pad"
             style={[input, styles.numberInput]}
             accessibilityLabel={field.label}
@@ -134,7 +144,9 @@ function TargetingCard({ form, set, sources }: FormProps & { sources: ServerSett
           <Text style={[styles.label, { color: theme.text }]}>{field.label}</Text>
           <TextInput
             value={form[field.key]}
-            onChangeText={(v) => set({ [field.key]: v } as Partial<SettingsForm>)}
+            onChangeText={(v) => {
+              set({ [field.key]: v } as Partial<SettingsForm>);
+            }}
             placeholder="comma-separated"
             placeholderTextColor={theme.textFaint}
             multiline
@@ -176,22 +188,23 @@ function BackupsCard({ backups }: { backups: Backups }) {
 
 type Message = { tone: "info" | "danger"; text: string };
 
-function useSettingsEditor(data: SettingsData | null, setData: (data: SettingsData) => void) {
+function useSettingsEditor(resource: ReturnType<typeof useApiResource<SettingsData>>) {
+  const { data, setData } = resource;
   const [form, setForm] = useState<SettingsForm | null>(null);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<Message | null>(null);
+  const [message, setMessage] = useState<Message>();
 
   useEffect(() => {
     if (data) setForm(settingsToForm(data.settings));
   }, [data]);
 
-  const patch: SettingsPatch | null = useMemo(() => (data && form ? buildSettingsPatch(data.settings, form) : null), [data, form]);
+  const patch = useMemo(() => (data && form ? buildSettingsPatch(data.settings, form) : null), [data, form]);
   const dirty = !!patch && Object.keys(patch).length > 0;
 
-  const save = async () => {
+  async function save() {
     if (!patch || !data) return;
     setSaving(true);
-    setMessage(null);
+    setMessage(undefined);
     try {
       const settings = await api.updateSettings(patch);
       setData({ ...data, settings });
@@ -201,16 +214,21 @@ function useSettingsEditor(data: SettingsData | null, setData: (data: SettingsDa
     } finally {
       setSaving(false);
     }
-  };
-  const set = (changes: Partial<SettingsForm>) => setForm((current) => (current ? { ...current, ...changes } : current));
-  const discard = () => data && setForm(settingsToForm(data.settings));
+  }
+  function set(changes: Partial<SettingsForm>) {
+    setForm((current) => (current ? { ...current, ...changes } : current));
+  }
+  function discard() {
+    if (data) setForm(settingsToForm(data.settings));
+  }
   return { form, set, dirty, saving, message, save, discard };
 }
 
 export default function SettingsScreen() {
   const theme = useTheme();
-  const { data, loading, refreshing, error, refresh, reload, setData } = useApiResource(loadSettings);
-  const { form, set, dirty, saving, message, save, discard } = useSettingsEditor(data, setData);
+  const resource = useApiResource(loadSettings);
+  const { data, loading, refreshing, error, refresh, reload } = resource;
+  const { form, set, dirty, saving, message, save, discard } = useSettingsEditor(resource);
 
   if (loading && !data) return <ScreenContainer><LoadingView /></ScreenContainer>;
   if (!data || !form) {

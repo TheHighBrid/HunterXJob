@@ -13,37 +13,42 @@ import { ScreenContainer } from "@/components/ScreenContainer";
 import { ErrorView, LoadingView } from "@/components/StatusViews";
 import { useApiResource } from "@/hooks/useApiResource";
 import { confirmAsync } from "@/lib/confirm";
-import { REVIEW_ACTION_COPY, type ReviewActionName } from "@/safety";
+import { reviewActionCopy, type ReviewActionName } from "@/safety";
 import { stageColor, useTheme } from "@/theme";
 import { formatDateTime, formatScore, humanize } from "@/utils/format";
 
-const ACTION_CALLS = {
-  approve: api.approveTask,
-  reject: api.rejectTask,
-  resolve: api.resolveTask,
-} satisfies Record<ReviewActionName, (id: string) => Promise<ReviewAction>>;
+function callReviewAction(name: ReviewActionName, id: string) {
+  switch (name) {
+    case "approve":
+      return api.approveTask(id);
+    case "reject":
+      return api.rejectTask(id);
+    default:
+      return api.resolveTask(id);
+  }
+}
 
-function useReviewActions(task: ReviewTaskDetail | null, refresh: () => Promise<void> | void) {
-  const [busy, setBusy] = useState<ReviewActionName | null>(null);
-  const [result, setResult] = useState<ReviewAction | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+function useReviewActions(refresh: () => Promise<void>, task?: ReviewTaskDetail) {
+  const [busy, setBusy] = useState<ReviewActionName>();
+  const [result, setResult] = useState<ReviewAction>();
+  const [actionError, setActionError] = useState<string>();
 
-  const run = async (name: ReviewActionName) => {
+  async function run(name: ReviewActionName) {
     if (!task) return;
-    const copy = REVIEW_ACTION_COPY[name];
+    const copy = reviewActionCopy(name);
     const body = name === "approve" && task.approve_effect ? task.approve_effect : copy.body;
     if (!(await confirmAsync(copy.title, body, copy.confirm, name === "reject"))) return;
     setBusy(name);
-    setActionError(null);
+    setActionError(undefined);
     try {
-      setResult(await ACTION_CALLS[name](task.id));
+      setResult(await callReviewAction(name, task.id));
       await refresh();
     } catch (err) {
       setActionError(describeError(err));
     } finally {
-      setBusy(null);
+      setBusy(undefined);
     }
-  };
+  }
   return { busy, result, actionError, run };
 }
 
@@ -98,7 +103,7 @@ function TaskJobCard({ task }: { task: ReviewTaskDetail }) {
   );
 }
 
-type ActionsProps = { task: ReviewTaskDetail; busy: ReviewActionName | null; run: (name: ReviewActionName) => Promise<void> };
+type ActionsProps = Pick<ReturnType<typeof useReviewActions>, "busy" | "run"> & { task: ReviewTaskDetail };
 
 function ActionsCard({ task, busy, run }: ActionsProps) {
   if (task.status !== "open") return <Muted>Closed {formatDateTime(task.resolved_at)}.</Muted>;
@@ -122,7 +127,7 @@ export default function ReviewTaskScreen() {
   const theme = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: task, loading, refreshing, error, refresh, reload } = useApiResource(() => api.reviewTask(String(id)), [id]);
-  const { busy, result, actionError, run } = useReviewActions(task, refresh);
+  const { busy, result, actionError, run } = useReviewActions(refresh, task ?? undefined);
 
   if (loading && !task) return <ScreenContainer><LoadingView /></ScreenContainer>;
   if (!task) return <ScreenContainer><ErrorView message={error ?? "Task not found."} onRetry={reload} /></ScreenContainer>;

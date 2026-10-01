@@ -20,7 +20,9 @@ function TaskRow({ task }: { task: ReviewTask }) {
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={() => router.push({ pathname: "/review/[id]", params: { id: task.id } })}
+      onPress={() => {
+        router.push({ pathname: "/review/[id]", params: { id: task.id } });
+      }}
       style={({ pressed }) => [styles.row, { backgroundColor: theme.surface, borderColor: theme.border, opacity: pressed ? 0.85 : 1 }]}>
         <View style={styles.head}>
           <Badge label={humanize(task.reason_code)} color={open ? theme.warning : theme.textFaint} />
@@ -41,8 +43,12 @@ export default function ReviewQueueScreen() {
   return (
     <ScreenContainer>
       <View style={styles.filters}>
-        <Chip label="Open" selected={status === "open"} onPress={() => setStatus("open")} />
-        <Chip label="Closed" selected={status === "closed"} onPress={() => setStatus("closed")} />
+        <Chip label="Open" selected={status === "open"} onPress={() => {
+          setStatus("open");
+        }} />
+        <Chip label="Closed" selected={status === "closed"} onPress={() => {
+          setStatus("closed");
+        }} />
       </View>
       {loading && !data ? (
         <LoadingView />

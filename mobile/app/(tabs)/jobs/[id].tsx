@@ -42,7 +42,7 @@ function ScoreBlock({ job }: { job: JobDetail }) {
   );
 }
 
-function FormStatusCard({ status, preview }: { status: FormStatus; preview: FormPreview | null }) {
+function FormStatusCard({ status, preview }: { status: FormStatus; preview?: FormPreview }) {
   const theme = useTheme();
   const color = status.state === "validated" ? theme.success : status.state === "blocked" || status.state === "unavailable" ? theme.warning : theme.textMuted;
   return (
@@ -131,7 +131,9 @@ function OpenTasksCard({ tasks }: { tasks: JobDetail["review_tasks"] }) {
         <Pressable
           key={task.id}
           accessibilityRole="button"
-          onPress={() => router.push({ pathname: "/review/[id]", params: { id: task.id } })}
+          onPress={() => {
+            router.push({ pathname: "/review/[id]", params: { id: task.id } });
+          }}
           style={({ pressed }) => [styles.task, { borderColor: theme.border, opacity: pressed ? 0.7 : 1 }]}
         >
           <Text style={[styles.blockedLabel, { color: theme.text }]}>{task.title}</Text>
@@ -161,8 +163,8 @@ function TimelineCard({ events }: { events: JobDetail["events"] }) {
   return (
     <Card title="Timeline">
       {events.length === 0 ? <Muted>No events.</Muted> : null}
-      {events.slice(0, 15).map((event, index) => (
-        <View key={`${event.created_at}-${index}`} style={styles.event}>
+      {events.slice(0, 15).map((event) => (
+        <View key={`${event.created_at}-${event.from_stage ?? ""}-${event.to_stage}`} style={styles.event}>
           <Text style={[styles.eventStage, { color: stageColor(theme, event.to_stage) }]}>{humanize(event.to_stage)}</Text>
           <Text style={[styles.blockedReason, { color: theme.textMuted }]}>
             {formatDateTime(event.created_at)} · {event.message}
@@ -186,12 +188,12 @@ function DescriptionCard({ description }: { description: string | null | undefin
 }
 
 function useFormPreview(id: string) {
-  const [preview, setPreview] = useState<FormPreview | null>(null);
-  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<FormPreview>();
+  const [previewError, setPreviewError] = useState<string>();
   const [checking, setChecking] = useState(false);
-  const checkForm = async () => {
+  async function checkForm() {
     setChecking(true);
-    setPreviewError(null);
+    setPreviewError(undefined);
     try {
       setPreview(await api.previewForm(id));
     } catch (err) {
@@ -199,7 +201,7 @@ function useFormPreview(id: string) {
     } finally {
       setChecking(false);
     }
-  };
+  }
   return { preview, previewError, checking, checkForm };
 }
 

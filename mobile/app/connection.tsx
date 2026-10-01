@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { testConnection, type ConnectionReport, type StepStatus } from "@/api/connectionTest";
@@ -23,8 +23,8 @@ function useConnectionForm() {
   const [url, setUrl] = useState(saved.baseUrl);
   const [key, setKey] = useState(saved.apiKey);
   const [testing, setTesting] = useState(false);
-  const [report, setReport] = useState<ConnectionReport | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [report, setReport] = useState<ConnectionReport>();
+  const [message, setMessage] = useState<string>();
 
   // The key is loaded from the secure store asynchronously; pick it up once it arrives.
   useEffect(() => {
@@ -34,9 +34,9 @@ function useConnectionForm() {
     }
   }, [saved.ready, saved.baseUrl, saved.apiKey]);
 
-  const runTest = async (): Promise<ConnectionReport> => {
+  async function runTest(): Promise<ConnectionReport> {
     setTesting(true);
-    setMessage(null);
+    setMessage(undefined);
     try {
       const result = await testConnection(url, key);
       setReport(result);
@@ -44,9 +44,9 @@ function useConnectionForm() {
     } finally {
       setTesting(false);
     }
-  };
+  }
 
-  const save = async () => {
+  async function save() {
     const result = await runTest();
     if (!result.ok || !result.url) {
       setMessage("Not saved: fix the failing step first.");
@@ -55,21 +55,21 @@ function useConnectionForm() {
     await saved.setConnection(result.url, key.trim());
     setMessage("Saved. The API key is stored in this phone's secure storage.");
     if (router.canGoBack()) router.back();
-  };
+  }
 
-  const forget = async () => {
+  async function forget() {
     if (!(await confirmAsync("Forget this server?", "Removes the saved URL and API key from this phone.", "Forget", true))) return;
     await saved.forget();
     setUrl("");
     setKey("");
-    setReport(null);
+    setReport(undefined);
     setMessage("Connection removed.");
-  };
+  }
 
   return { savedUrl: saved.baseUrl, url, setUrl, key, setKey, testing, report, message, runTest, save, forget };
 }
 
-type ServerFormProps = { url: string; setUrl: (v: string) => void; apiKey: string; setKey: (v: string) => void };
+type ServerFormProps = { url: string; setUrl: Dispatch<SetStateAction<string>>; apiKey: string; setKey: Dispatch<SetStateAction<string>> };
 
 function ServerForm({ url, setUrl, apiKey, setKey }: ServerFormProps) {
   const theme = useTheme();
@@ -104,14 +104,16 @@ function ServerForm({ url, setUrl, apiKey, setKey }: ServerFormProps) {
           style={[inputStyle, { flex: 1 }]}
           accessibilityLabel="API key"
         />
-        <PrimaryButton title={showKey ? "Hide" : "Show"} variant="secondary" onPress={() => setShowKey((v) => !v)} />
+        <PrimaryButton title={showKey ? "Hide" : "Show"} variant="secondary" onPress={() => {
+          setShowKey((v) => !v);
+        }} />
       </View>
       <Muted>{"On the server: grep API_KEY v2/.env. The key is kept in the phone's secure storage, never in plain app storage."}</Muted>
     </Card>
   );
 }
 
-function ReportCard({ report }: { report: ConnectionReport | null }) {
+function ReportCard({ report }: { report?: ConnectionReport }) {
   const theme = useTheme();
   if (!report) return null;
   return (

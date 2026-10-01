@@ -14,33 +14,20 @@ export interface ConnectionState {
   apiKey: string;
   /** AsyncStorage and the secure store have both been read. */
   ready: boolean;
-  setConnection: (baseUrl: string, apiKey: string) => Promise<void>;
-  forget: () => Promise<void>;
-  hydrateKey: () => Promise<void>;
+  setConnection: typeof setConnection;
+  forget: typeof forgetConnection;
+  hydrateKey: typeof hydrateKey;
 }
 
 export const useConnection = create<ConnectionState>()(
   persist(
-    (set) => ({
+    (): ConnectionState => ({
       baseUrl: "",
       apiKey: "",
       ready: false,
-      setConnection: async (baseUrl, apiKey) => {
-        await saveApiKey(apiKey);
-        set({ baseUrl, apiKey });
-      },
-      forget: async () => {
-        await clearApiKey();
-        set({ baseUrl: "", apiKey: "" });
-      },
-      hydrateKey: async () => {
-        let apiKey = "";
-        try {
-          apiKey = await loadApiKey();
-        } finally {
-          set({ apiKey, ready: true });
-        }
-      },
+      setConnection,
+      forget: forgetConnection,
+      hydrateKey,
     }),
     {
       name: "hunterxjob-connection",
@@ -53,6 +40,26 @@ export const useConnection = create<ConnectionState>()(
     }
   )
 );
+
+/** Save a tested connection: the key goes to the secure store, the URL to AsyncStorage. */
+async function setConnection(baseUrl: string, apiKey: string): Promise<void> {
+  await saveApiKey(apiKey);
+  useConnection.setState({ baseUrl, apiKey });
+}
+
+async function forgetConnection(): Promise<void> {
+  await clearApiKey();
+  useConnection.setState({ baseUrl: "", apiKey: "" });
+}
+
+async function hydrateKey(): Promise<void> {
+  let apiKey = "";
+  try {
+    apiKey = await loadApiKey();
+  } finally {
+    useConnection.setState({ apiKey, ready: true });
+  }
+}
 
 export function getConnection(): { baseUrl: string; apiKey: string } {
   const { baseUrl, apiKey } = useConnection.getState();

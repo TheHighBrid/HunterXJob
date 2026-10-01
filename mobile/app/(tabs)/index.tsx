@@ -45,7 +45,7 @@ export default function DashboardScreen() {
   const { data, loading, refreshing, error, refresh, reload } = useApiResource(loadDashboard, [], 15000);
   const [busy, setBusy] = useState<string | null>(null);
 
-  const act = async (name: string, action: () => Promise<unknown>, done?: string) => {
+  async function act(name: string, action: () => Promise<unknown>, done?: string) {
     setBusy(name);
     try {
       await action();
@@ -56,22 +56,25 @@ export default function DashboardScreen() {
     } finally {
       setBusy(null);
     }
-  };
+  }
 
-  const toggleKillSwitch = async (engage: boolean) => {
-    if (engage) {
-      await act("kill", () => api.setKillSwitch(killSwitchRequest(true, false)!));
-      return;
-    }
-    const confirmed = await confirmAsync(
+  async function toggleKillSwitch(engage: boolean) {
+    const confirmed = engage || (await confirmAsync(
       "Disengage the kill switch?",
       "Scheduled cycles and dry-runs can start again (live submission stays locked).",
       "Disengage",
       true
-    );
-    const body = killSwitchRequest(false, confirmed);
+    ));
+    const body = killSwitchRequest(engage, confirmed);
     if (body) await act("kill", () => api.setKillSwitch(body));
-  };
+  }
+
+  async function runNow() {
+    await act("run", async () => {
+      const result = await api.runCycleNow();
+      if (!result.started) throw new Error(result.reason ?? "Not started.");
+    }, "Cycle started. Pull to refresh for results.");
+  }
 
   if (loading && !data) return <ScreenContainer><LoadingView label="Contacting server…" /></ScreenContainer>;
   if (!data) {
@@ -79,7 +82,7 @@ export default function DashboardScreen() {
       <ScreenContainer>
         <ErrorView message={error ?? "No data."} onRetry={reload} />
         <View style={{ padding: 16 }}>
-          <PrimaryButton title="Open connection settings" variant="secondary" onPress={() => router.push("/connection")} />
+          <PrimaryButton title="Open connection settings" variant="secondary" onPress={() => { router.push("/connection"); }} />
         </View>
       </ScreenContainer>
     );
@@ -144,12 +147,7 @@ export default function DashboardScreen() {
                 title="Run now"
                 loading={busy === "run"}
                 disabled={status.kill_switch || status.cycle_in_progress}
-                onPress={() =>
-                  void act("run", async () => {
-                    const result = await api.runCycleNow();
-                    if (!result.started) throw new Error(result.reason ?? "Not started.");
-                  }, "Cycle started. Pull to refresh for results.")
-                }
+                onPress={() => void runNow()}
               />
             </View>
           </View>
