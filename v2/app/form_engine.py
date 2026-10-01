@@ -14,8 +14,8 @@ class ControlType(str, Enum):
     EMAIL = "email"
     TEL = "tel"
     NUMBER = "number"
-    # HTML input type name, not a credential.
-    PASSWORD = "password"  # noqa: S105  # nosec B105
+    # HTML <input type="password"> control type, not a credential.
+    PASSWORD = "password"  # noqa  # nosemgrep  # nosec B105
     TEXTAREA = "textarea"
     SELECT = "select"
     RADIO = "radio"
