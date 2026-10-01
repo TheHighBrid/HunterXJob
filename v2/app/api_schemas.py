@@ -8,7 +8,7 @@ TypeScript types are generated from, so keep them in sync with the views in
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -64,6 +64,7 @@ class LiveSubmissionOut(Out):
 class SourcesOut(Out):
     greenhouse_boards: int
     lever_companies: int
+    ashby_orgs: int
     generic_feeds: int
 
 
@@ -88,11 +89,16 @@ class SettingsOut(Out):
     excluded_locations: list[str]
     excluded_titles: list[str]
     blacklisted_companies: list[str]
+    greenhouse_board_tokens: Annotated[list[str], Field(description="Public Greenhouse board slugs")]
+    lever_companies: list[str]
+    ashby_orgs: list[str]
     sources: SourcesOut
     llm_provider: str
     llm_fast_model: str
     llm_quality_model: str
     greenhouse_browser_verify: bool
+    lever_browser_verify: bool
+    ashby_browser_verify: bool
     backup_interval_hours: int
     backup_retention: int
     editable: list[str]
@@ -229,6 +235,12 @@ class JobOut(Out):
     application_id: str | None = None
     application_stage: str | None = None
     open_review_tasks: int = 0
+    source: str = ""
+    board: str | None = None
+    canonical_id: str | None = None
+    liveness: str | None = None
+    duplicate_of_id: str | None = None
+    linked_count: int = 0
 
 
 class ScoresOut(Out):
@@ -308,9 +320,45 @@ class EventOut(Out):
     created_at: str | None = None
 
 
+class LivenessCheckOut(Out):
+    checked_at: str | None = None
+    trigger: str
+    outcome: str
+    signal: str
+    http_status: int | None = None
+    detail: str
+    action: str
+
+
+class LivenessOut(Out):
+    status: str | None = None
+    reason: str | None = None
+    checked_at: str | None = None
+    next_check_at: str | None = None
+    failures: int = 0
+    closed_at: str | None = None
+    last_seen_at: str | None = None
+    checks: list[LivenessCheckOut] = Field(default_factory=list)
+
+
+class LinkedPostingOut(Out):
+    id: str
+    title: str
+    company: str
+    location: str
+    source: str
+    canonical_id: str | None = None
+    stage: str
+    url: str
+    relation: Literal["primary", "duplicate"]
+    method: str | None = None
+    score: float | None = None
+
+
 class JobDetailOut(JobOut):
     description: str
-    liveness: str | None = None
+    liveness_detail: LivenessOut
+    linked_postings: list[LinkedPostingOut] = Field(default_factory=list)
     scores: ScoresOut
     decision: DecisionOut | None = None
     application: JobApplicationOut | None = None

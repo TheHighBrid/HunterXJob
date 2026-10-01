@@ -1,8 +1,11 @@
 import type { ServerSettings, SettingsPatch } from "@/api/types";
 import { parseList } from "@/utils/format";
 
+/** Job-source lists (public board slugs) the phone can edit. */
+type SourceListKey = "greenhouse_board_tokens" | "lever_companies" | "ashby_orgs";
+
 /** Editable copy of the server settings, as typed into text inputs. */
-export interface SettingsForm {
+export type SettingsForm = Record<SourceListKey, string> & {
   automation_enabled: boolean;
   quiet_hours_start: string;
   quiet_hours_end: string;
@@ -18,7 +21,7 @@ export interface SettingsForm {
   excluded_titles: string;
   excluded_locations: string;
   blacklisted_companies: string;
-}
+};
 
 export function settingsToForm(settings: ServerSettings): SettingsForm {
   return {
@@ -37,6 +40,9 @@ export function settingsToForm(settings: ServerSettings): SettingsForm {
     excluded_titles: settings.excluded_titles.join(", "),
     excluded_locations: settings.excluded_locations.join(", "),
     blacklisted_companies: settings.blacklisted_companies.join(", "),
+    greenhouse_board_tokens: settings.greenhouse_board_tokens.join(", "),
+    lever_companies: settings.lever_companies.join(", "),
+    ashby_orgs: settings.ashby_orgs.join(", "),
   };
 }
 
@@ -83,6 +89,9 @@ export function buildSettingsPatch(settings: ServerSettings, form: SettingsForm)
     excluded_titles: changedList(form.excluded_titles, settings.excluded_titles),
     excluded_locations: changedList(form.excluded_locations, settings.excluded_locations),
     blacklisted_companies: changedList(form.blacklisted_companies, settings.blacklisted_companies),
+    greenhouse_board_tokens: changedList(form.greenhouse_board_tokens, settings.greenhouse_board_tokens),
+    lever_companies: changedList(form.lever_companies, settings.lever_companies),
+    ashby_orgs: changedList(form.ashby_orgs, settings.ashby_orgs),
   };
   const editable = new Set(settings.editable);
   // Drop unchanged fields and anything outside the server's editable subset.

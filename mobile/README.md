@@ -14,10 +14,10 @@ on the server, and nothing in the app can unlock it. See `../docs/ARCHITECTURE.m
 | Tab | What it shows |
 |---|---|
 | **Dashboard** | Server status, live-submission lock, kill switch (engage anytime; disengage asks you to confirm), scheduler state with pause/resume/run-now, today's caps, recent cycles |
-| **Jobs** | Searchable list with stage filter and scores. Detail shows the score breakdown, form status (fields planned, needing review, blockers), a read-only live form check, review tasks, approved-materials state with a link to Materials, and the timeline |
+| **Jobs** | Searchable list with stage filter (including Duplicates and Closed), scores, and ATS source, liveness and duplicate badges. Detail shows the score breakdown, form status (fields planned, needing review, blockers), a read-only live form check, review tasks, approved-materials state with a link to Materials, the timeline, linked postings of the same role (with "Not a duplicate" to unlink) and posting status (liveness history and a read-only "Check posting now") |
 | **Review** | Open/closed queue. Detail lists the reason codes and what approving would do. Approve, reject, resolve or dismiss, each with a confirmation. Approval never submits; at most it queues another dry-run |
 | **Reports** | Pipeline counts, dry-runs, review backlog, cycles in the last 24h, 7-day history |
-| **Settings** | Read-only safety section, the editable safe subset (caps, score threshold, quiet hours, cycle limits, targeting), AI info, backups list, link to Profile |
+| **Settings** | Read-only safety section, the editable safe subset (caps, score threshold, quiet hours, cycle limits, targeting, Greenhouse/Lever/Ashby board lists), AI info, backups list, link to Profile |
 | **Profile** (from Settings or Materials) | Verified-facts profile grouped by category with Verified/Unverified badges, readiness and what's missing, verify/unverify (with confirmation), edit (saving un-verifies unless you pick *Save and verify*), remove, paste-import of YAML/JSON/résumé text as unverified drafts |
 | **Materials** (from a job's Application card or a `materials_review` task) | Latest résumé and cover-letter versions with status, generator, content/PDF hashes, text preview, approve/reject per version, generate/regenerate drafts, generate blockers. Nothing is attached until approved; nothing is ever submitted |
 | **Connection** (modal, header button) | Server URL, API key, connection test |

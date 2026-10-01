@@ -103,6 +103,7 @@ my i'm i've i'd me myself am your you're you've our we're what's it's that's the
 role's roles responsibilities responsibility opportunity opportunities mission values value
 contribute contributing contribution contributions bring bringing offer offering would like
 believe confident eager glad happy keen motivated passionate ready enjoy enjoyed
+following requirements posting match hold considering welcome chance discuss
 """
 COMMON_WORDS = frozenset(_COMMON_TEXT.split())
 

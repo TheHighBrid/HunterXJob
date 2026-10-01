@@ -54,17 +54,34 @@ discover ─▶ normalize ─▶ deterministic gate ─┬─▶ reject
 * **Answer vault** (`app/answer_vault.py`, `app/vault_store.py`): stored
   answers with provenance and scope. Sensitive, legal, demographic and
   work-authorization fields are never inferred from the résumé. They fail closed and go to review.
-* **Real forms** (`app/greenhouse_form.py`, `app/real_forms.py`): Greenhouse
-  forms come from the public boards API, with optional headless-browser
-  verification (`GREENHOUSE_BROWSER_VERIFY`). If the form can't be fetched, a
-  review task is opened. There is never a sample-form fallback.
+* **Discovery** (`app/discovery.py`): read-only public board feeds for
+  Greenhouse, Lever and Ashby, normalized into one record shape with a
+  canonical id `{ats}:{board}:{job id}`.
+* **Dedup** (`app/dedup.py`): company/title/location/description fingerprints
+  (SHA-256 + simhash). The same role posted on several boards or locations is
+  linked (`job_links`, stage `duplicate`), never deleted. A duplicate guard
+  stops a role from being prepared or dry-run twice. If the primary is
+  rejected, withdrawn or closed, its copies are released and gated on their own.
+* **Liveness** (`app/job_liveness.py`): conservative open/closed checks at the
+  posting's source. Two "gone" results at least 30 minutes apart close a job;
+  transient errors never do (exponential backoff, plus a review task after
+  repeated failures). Every check is stored in `liveness_checks`. Prepare and
+  dry-run require a recent `live` result.
+* **Real forms** (`app/greenhouse_form.py`, `app/lever_form.py`,
+  `app/ashby_form.py`, `app/real_forms.py`): Greenhouse forms come from the
+  public boards API, Lever forms from the public apply page, and Ashby forms
+  from Ashby's public job-posting query (sent as GET). Each platform has
+  optional headless-browser verification (`*_BROWSER_VERIFY`) that aborts
+  every non-GET request (Ashby's allowlisted read queries are re-issued as
+  GETs). If the form can't be fetched, a review task is opened. There is never
+  a sample-form fallback.
 * **Review queue** (`app/review_queue.py`, `app/review_actions.py`): CAPTCHA,
   login walls, MFA, assessments, missing legal or sensitive answers, ambiguous
   questions, form-fetch failures and decision reviews become tasks with reason codes.
 
 ## 3. Continuous run
 
-`app/cycle.py` runs discover → score → prepare → dry-run on an interval inside
+`app/cycle.py` runs discover → liveness → score → prepare → dry-run on an interval inside
 the API process. It is off by default (`CONTINUOUS_RUN_ENABLED`).
 
 * Gates, checked at the start and again during the cycle:
@@ -89,7 +106,9 @@ and pruned to the retention count.
 
 | Table | Purpose |
 |---|---|
-| `jobs` | Postings with stage, scores, eligibility reason, platform |
+| `jobs` | Postings with stage, scores, eligibility reason, platform, board, canonical id, fingerprints, duplicate link and liveness state |
+| `job_links` | Duplicate links between postings (method, score, evidence); undoable |
+| `liveness_checks` | Every liveness observation: trigger, outcome, signal, HTTP status, action taken |
 | `applications` | One per job: stage, mode (`dry_run`), materials, validation/blocker JSON, idempotency key |
 | `pipeline_events` | Audit trail of every stage change (with the scoring report payload) |
 | `answer_policies` | The answer vault |
@@ -182,8 +201,10 @@ These are enforced on the server and covered by `v2/tests/test_remote_api.py`,
    * Approval is refused while the kill switch is engaged, for excluded
      employers, and for anything already in a submission stage.
 4. **Kill switch.** Engaging is always allowed; disengaging needs `confirm: true` (428 otherwise).
-5. **Settings view has no secrets.** It never includes the API key, local service URLs or the database path. Job sources are reported as counts.
+5. **Settings view has no secrets.** It never includes the API key, local service URLs or the database path. Public board slugs are listed (and editable, validated as slugs); generic feed URLs are reported only as a count.
 6. **Dry-runs are checked.** If a dry-run claims a submission, the kill switch engages.
+   Form fetchers only ever send GETs (for Ashby, allowlisted read-only queries). They never call an apply endpoint and never follow redirects.
+   A closed, suspect or unconfirmed posting is never prepared or dry-run, and a duplicate role never twice.
 7. **Truthful materials.** Résumés, cover letters and profile answers use only
    verified facts. Generated materials are drafts until approved per version;
    unapproved, tampered or stale (a used fact was un-verified) versions are never
@@ -191,7 +212,7 @@ These are enforced on the server and covered by `v2/tests/test_remote_api.py`,
 
 The editable settings subset is: `automation_enabled`, the daily dry-run and
 application caps, `min_match_score`, quiet hours, cycle interval and per-cycle
-caps, and the targeting lists. These overrides are stored in `setting_overrides`
+caps, the targeting lists, and the Greenhouse/Lever/Ashby board lists. These overrides are stored in `setting_overrides`
 and layered over `.env` at startup. Everything else needs `.env` and a restart.
 
 ## 7. Mobile app

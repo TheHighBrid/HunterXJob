@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from sqlalchemy import Connection, Engine, inspect, select
+from sqlalchemy import Connection, Engine, inspect, select, text
 
 from app.db import Base
 
@@ -48,12 +48,44 @@ def _create_tables(*names: str) -> Callable[[Connection], None]:
     return apply
 
 
+_JOB_COLUMNS_V5 = (
+    "board", "canonical_id", "dedup_key", "description_hash", "description_simhash", "duplicate_of_id",
+    "last_seen_at", "liveness_reason", "liveness_checked_at", "liveness_failures", "liveness_next_check_at", "closed_at",
+)
+
+
+def _discovery_identity(connection: Connection) -> None:
+    """v5: canonical job identity, duplicate links and liveness evidence."""
+    _create_tables("job_links", "liveness_checks")(connection)
+    jobs = Base.metadata.tables["jobs"]
+    existing = {column["name"] for column in inspect(connection).get_columns("jobs")}
+    for name in _JOB_COLUMNS_V5:
+        if name in existing:
+            continue
+        column_type = jobs.c[name].type.compile(dialect=connection.dialect)
+        # Column names come from the constant _JOB_COLUMNS_V5 and types from the ORM model.
+        connection.exec_driver_sql(f'ALTER TABLE jobs ADD COLUMN "{name}" {column_type}')
+    for index in jobs.indexes:
+        if any(column.name in _JOB_COLUMNS_V5 for column in index.columns):
+            index.create(connection, checkfirst=True)
+    # Existing Greenhouse/Lever rows stored the board token in ``company``.
+    connection.execute(text(
+        "UPDATE jobs SET board = lower(company), canonical_id = source || ':' || lower(company) || ':' || external_id "
+        "WHERE canonical_id IS NULL AND source IN ('greenhouse', 'lever', 'ashby')"
+    ))
+    connection.execute(text(
+        "UPDATE jobs SET canonical_id = source || ':' || external_id WHERE canonical_id IS NULL"
+    ))
+    connection.execute(text("UPDATE jobs SET liveness_failures = 0 WHERE liveness_failures IS NULL"))
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(1, "baseline schema (v0.2)", _create_tables(*BASELINE_TABLES)),
     Migration(2, "scheduler cycle ledger", _create_tables("scheduler_cycles")),
     Migration(3, "runtime setting overrides", _create_tables("setting_overrides")),
     Migration(4, "verified profile facts and versioned application materials",
               _create_tables("profile_facts", "application_materials")),
+    Migration(5, "canonical job identity, duplicate links and liveness checks", _discovery_identity),
 )
 LATEST_VERSION = MIGRATIONS[-1].version
 

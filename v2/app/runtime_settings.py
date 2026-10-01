@@ -11,14 +11,18 @@ Safety rules enforced here:
   (``extra="forbid"``), so ``allow_live_submission``, ``application_mode``,
   ``api_key`` and every other setting can never be changed through the API.
 * Numeric limits keep the same bounds as :class:`app.config.Settings`.
+* Job-source lists (Greenhouse board tokens, Lever company slugs, Ashby
+  organization slugs) are public identifiers; each item must be a plain slug
+  so it can only ever name a board on the ATS's own public API.
 * :func:`settings_view` never includes secrets (API key, URLs of local
-  services, database path).
+  services, database path, generic feed URLs).
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -32,9 +36,13 @@ from app.security import auth_posture
 logger = logging.getLogger(__name__)
 
 HHMM = r"^([01]\d|2[0-3]):[0-5]\d$"
-LIST_FIELDS = ("target_locations", "target_keywords", "excluded_locations", "excluded_titles", "blacklisted_companies")
+TARGETING_LIST_FIELDS = ("target_locations", "target_keywords", "excluded_locations", "excluded_titles", "blacklisted_companies")
+SOURCE_LIST_FIELDS = ("greenhouse_board_tokens", "lever_companies", "ashby_orgs")
+LIST_FIELDS = TARGETING_LIST_FIELDS + SOURCE_LIST_FIELDS
 MAX_LIST_ITEMS = 100
+MAX_SOURCE_ITEMS = 60
 MAX_ITEM_LENGTH = 120
+SOURCE_SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$")
 
 LIVE_SUBMISSION_LOCK_REASON = (
     "No adapter is certified for autonomous submission. The pipeline only runs dry-runs "
@@ -62,8 +70,11 @@ class SettingsPatch(BaseModel):
     excluded_locations: list[str] | None = None
     excluded_titles: list[str] | None = None
     blacklisted_companies: list[str] | None = None
+    greenhouse_board_tokens: list[str] | None = None
+    lever_companies: list[str] | None = None
+    ashby_orgs: list[str] | None = None
 
-    @field_validator(*LIST_FIELDS)
+    @field_validator(*TARGETING_LIST_FIELDS)
     @classmethod
     def _clean_list(cls, value: list[str] | None) -> list[str] | None:
         if value is None:
@@ -80,6 +91,24 @@ class SettingsPatch(BaseModel):
             if len(item) > MAX_ITEM_LENGTH:
                 raise ValueError(f"items must be at most {MAX_ITEM_LENGTH} characters")
             if item not in cleaned:
+                cleaned.append(item)
+        return cleaned
+
+    @field_validator(*SOURCE_LIST_FIELDS)
+    @classmethod
+    def _clean_sources(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        if len(value) > MAX_SOURCE_ITEMS:
+            raise ValueError(f"at most {MAX_SOURCE_ITEMS} boards per ATS")
+        cleaned: list[str] = []
+        for item in value:
+            item = item.strip()
+            if not item:
+                continue
+            if not SOURCE_SLUG_RE.match(item):
+                raise ValueError("board slugs may only contain letters, digits, '.', '_' and '-' (e.g. 'cohere')")
+            if item.lower() not in {existing.lower() for existing in cleaned}:
                 cleaned.append(item)
         return cleaned
 
@@ -169,11 +198,16 @@ def settings_view(settings: Settings, overridden: list[str] | None = None) -> di
         "excluded_locations": settings.excluded_location_list,
         "excluded_titles": settings.excluded_title_list,
         "blacklisted_companies": settings.blacklisted_company_list,
+        "greenhouse_board_tokens": settings.greenhouse_board_list,
+        "lever_companies": settings.lever_company_list,
+        "ashby_orgs": settings.ashby_org_list,
         "sources": settings.source_counts(),
         "llm_provider": settings.llm_provider,
         "llm_fast_model": settings.ollama_fast_model,
         "llm_quality_model": settings.ollama_quality_model,
         "greenhouse_browser_verify": settings.greenhouse_browser_verify,
+        "lever_browser_verify": settings.lever_browser_verify,
+        "ashby_browser_verify": settings.ashby_browser_verify,
         "backup_interval_hours": settings.backup_interval_hours,
         "backup_retention": settings.backup_retention,
         "editable": list(EDITABLE_KEYS),

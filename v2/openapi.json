@@ -1159,6 +1159,28 @@
             ],
             "title": "Application Stage"
           },
+          "board": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Board"
+          },
+          "canonical_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Id"
+          },
           "company": {
             "title": "Company",
             "type": "string"
@@ -1188,6 +1210,17 @@
             ],
             "title": "Discovered At"
           },
+          "duplicate_of_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Of Id"
+          },
           "eligible": {
             "anyOf": [
               {
@@ -1213,6 +1246,18 @@
             "title": "Id",
             "type": "string"
           },
+          "linked_count": {
+            "default": 0,
+            "title": "Linked Count",
+            "type": "integer"
+          },
+          "linked_postings": {
+            "items": {
+              "$ref": "#/components/schemas/LinkedPostingOut"
+            },
+            "title": "Linked Postings",
+            "type": "array"
+          },
           "liveness": {
             "anyOf": [
               {
@@ -1223,6 +1268,9 @@
               }
             ],
             "title": "Liveness"
+          },
+          "liveness_detail": {
+            "$ref": "#/components/schemas/LivenessOut"
           },
           "location": {
             "title": "Location",
@@ -1280,6 +1328,11 @@
           "scores": {
             "$ref": "#/components/schemas/ScoresOut"
           },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          },
           "stage": {
             "title": "Stage",
             "type": "string"
@@ -1297,15 +1350,21 @@
           "application",
           "application_id",
           "application_stage",
+          "board",
+          "canonical_id",
           "company",
           "decision",
           "description",
           "discovered_at",
+          "duplicate_of_id",
           "eligible",
           "events",
           "form_status",
           "id",
+          "linked_count",
+          "linked_postings",
           "liveness",
+          "liveness_detail",
           "location",
           "open_review_tasks",
           "platform",
@@ -1314,6 +1373,7 @@
           "review_tasks",
           "score",
           "scores",
+          "source",
           "stage",
           "title",
           "url"
@@ -1415,6 +1475,28 @@
             ],
             "title": "Application Stage"
           },
+          "board": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Board"
+          },
+          "canonical_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Id"
+          },
           "company": {
             "title": "Company",
             "type": "string"
@@ -1430,6 +1512,17 @@
             ],
             "title": "Discovered At"
           },
+          "duplicate_of_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Of Id"
+          },
           "eligible": {
             "anyOf": [
               {
@@ -1444,6 +1537,22 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "linked_count": {
+            "default": 0,
+            "title": "Linked Count",
+            "type": "integer"
+          },
+          "liveness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Liveness"
           },
           "location": {
             "title": "Location",
@@ -1491,6 +1600,11 @@
             ],
             "title": "Score"
           },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          },
           "stage": {
             "title": "Stage",
             "type": "string"
@@ -1507,16 +1621,22 @@
         "required": [
           "application_id",
           "application_stage",
+          "board",
+          "canonical_id",
           "company",
           "discovered_at",
+          "duplicate_of_id",
           "eligible",
           "id",
+          "linked_count",
+          "liveness",
           "location",
           "open_review_tasks",
           "platform",
           "reason",
           "remote",
           "score",
+          "source",
           "stage",
           "title",
           "url"
@@ -1652,6 +1772,94 @@
         "title": "LimitsOut",
         "type": "object"
       },
+      "LinkedPostingOut": {
+        "properties": {
+          "canonical_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Id"
+          },
+          "company": {
+            "title": "Company",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "location": {
+            "title": "Location",
+            "type": "string"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "relation": {
+            "enum": [
+              "primary",
+              "duplicate"
+            ],
+            "title": "Relation",
+            "type": "string"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "canonical_id",
+          "company",
+          "id",
+          "location",
+          "method",
+          "relation",
+          "score",
+          "source",
+          "stage",
+          "title",
+          "url"
+        ],
+        "title": "LinkedPostingOut",
+        "type": "object"
+      },
       "LiveSubmissionOut": {
         "properties": {
           "env_allow_live_submission": {
@@ -1674,6 +1882,157 @@
           "reason"
         ],
         "title": "LiveSubmissionOut",
+        "type": "object"
+      },
+      "LivenessCheckOut": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "http_status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Http Status"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "signal": {
+            "title": "Signal",
+            "type": "string"
+          },
+          "trigger": {
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "checked_at",
+          "detail",
+          "http_status",
+          "outcome",
+          "signal",
+          "trigger"
+        ],
+        "title": "LivenessCheckOut",
+        "type": "object"
+      },
+      "LivenessOut": {
+        "properties": {
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/LivenessCheckOut"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "failures": {
+            "default": 0,
+            "title": "Failures",
+            "type": "integer"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "next_check_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Check At"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "checked_at",
+          "checks",
+          "closed_at",
+          "failures",
+          "last_seen_at",
+          "next_check_at",
+          "reason",
+          "status"
+        ],
+        "title": "LivenessOut",
         "type": "object"
       },
       "MaterialActionOut": {
@@ -2983,6 +3342,17 @@
             "title": "Application Mode",
             "type": "string"
           },
+          "ashby_browser_verify": {
+            "title": "Ashby Browser Verify",
+            "type": "boolean"
+          },
+          "ashby_orgs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ashby Orgs",
+            "type": "array"
+          },
           "auth_mode": {
             "title": "Auth Mode",
             "type": "string"
@@ -3047,9 +3417,28 @@
             "title": "Excluded Titles",
             "type": "array"
           },
+          "greenhouse_board_tokens": {
+            "description": "Public Greenhouse board slugs",
+            "items": {
+              "type": "string"
+            },
+            "title": "Greenhouse Board Tokens",
+            "type": "array"
+          },
           "greenhouse_browser_verify": {
             "title": "Greenhouse Browser Verify",
             "type": "boolean"
+          },
+          "lever_browser_verify": {
+            "title": "Lever Browser Verify",
+            "type": "boolean"
+          },
+          "lever_companies": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lever Companies",
+            "type": "array"
           },
           "live_submission": {
             "$ref": "#/components/schemas/LiveSubmissionOut"
@@ -3117,6 +3506,8 @@
         },
         "required": [
           "application_mode",
+          "ashby_browser_verify",
+          "ashby_orgs",
           "auth_mode",
           "automation_enabled",
           "backup_interval_hours",
@@ -3130,7 +3521,10 @@
           "editable",
           "excluded_locations",
           "excluded_titles",
+          "greenhouse_board_tokens",
           "greenhouse_browser_verify",
+          "lever_browser_verify",
+          "lever_companies",
           "live_submission",
           "llm_fast_model",
           "llm_provider",
@@ -3153,6 +3547,20 @@
         "additionalProperties": false,
         "description": "The only settings the API may change. Anything else is a 422.",
         "properties": {
+          "ashby_orgs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ashby Orgs"
+          },
           "automation_enabled": {
             "anyOf": [
               {
@@ -3258,6 +3666,34 @@
             ],
             "title": "Excluded Titles"
           },
+          "greenhouse_board_tokens": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Greenhouse Board Tokens"
+          },
+          "lever_companies": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lever Companies"
+          },
           "max_applications_per_day": {
             "anyOf": [
               {
@@ -3355,6 +3791,10 @@
       },
       "SourcesOut": {
         "properties": {
+          "ashby_orgs": {
+            "title": "Ashby Orgs",
+            "type": "integer"
+          },
           "generic_feeds": {
             "title": "Generic Feeds",
             "type": "integer"
@@ -3369,6 +3809,7 @@
           }
         },
         "required": [
+          "ashby_orgs",
           "generic_feeds",
           "greenhouse_boards",
           "lever_companies"
@@ -4082,6 +4523,49 @@
         ]
       }
     },
+    "/api/jobs/{job_id}/check-liveness": {
+      "post": {
+        "description": "Ask the posting's public source whether it is still open (read-only GET).\n\nFollows the same conservative policy as scheduled checks: one \"gone\" answer\nonly marks the posting suspect; errors never close it.",
+        "operationId": "check_liveness_api_jobs__job_id__check_liveness_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check Liveness",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
     "/api/jobs/{job_id}/form": {
       "get": {
         "description": "Fetch the job's real application form (read-only) and plan it against the vault.\n\nNo state changes, no evidence, nothing submitted. Values for sensitive or\nlegal fields are redacted in the response.",
@@ -4207,6 +4691,49 @@
         "summary": "Generate Job Materials",
         "tags": [
           "materials"
+        ]
+      }
+    },
+    "/api/jobs/{job_id}/unlink-duplicate": {
+      "post": {
+        "description": "Owner override: this posting is not a duplicate. It is re-gated from scratch (never applied).",
+        "operationId": "unlink_duplicate_api_jobs__job_id__unlink_duplicate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unlink Duplicate",
+        "tags": [
+          "remote"
         ]
       }
     },

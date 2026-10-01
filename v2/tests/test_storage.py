@@ -55,15 +55,51 @@ def test_pre_versioning_database_is_adopted_without_losing_data(tmp_path):
     assert not inspect(engine).has_table("scheduler_cycles")
 
     seen = []
-    assert run_migrations(engine, before=lambda pending: seen.append([m.version for m in pending])) == [1, 2, 3, 4]
-    assert seen == [[1, 2, 3, 4]]
+    assert run_migrations(engine, before=lambda pending: seen.append([m.version for m in pending])) == [1, 2, 3, 4, 5]
+    assert seen == [[1, 2, 3, 4, 5]]
     assert inspect(engine).has_table("scheduler_cycles")
     assert inspect(engine).has_table("setting_overrides")
     assert inspect(engine).has_table("profile_facts")
     assert inspect(engine).has_table("application_materials")
     with Session() as db:
         assert db.execute(select(Job.title)).scalar_one() == "Fraud Analyst"
-        assert [row.version for row in db.execute(select(SchemaVersion)).scalars()] == [1, 2, 3, 4]
+        assert [row.version for row in db.execute(select(SchemaVersion)).scalars()] == [1, 2, 3, 4, 5]
+
+
+_V4_JOBS = """
+CREATE TABLE jobs (
+    id VARCHAR PRIMARY KEY, source VARCHAR(50), external_id VARCHAR(255), title VARCHAR(255), company VARCHAR(255),
+    location VARCHAR(255), remote BOOLEAN, url TEXT, description TEXT, stage VARCHAR(50), eligible BOOLEAN,
+    eligibility_reason TEXT, deterministic_score FLOAT, ai_score FLOAT, final_score FLOAT, platform VARCHAR(50),
+    liveness VARCHAR(20), discovered_at DATETIME, updated_at DATETIME,
+    CONSTRAINT uq_job_source_external UNIQUE (source, external_id)
+)
+"""
+
+
+def test_v4_jobs_table_gains_identity_columns_and_backfilled_canonical_ids(tmp_path):
+    engine = _engine(tmp_path)
+    with engine.begin() as connection:
+        connection.execute(text(_V4_JOBS))
+        connection.execute(text(
+            "INSERT INTO jobs (id, source, external_id, title, company, url, stage) VALUES "
+            "('a', 'greenhouse', '123', 'Fraud Analyst', 'AcmeBoard', 'https://x', 'scored'), "
+            "('b', 'manual', 'm-1', 'KYC Analyst', 'Acme', 'https://y', 'scored')"
+        ))
+    others = [table for name, table in Base.metadata.tables.items() if name != "jobs"]
+    Base.metadata.create_all(engine, tables=others)
+    with engine.begin() as connection:
+        for version in (1, 2, 3, 4):
+            connection.execute(
+                text("INSERT INTO schema_version (version, description, applied_at) VALUES (:version, :description, '2026-01-01')"),
+                {"version": version, "description": f"v{version}"},
+            )
+    assert run_migrations(engine) == [5]
+    columns = {column["name"] for column in inspect(engine).get_columns("jobs")}
+    assert {"canonical_id", "board", "duplicate_of_id", "liveness_next_check_at", "closed_at"} <= columns
+    with engine.connect() as connection:
+        rows = dict(connection.execute(text("SELECT id, canonical_id FROM jobs")).all())
+    assert rows == {"a": "greenhouse:acmeboard:123", "b": "manual:m-1"}
 
 
 def test_before_hook_not_called_when_up_to_date(tmp_path):

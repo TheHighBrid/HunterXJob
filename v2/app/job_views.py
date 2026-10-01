@@ -8,6 +8,8 @@ from typing import Any
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.dedup import linked_postings
+from app.job_liveness import recent_checks
 from app.material_store import materials_ready
 from app.models import Application, Job, PipelineEvent, ReviewTask, iso_utc
 from app.review_actions import task_summary
@@ -26,7 +28,7 @@ def _loads(raw: str | None) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
-def job_row(job: Job, open_tasks: int = 0) -> dict[str, Any]:
+def job_row(job: Job, open_tasks: int = 0, linked_count: int = 0) -> dict[str, Any]:
     application = job.application
     return {
         "id": job.id, "title": job.title, "company": job.company, "location": job.location,
@@ -36,7 +38,21 @@ def job_row(job: Job, open_tasks: int = 0) -> dict[str, Any]:
         "application_id": application.id if application else None,
         "application_stage": application.stage if application else None,
         "open_review_tasks": open_tasks,
+        "source": job.source, "board": job.board, "canonical_id": job.canonical_id,
+        "liveness": job.liveness, "duplicate_of_id": job.duplicate_of_id, "linked_count": linked_count,
     }
+
+
+def _linked_counts(db: Session, jobs: list[Job]) -> dict[str, int]:
+    """Other postings of the same role, per job (primary plus its linked duplicates)."""
+    primaries = {job.duplicate_of_id or job.id for job in jobs}
+    if not primaries:
+        return {}
+    children = dict(db.execute(
+        select(Job.duplicate_of_id, func.count()).where(Job.duplicate_of_id.in_(primaries)).group_by(Job.duplicate_of_id)
+    ).all())
+    # A primary sees its children; a duplicate sees the primary plus its siblings (same number).
+    return {job.id: int(children.get(job.duplicate_of_id or job.id, 0)) for job in jobs}
 
 
 def list_jobs(
@@ -60,7 +76,8 @@ def list_jobs(
             ReviewTask.status == "open", ReviewTask.job_id.in_([job.id for job in jobs])
         ).group_by(ReviewTask.job_id)
     ).all()) if jobs else {}
-    return [job_row(job, int(counts.get(job.id, 0))) for job in jobs]
+    linked = _linked_counts(db, jobs)
+    return [job_row(job, int(counts.get(job.id, 0)), linked.get(job.id, 0)) for job in jobs]
 
 
 def _decision_report(db: Session, job: Job) -> dict[str, Any] | None:
@@ -125,6 +142,22 @@ def form_status(application: Application | None, open_tasks: list[ReviewTask]) -
     return {**base, **_form_outcome(validation, open_tasks)}
 
 
+def liveness_view(db: Session, job: Job) -> dict[str, Any]:
+    return {
+        "status": job.liveness,
+        "reason": job.liveness_reason,
+        "checked_at": iso_utc(job.liveness_checked_at),
+        "next_check_at": iso_utc(job.liveness_next_check_at),
+        "failures": job.liveness_failures or 0,
+        "closed_at": iso_utc(job.closed_at),
+        "last_seen_at": iso_utc(job.last_seen_at),
+        "checks": [{
+            "checked_at": iso_utc(check.checked_at), "trigger": check.trigger, "outcome": check.outcome,
+            "signal": check.signal, "http_status": check.http_status, "detail": check.detail, "action": check.action,
+        } for check in recent_checks(db, job)],
+    }
+
+
 def job_detail(db: Session, job: Job) -> dict[str, Any]:
     tasks = list(db.execute(
         select(ReviewTask).where(ReviewTask.job_id == job.id).order_by(ReviewTask.created_at.desc())
@@ -134,10 +167,12 @@ def job_detail(db: Session, job: Job) -> dict[str, Any]:
     events = db.execute(
         select(PipelineEvent).where(PipelineEvent.job_id == job.id).order_by(PipelineEvent.created_at.desc()).limit(50)
     ).scalars()
+    linked = linked_postings(db, job)
     return {
-        **job_row(job, len(open_tasks)),
+        **job_row(job, len(open_tasks), len(linked)),
         "description": job.description or "",
-        "liveness": job.liveness,
+        "liveness_detail": liveness_view(db, job),
+        "linked_postings": linked,
         "scores": {
             "final": job.final_score,
             "deterministic": job.deterministic_score,

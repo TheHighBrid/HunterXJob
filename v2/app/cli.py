@@ -72,6 +72,26 @@ def _cmd_cycle(_: argparse.Namespace) -> int:
     return 0 if result["status"] in {"completed", "skipped"} else 1
 
 
+def _cmd_dedup_scan(_: argparse.Namespace) -> int:
+    from app.db import SessionLocal, init_db
+    from app.dedup import scan
+
+    init_db()
+    with SessionLocal() as db:
+        print(json.dumps(scan(db)))
+    return 0
+
+
+def _cmd_liveness(_: argparse.Namespace) -> int:
+    from app.db import SessionLocal, init_db
+    from app.job_liveness import run_due_checks
+
+    init_db()
+    with SessionLocal() as db:
+        print(json.dumps(run_due_checks(db, get_settings()), default=str))
+    return 0
+
+
 def _cmd_api_key(_: argparse.Namespace) -> int:
     print(secrets.token_urlsafe(32))
     return 0
@@ -117,6 +137,8 @@ COMMANDS = {
     "backup": (_cmd_backup, "write a timestamped database backup and prune old ones"),
     "backups": (_cmd_backups, "list database backups"),
     "cycle": (_cmd_cycle, "run one discover/score/prepare/dry-run cycle now"),
+    "dedup-scan": (_cmd_dedup_scan, "fingerprint older postings and link duplicates (never deletes)"),
+    "liveness": (_cmd_liveness, "run due liveness checks for queued postings now (read-only GETs)"),
     "api-key": (_cmd_api_key, "print a new random API key"),
     "check-auth": (_cmd_check_auth, "report the API authentication posture"),
     "openapi": (_cmd_openapi, "write (or --check) the OpenAPI snapshot used for the mobile types"),

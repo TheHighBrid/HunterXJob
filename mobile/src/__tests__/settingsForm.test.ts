@@ -22,17 +22,23 @@ const settings: ServerSettings = {
   excluded_locations: [],
   excluded_titles: [],
   blacklisted_companies: [],
-  sources: { greenhouse_boards: 2, lever_companies: 0, generic_feeds: 0 },
+  sources: { greenhouse_boards: 2, lever_companies: 0, ashby_orgs: 1, generic_feeds: 0 },
+  greenhouse_board_tokens: ["d2l", "geotab"],
+  lever_companies: [],
+  ashby_orgs: ["cohere"],
   llm_provider: "ollama",
   llm_fast_model: "llama3.2:1b",
   llm_quality_model: "llama3.2:3b",
   greenhouse_browser_verify: true,
+  lever_browser_verify: false,
+  ashby_browser_verify: false,
   backup_interval_hours: 24,
   backup_retention: 14,
   editable: [
     "automation_enabled", "max_applications_per_day", "max_dry_runs_per_day", "min_match_score", "quiet_hours_start",
     "quiet_hours_end", "cycle_interval_minutes", "cycle_max_score", "cycle_max_prepare", "cycle_max_dry_runs",
     "target_locations", "target_keywords", "excluded_locations", "excluded_titles", "blacklisted_companies",
+    "greenhouse_board_tokens", "lever_companies", "ashby_orgs",
   ],
   overridden: [],
 };
@@ -53,5 +59,10 @@ describe("buildSettingsPatch", () => {
     const patch = buildSettingsPatch(locked, form);
     expect(patch).toEqual({ min_match_score: 70 });
     expect(Object.keys(patch)).not.toContain("allow_live_submission");
+  });
+
+  it("sends edited source lists", () => {
+    const form = { ...settingsToForm(settings), ashby_orgs: "cohere, wealthsimple", lever_companies: "pointclickcare" };
+    expect(buildSettingsPatch(settings, form)).toEqual({ ashby_orgs: ["cohere", "wealthsimple"], lever_companies: ["pointclickcare"] });
   });
 });

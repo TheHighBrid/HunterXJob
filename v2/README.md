@@ -42,7 +42,9 @@ Open `http://127.0.0.1:8011`, paste the `API_KEY` from `.env` into the key box, 
 ./hunterx install | start | stop | restart | status | logs | test
 ./hunterx serve            # foreground server (used by systemd / Termux:Boot)
 ./hunterx doctor           # installation, auth, network bind, schema, backups, browser
-./hunterx cycle            # run one discover -> score -> prepare -> dry-run cycle now
+./hunterx cycle            # run one discover -> liveness -> score -> prepare -> dry-run cycle now
+./hunterx dedup-scan       # fingerprint older postings and link duplicates (never deletes)
+./hunterx liveness         # run due read-only liveness checks for queued postings now
 ./hunterx backup [--keep N] | backups
 ./hunterx migrate          # apply schema migrations (also automatic on start)
 ./hunterx api-key          # print a new random API key
@@ -68,10 +70,11 @@ Every endpoint except `GET /api/health` and the static dashboard page needs `X-A
 
 Off by default (`CONTINUOUS_RUN_ENABLED=false`). When on, the API process runs a cycle every `CYCLE_INTERVAL_MINUTES` (minimum 5):
 
-1. **discover** from `GREENHOUSE_BOARD_TOKENS` / `LEVER_COMPANIES` (one failing board does not stop the others);
-2. **score** up to `CYCLE_MAX_SCORE` new jobs (needs résumé facts; uses the local model only if it is reachable);
-3. **prepare** up to `CYCLE_MAX_PREPARE` shortlisted jobs by drafting materials with the local model. You still approve each application; the cycle never approves;
-4. **dry-run** up to `CYCLE_MAX_DRY_RUNS` applications you approved (`ready_to_apply`), against the real form, never submitting.
+1. **discover** from `GREENHOUSE_BOARD_TOKENS` / `LEVER_COMPANIES` / `ASHBY_ORGS` (one failing board does not stop the others). New postings are fingerprinted and linked to an existing posting of the same role (see [Discovery sources](#discovery-sources-dedup-and-liveness));
+2. **liveness**: re-check up to `CYCLE_MAX_LIVENESS` queued postings that are due (read-only GETs);
+3. **score** up to `CYCLE_MAX_SCORE` new jobs (needs résumé facts; uses the local model only if it is reachable);
+4. **prepare** up to `CYCLE_MAX_PREPARE` shortlisted jobs by drafting materials with the local model. You still approve each application; the cycle never approves;
+5. **dry-run** up to `CYCLE_MAX_DRY_RUNS` applications you approved (`ready_to_apply`), against the real form, never submitting. Each posting is confirmed live first (prepare and dry-run are skipped for postings that aren't).
 
 Gates, checked every cycle:
 
@@ -95,12 +98,14 @@ The mobile app (`../mobile`) is a remote control for these routes. All of them n
 | Route | What it does |
 |---|---|
 | `GET /api/auth/check` | Confirms the key; returns the server version |
-| `GET /api/settings` | Current configuration. Never includes secrets: no API key, local service URLs or database path, and job sources only as counts. `live_submission.locked` is always `true` |
+| `GET /api/settings` | Current configuration. Never includes secrets: no API key, local service URLs or database path. Public board slugs are listed; generic feed URLs only as a count. `live_submission.locked` is always `true` |
 | `PATCH /api/settings` | Changes the safe subset (below). Unknown or locked keys get `422` |
 | `GET /api/reports/summary` | Jobs discovered/scored, dry-runs, submissions (always 0), review tasks, cycles, 7-day history |
-| `GET /api/jobs?q=&stage=&offset=&limit=` | Job list with scores and open review counts |
-| `GET /api/jobs/{id}` | Score breakdown, form status and blockers, application, review tasks, timeline |
+| `GET /api/jobs?q=&stage=&offset=&limit=` | Job list with scores, open review counts, ATS source, liveness and duplicate links |
+| `GET /api/jobs/{id}` | Score breakdown, form status and blockers, application, review tasks, timeline, linked postings, liveness history |
 | `GET /api/jobs/{id}/form` | Read-only preview of the live form and fill plan |
+| `POST /api/jobs/{id}/check-liveness` | Check the posting at its source now (read-only GET). Same closing policy as the cycle |
+| `POST /api/jobs/{id}/unlink-duplicate` | Owner says a linked posting is not a duplicate: it goes back to `discovered` and is scored on its own. `409` if it isn't linked |
 | `GET /api/review-tasks?status=open\|closed\|all`, `GET /api/review-tasks/{id}` | Review queue; the detail lists allowed actions and what approval would do |
 | `POST /api/review-tasks/{id}/approve` | Shortlists a `review` job, approves a prepared application, or re-queues a blocked one for the next **dry-run**. Refused (`409`) while the kill switch is engaged, for blacklisted companies, or once an application is in a submission stage. Never submits |
 | `POST /api/review-tasks/{id}/reject` | Closes the task and rejects (or withdraws) the job |
@@ -115,8 +120,9 @@ Settings the phone can change (stored in the `setting_overrides` table and appli
 - `quiet_hours_start` / `quiet_hours_end` (`HH:MM`)
 - `cycle_interval_minutes`, `cycle_max_score`, `cycle_max_prepare`, `cycle_max_dry_runs`
 - `target_locations`, `target_keywords`, `excluded_locations`, `excluded_titles`, `blacklisted_companies`
+- job sources: `greenhouse_board_tokens`, `lever_companies`, `ashby_orgs` (each a list of public board slugs: letters, digits, `.`, `_`, `-`; at most 60)
 
-Everything else needs `.env` and a restart: `APPLICATION_MODE`, `ALLOW_LIVE_SUBMISSION`, `CONTINUOUS_RUN_ENABLED`, `API_KEY`, job sources, the AI model and the database.
+Everything else needs `.env` and a restart: `APPLICATION_MODE`, `ALLOW_LIVE_SUBMISSION`, `CONTINUOUS_RUN_ENABLED`, `API_KEY`, generic feed URLs, the AI model and the database.
 
 `CORS_ORIGINS` (comma-separated, empty by default) lets a browser front end such as the Expo web preview call the API. The native app doesn't need it.
 
@@ -145,7 +151,7 @@ Default is `dry_run`. `ALLOW_LIVE_SUBMISSION` and `unattended_mode` stay false.
 1. Load and verify your profile (see [Profile and application materials](#profile-and-application-materials)).
 2. `PUT /api/resume-facts` (free-text summary used only for AI scoring).
 3. `POST /api/answers` for explicit policies. Work authorization must be `user` or `policy`.
-4. Set Greenhouse board tokens / Lever slugs in `.env`.
+4. Set Greenhouse board tokens / Lever slugs / Ashby org slugs in `.env` or on the phone (Settings → Job sources). `examples/boards.canada.example.env` is a starter list of public Canadian-relevant boards; it is an example only and nothing reads it.
 5. `POST /api/discovery/run` then `POST /api/scoring/run`.
 6. Generate materials, approve them, then `POST /api/applications/{id}/apply` for a dry-run.
 7. Watch `/api/review-tasks` instead of hoping the bot guessed.
@@ -202,13 +208,51 @@ Set `MATERIALS_LLM_ENABLED=true`, `MATERIALS_LLM_PROVIDER=ollama|openai`, `MATER
 
 Verified facts also feed the answer vault: `first_name`, `last_name`, `email`, `phone`, `location`, link fields, `current_company`, `current_title`, `work_authorization_{cc}` / `sponsorship_{cc}` (Yes/No per country) and Greenhouse employment/education history rows (`employment_0_company`, `employment_0_title`, `employment_0_start_month` = month name, `employment_0_start_year`, `education_0_school`, `education_0_degree`, ...). Answers you store explicitly in the vault always override profile-derived ones. A history field whose row or section can't be identified unambiguously, or a dropdown whose options don't contain the exact value, goes to review.
 
-## Real-form dry-runs (Greenhouse)
+## Discovery sources, dedup and liveness
+
+All discovery is read-only GETs against public job-board APIs. Redirects are not followed, and board slugs are validated (letters, digits, `.`, `_`, `-`) before they go into a URL:
+
+| Source | Setting | Feed |
+|---|---|---|
+| Greenhouse | `GREENHOUSE_BOARD_TOKENS` | `boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true` |
+| Lever | `LEVER_COMPANIES` | `api.lever.co/v0/postings/{slug}?mode=json` |
+| Ashby | `ASHBY_ORGS` | `api.ashbyhq.com/posting-api/job-board/{org}` (unlisted postings are skipped) |
+
+Every source goes through the same normalization, eligibility gate, scoring and targeting. The lists can be edited on the phone (Settings → Job sources). `examples/boards.canada.example.env` is a starter list of public boards with Canadian postings, checked on 2026-10-01. It is an example only: nothing loads it, and nothing is enabled by default.
+
+**Canonical identity.** Each posting gets `canonical_id = {ats}:{board}:{job id}` (for example `ashby:cohere:5f1c…`). It is unique in the database, so re-discovery updates the row instead of adding one.
+
+**Cross-board duplicates.** Each posting is fingerprinted from its normalized company, title and location, plus a SHA-256 and a 64-bit simhash of the normalized description. A new posting is linked to an earlier one from the same company when:
+- the descriptions are identical, or
+- the titles are near-identical (≥ 0.92 similarity) and differ only by place words such as "(France)" vs "(Middle East)", and the description simhashes are within 6 bits, or
+- the title and location match exactly.
+
+The same role posted in another location is linked too. Nothing is deleted. The duplicate moves to stage `duplicate` with `duplicate_of_id` set, and a `job_links` row records the method and evidence. The primary is the posting that already has an application or got further; otherwise it is the earliest discovered. Preparing materials and dry-running are refused for any posting whose group already has a prepared or dry-run application, so the same role is never prepared or dry-run twice. A link never outlives its primary: if the primary is rejected (for example by the location gate), withdrawn or closed, its copies are released (link kept as `released`), gated on their own, and re-grouped among themselves. That way a Toronto copy of a role is never hidden behind a rejected New York posting. `./hunterx dedup-scan` fingerprints older rows and links them. `POST /api/jobs/{id}/unlink-duplicate` undoes a link.
+
+**Liveness.** A posting is checked at its own source:
+- Greenhouse and Lever: the posting API (404/410 means gone).
+- Ashby: its public job-posting query (`jobPosting: null` means gone).
+- Other sources: the posting page, where only explicit "no longer accepting applications"-style text counts.
+
+The policy is deliberately conservative:
+
+- The first "gone" result marks the posting `suspect`. It is closed only if a second check, at least `LIVENESS_CONFIRM_MINUTES` (30) later, also says gone. Closing moves the job to `closed` and auto-closes its open review tasks with the reason. Postings already in an application stage are never moved; the check is recorded as `close_blocked`.
+- Timeouts, network errors, 5xx, 429, unexpected redirects and unparseable responses count as `unknown` and are never a reason to close. The next check backs off exponentially from `LIVENESS_BACKOFF_MINUTES` up to `LIVENESS_BACKOFF_MAX_HOURS`. After `LIVENESS_REVIEW_AFTER_FAILURES` inconclusive checks in a row, one `liveness_review` task is opened.
+- A closed posting that is found live again is reopened at `discovered`.
+- Every check is stored in `liveness_checks` (outcome, signal, HTTP status, action) as evidence.
+- Queued postings are re-checked every `LIVENESS_RECHECK_HOURS`. A posting that disappears from its board feed only gets an immediate check scheduled; it is never closed from the feed alone.
+- Before preparing, a live result younger than `LIVENESS_MAX_AGE_PREPARE_HOURS` (6) is reused; otherwise the posting is checked. Before every dry-run, the posting is checked unless a live result is younger than `LIVENESS_MAX_AGE_DRY_RUN_MINUTES` (30). Any result other than `live` defers the step (`liveness_suspect` / `liveness_unknown`) or ends it (`liveness_closed`).
+
+## Real-form dry-runs (Greenhouse, Lever, Ashby)
 
 A dry-run plans against the **employer's real application form**, never a sample:
 
 - The form comes from the public boards API: `GET https://boards-api.greenhouse.io/v1/boards/{board}/jobs/{id}?questions=true`. That covers standard fields, custom questions, location questions, EEOC compliance questions, demographic questions, and GDPR consent flags. Only GET is used, only against that host, and redirects are not followed.
 - Optional browser verification (`GREENHOUSE_BROWSER_VERIFY=true`, needs `pip install -e '.[browser]'` plus `python -m playwright install chromium`) loads the posting's embed page in headless Chromium. All non-GET requests are aborted, nothing is clicked or typed, and no files are uploaded. Required fields that are on the page but missing from the API (for example employment/education history or the phone-country picker) are added and stop the plan for review. `GREENHOUSE_BROWSER_FALLBACK=true` builds the form from the page when the API is temporarily failing. Comboboxes read only from the page always go to review, because their options can't be checked without interacting.
-- If the form can't be fetched (posting closed, network error, unsupported platform), the application goes to review with `form_unavailable` or `form_fetch_failed`. Nothing is faked. Lever, email, and generic postings don't have a real-form fetcher yet, so their dry-runs are refused.
+- **Lever:** the public apply page `GET https://jobs.lever.co/{company}/{posting id}/apply` is server-rendered. The standard fields, the posting's custom question cards and its surveys (EEO/demographic) are read from the HTML, including the question definitions Lever embeds in hidden template inputs. Marketing-consent checkboxes are never checked. hCaptcha is recorded as the submit boundary. With `LEVER_BROWSER_VERIFY=true`, the same page is also loaded in headless Chromium with every non-GET request aborted, and the rendered fields are compared.
+- **Ashby:** the application form comes from Ashby's public job-posting GraphQL query, sent as a GET (`jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobPosting`). Only allowlisted read queries are ever sent, and any document that isn't a query is refused before it leaves the process. Field types, required flags, select options and survey (EEO) questions map onto the same form engine. With `ASHBY_BROWSER_VERIFY=true`, the hosted application page is loaded in headless Chromium: the page's own allowlisted read-only GraphQL POSTs are re-issued as GETs, and every other non-GET request is aborted. Nothing is clicked, typed or uploaded.
+- All three platforms use the same answer vault, profile facts and review rules. Scoped answers work as `lever:{company}` / `ashby:{org}` (optionally with `:{job id}`). No apply endpoint is ever called.
+- If the form can't be fetched (posting closed, network error, unsupported platform), the application goes to review with `form_unavailable` or `form_fetch_failed`. Nothing is faked. Email and generic postings don't have a real-form fetcher, so their dry-runs are refused.
 - `GET /api/jobs/{job_id}/form` previews the real form and the fill plan without changing any state. Sensitive and legal values are redacted.
 
 Answer-vault keys for real forms:

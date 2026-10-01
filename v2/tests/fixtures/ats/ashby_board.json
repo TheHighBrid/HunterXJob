@@ -1,0 +1,115 @@
+{
+ "apiVersion": "1",
+ "jobs": [
+  {
+   "id": "9b99caed-e385-574f-94f7-4be75f67782d",
+   "title": "Senior Full-Stack Engineer, Internal Applications",
+   "department": "Engineering & Infra",
+   "team": "Internal Applications",
+   "employmentType": "FullTime",
+   "location": "Toronto",
+   "secondaryLocations": [
+    {
+     "location": "Canada"
+    }
+   ],
+   "publishedAt": "2026-09-15T18:21:37.401+00:00",
+   "isListed": true,
+   "isRemote": true,
+   "workplaceType": "Remote",
+   "jobUrl": "https://jobs.ashbyhq.com/northwind/9b99caed-e385-574f-94f7-4be75f67782d",
+   "applyUrl": "https://jobs.ashbyhq.com/northwind/9b99caed-e385-574f-94f7-4be75f67782d/application",
+   "descriptionHtml": "<p><strong>About the role</strong></p><p>You will investigate alerts, document evidence, partner with operations and compliance teams, improve controls, and communicate findings clearly to stakeholders across the organization. We value curiosity, rigor, bilingual communication, and a calm approach to ambiguous problems. This posting is a sanitized fixture for offline tests and does not describe a real job.</p>",
+   "descriptionPlain": "About the role\n\nYou will investigate alerts, document evidence, partner with operations and compliance teams, improve controls, and communicate findings clearly to stakeholders across the organization. We value curiosity, rigor, bilingual communication, and a calm approach to ambiguous problems. This posting is a sanitized fixture for offline tests and does not describe a real job."
+  },
+  {
+   "id": "831c138d-1ab7-5afa-b938-dd5da8882214",
+   "title": "Member of Technical Staff, Modeling",
+   "department": "Modeling",
+   "team": "Modeling",
+   "employmentType": "FullTime",
+   "location": "London",
+   "secondaryLocations": [
+    {
+     "location": "San Francisco"
+    },
+    {
+     "location": "New York"
+    }
+   ],
+   "publishedAt": "2026-09-15T18:21:37.401+00:00",
+   "isListed": true,
+   "isRemote": true,
+   "workplaceType": "Remote",
+   "jobUrl": "https://jobs.ashbyhq.com/northwind/831c138d-1ab7-5afa-b938-dd5da8882214",
+   "applyUrl": "https://jobs.ashbyhq.com/northwind/831c138d-1ab7-5afa-b938-dd5da8882214/application",
+   "descriptionHtml": "<p><strong>About the role</strong></p><p>You will investigate alerts, document evidence, partner with operations and compliance teams, improve controls, and communicate findings clearly to stakeholders across the organization. We value curiosity, rigor, bilingual communication, and a calm approach to ambiguous problems. This posting is a sanitized fixture for offline tests and does not describe a real job.</p>",
+   "descriptionPlain": "About the role\n\nYou will investigate alerts, document evidence, partner with operations and compliance teams, improve controls, and communicate findings clearly to stakeholders across the organization. We value curiosity, rigor, bilingual communication, and a calm approach to ambiguous problems. This posting is a sanitized fixture for offline tests and does not describe a real job."
+  },
+  {
+   "id": "9733a1ca-eb52-5949-b8a6-23ba7a5d9820",
+   "title": "Senior Member of Technical Staff, Multimodal AI",
+   "department": "Modeling",
+   "team": "Modeling",
+   "employmentType": "FullTime",
+   "location": "San Francisco",
+   "secondaryLocations": [
+    {
+     "location": "New York"
+    },
+    {
+     "location": "San Francisco"
+    }
+   ],
+   "publishedAt": "2026-09-15T18:21:37.401+00:00",
+   "isListed": true,
+   "isRemote": true,
+   "workplaceType": "Remote",
+   "jobUrl": "https://jobs.ashbyhq.com/northwind/9733a1ca-eb52-5949-b8a6-23ba7a5d9820",
+   "applyUrl": "https://jobs.ashbyhq.com/northwind/9733a1ca-eb52-5949-b8a6-23ba7a5d9820/application",
+   "descriptionHtml": "<p><strong>About the role</strong></p><p>You will investigate alerts, document evidence, partner with operations and compliance teams, improve controls, and communicate findings clearly to stakeholders across the organization. We value curiosity, rigor, bilingual communication, and a calm approach to ambiguous problems. This posting is a sanitized fixture for offline tests and does not describe a real job.</p>",
+   "descriptionPlain": "About the role\n\nYou will investigate alerts, document evidence, partner with operations and compliance teams, improve controls, and communicate findings clearly to stakeholders across the organization. We value curiosity, rigor, bilingual communication, and a calm approach to ambiguous problems. This posting is a sanitized fixture for offline tests and does not describe a real job."
+  },
+  {
+   "id": "274fb050-e1f0-5c73-bc9e-2131ba8cf011",
+   "title": "Senior Full-Stack Engineer, Internal Applications - Montreal",
+   "department": "Engineering & Infra",
+   "team": "Internal Applications",
+   "employmentType": "FullTime",
+   "location": "Montreal",
+   "secondaryLocations": [],
+   "publishedAt": "2026-09-15T18:21:37.401+00:00",
+   "isListed": true,
+   "isRemote": true,
+   "workplaceType": "Remote",
+   "jobUrl": "https://jobs.ashbyhq.com/northwind/274fb050-e1f0-5c73-bc9e-2131ba8cf011",
+   "applyUrl": "https://jobs.ashbyhq.com/northwind/274fb050-e1f0-5c73-bc9e-2131ba8cf011/application",
+   "descriptionHtml": "<p><strong>About the role</strong></p><p>You will investigate alerts, document evidence, partner with operations and compliance teams, improve controls, and communicate findings clearly to stakeholders across the organization. We value curiosity, rigor, bilingual communication, and a calm approach to ambiguous problems. This posting is a sanitized fixture for offline tests and does not describe a real job.</p>",
+   "descriptionPlain": "About the role\n\nYou will investigate alerts, document evidence, partner with operations and compliance teams, improve controls, and communicate findings clearly to stakeholders across the organization. We value curiosity, rigor, bilingual communication, and a calm approach to ambiguous problems. This posting is a sanitized fixture for offline tests and does not describe a real job."
+  },
+  {
+   "id": "736ad3e6-0722-5efe-ae74-59ddd1ee33ca",
+   "title": "Member of Technical Staff, Modeling",
+   "department": "Modeling",
+   "team": "Modeling",
+   "employmentType": "FullTime",
+   "location": "London",
+   "secondaryLocations": [
+    {
+     "location": "San Francisco"
+    },
+    {
+     "location": "New York"
+    }
+   ],
+   "publishedAt": "2026-09-15T18:21:37.401+00:00",
+   "isListed": false,
+   "isRemote": true,
+   "workplaceType": "Remote",
+   "jobUrl": "https://jobs.ashbyhq.com/northwind/736ad3e6-0722-5efe-ae74-59ddd1ee33ca",
+   "applyUrl": "https://jobs.ashbyhq.com/northwind/831c138d-1ab7-5afa-b938-dd5da8882214/application",
+   "descriptionHtml": "<p><strong>About the role</strong></p><p>You will investigate alerts, document evidence, partner with operations and compliance teams, improve controls, and communicate findings clearly to stakeholders across the organization. We value curiosity, rigor, bilingual communication, and a calm approach to ambiguous problems. This posting is a sanitized fixture for offline tests and does not describe a real job.</p>",
+   "descriptionPlain": "About the role\n\nYou will investigate alerts, document evidence, partner with operations and compliance teams, improve controls, and communicate findings clearly to stakeholders across the organization. We value curiosity, rigor, bilingual communication, and a calm approach to ambiguous problems. This posting is a sanitized fixture for offline tests and does not describe a real job."
+  }
+ ]
+}

@@ -12,10 +12,12 @@ from app.ai import AI_FAILURES, LocalAI
 from app.answer_vault import AnswerVault
 from app.config import Settings
 from app.decisioning import Decision, DecisionContext, JobFacts, evaluate_job
+from app.dedup import RELEASING_STAGES, duplicate_guard, release_duplicates
 from app.evidence import record_evidence
 from app.flags import is_enabled, kill_switch_engaged
 from app.form_engine import FillPlan, FormControl, detect_handoff, parse_controls, plan_fill
 from app.greenhouse_form import FormFetchError, RealForm
+from app.job_liveness import ensure_live
 from app.material_store import manifest, materials_ready, vault_records
 from app.models import AdapterMaturity, Application, Job, PipelineEvent, PipelineStage
 from app.review_queue import open_task
@@ -92,6 +94,8 @@ def transition(db: Session, job: Job, to_stage: PipelineStage, message: str, pay
     ))
     db.add(job)
     db.commit()
+    if to_stage.value in RELEASING_STAGES:
+        release_duplicates(db, job, to_stage.value)
 
 
 def _route_non_shortlist(db: Session, job: Job, result: EligibilityResult) -> bool:
@@ -247,6 +251,9 @@ def _apply_adapter(db: Session, settings: Settings, job: Job) -> tuple[str, Adap
         raise RuntimeError(f"no adapter catalog entry for {platform}")
     if not is_enabled(db, info.feature_flag):
         raise RuntimeError(f"adapter {platform} is feature-flagged off")
+    duplicate = duplicate_guard(db, job, "dry_run")
+    if duplicate:
+        raise RuntimeError(duplicate)
     return platform, info
 
 
@@ -383,6 +390,25 @@ def _complete_dry_run(db: Session, application: Application, job: Job, plan: Fil
     return list(filled), materials
 
 
+def _liveness_refusal(db: Session, settings: Settings, application: Application) -> dict[str, object] | None:
+    """Only a posting confirmed live is dry-run; suspect/unknown ones wait, confirmed-closed ones close.
+
+    The cycle checks first with its own probe, so this normally reuses that fresh result.
+    """
+    job = application.job
+    gate = ensure_live(db, settings, job, action="dry_run")
+    if gate.allowed:
+        return None
+    return {
+        "status": "closed" if job.stage == PipelineStage.closed.value else "deferred",
+        "reason": f"liveness_{gate.status}",
+        "detail": gate.reason,
+        "application_id": application.id,
+        "form_source": None,
+        "submitted": False,
+    }
+
+
 def execute_apply(
     db: Session,
     settings: Settings,
@@ -397,12 +423,17 @@ def execute_apply(
     snapshot instead (used by tests); it is labelled ``supplied_snapshot`` in
     the evidence. If the real form cannot be obtained the application goes to
     review. There is no fallback to a sample form, and nothing is submitted.
+    A linked duplicate is refused, and the posting must be confirmed live
+    first (suspect/unknown postings are deferred, confirmed-closed ones closed).
     """
     application = db.get(Application, application_id)
     if application is None:
         raise ValueError("application not found")
     job = application.job
     platform, info = _apply_adapter(db, settings, job)
+    refusal = _liveness_refusal(db, settings, application)
+    if refusal is not None:
+        return refusal
 
     application.adapter_name = platform
     application.adapter_maturity = info.maturity.value
