@@ -62,3 +62,35 @@ def snapshot(db: Session) -> dict[str, bool]:
 
 def kill_switch_engaged(db: Session) -> bool:
     return is_enabled(db, "global_kill_switch")
+
+
+# ----------------------------------------------------------------- API policy
+
+KILL_SWITCH = "global_kill_switch"
+# Flags on the path to a live submission. The API may turn them off, never on;
+# enabling them needs local access to the database (and a certified adapter,
+# which does not exist yet).
+API_ENABLE_FORBIDDEN = frozenset({"allow_live_submission", "unattended_mode"})
+
+
+class FlagChangeRefused(Exception):
+    def __init__(self, status_code: int, detail: str) -> None:
+        super().__init__(detail)
+        self.status_code = status_code
+        self.detail = detail
+
+
+def check_api_flag_change(key: str, enabled: bool, confirm: bool = False) -> None:
+    """Raise FlagChangeRefused unless the API may set ``key`` to ``enabled``.
+
+    * unknown keys are refused (404);
+    * live-submission flags can only be turned off (403);
+    * disengaging the kill switch needs an explicit ``confirm`` (428);
+      engaging it is always allowed.
+    """
+    if key not in DEFAULT_FLAGS:
+        raise FlagChangeRefused(404, f"unknown flag {key}")
+    if enabled and key in API_ENABLE_FORBIDDEN:
+        raise FlagChangeRefused(403, f"{key} cannot be enabled through the API; live submission stays locked")
+    if key == KILL_SWITCH and not enabled and not confirm:
+        raise FlagChangeRefused(428, "disengaging the kill switch needs confirm=true")

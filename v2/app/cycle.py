@@ -38,7 +38,7 @@ from app.backup import create_backup, latest_backup_time
 from app.config import Settings
 from app.discovery import JobRecord, discover_all, upsert_jobs
 from app.flags import is_enabled, kill_switch_engaged, set_flag
-from app.models import Application, Job, PipelineStage, SchedulerCycle
+from app.models import Application, Job, PipelineStage, SchedulerCycle, iso_utc
 from app.pipeline import execute_apply, generate_materials, score_pending_jobs
 from app.resume_facts import read_resume_facts
 from app.scheduler import day_start_utc, dry_runs_today, in_quiet_hours, local_now, submissions_today
@@ -131,8 +131,8 @@ def cycle_to_dict(cycle: SchedulerCycle) -> dict[str, Any]:
         "status": cycle.status,
         "reason": cycle.reason,
         "error": cycle.error,
-        "started_at": cycle.started_at.isoformat() if cycle.started_at else None,
-        "finished_at": cycle.finished_at.isoformat() if cycle.finished_at else None,
+        "started_at": iso_utc(cycle.started_at),
+        "finished_at": iso_utc(cycle.finished_at),
         "steps": json.loads(cycle.steps_json) if cycle.steps_json else {},
     }
 

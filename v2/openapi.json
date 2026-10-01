@@ -1,0 +1,4080 @@
+{
+  "components": {
+    "schemas": {
+      "AnswerIn": {
+        "properties": {
+          "confidence": {
+            "default": 1.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          },
+          "scope": {
+            "default": "global",
+            "title": "Scope",
+            "type": "string"
+          },
+          "sensitive": {
+            "default": false,
+            "title": "Sensitive",
+            "type": "boolean"
+          },
+          "source": {
+            "default": "user",
+            "title": "Source",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ],
+        "title": "AnswerIn",
+        "type": "object"
+      },
+      "ApplicationsSummaryOut": {
+        "properties": {
+          "by_stage": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Stage",
+            "type": "object"
+          },
+          "ready_to_apply": {
+            "title": "Ready To Apply",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "by_stage",
+          "ready_to_apply",
+          "total"
+        ],
+        "title": "ApplicationsSummaryOut",
+        "type": "object"
+      },
+      "AuthCheckOut": {
+        "properties": {
+          "auth": {
+            "title": "Auth",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "auth",
+          "ok",
+          "version"
+        ],
+        "title": "AuthCheckOut",
+        "type": "object"
+      },
+      "BackupOut": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "created_at",
+          "name",
+          "size_bytes"
+        ],
+        "title": "BackupOut",
+        "type": "object"
+      },
+      "BackupStatusOut": {
+        "properties": {
+          "interval_hours": {
+            "title": "Interval Hours",
+            "type": "integer"
+          },
+          "last_result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Result"
+          },
+          "latest_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest At"
+          }
+        },
+        "required": [
+          "interval_hours",
+          "last_result",
+          "latest_at"
+        ],
+        "title": "BackupStatusOut",
+        "type": "object"
+      },
+      "BackupsOut": {
+        "properties": {
+          "interval_hours": {
+            "title": "Interval Hours",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BackupOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "latest_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest At"
+          },
+          "retention": {
+            "title": "Retention",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "interval_hours",
+          "items",
+          "latest_at",
+          "retention"
+        ],
+        "title": "BackupsOut",
+        "type": "object"
+      },
+      "BlockedFieldOut": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "required": {
+            "default": false,
+            "title": "Required",
+            "type": "boolean"
+          },
+          "section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "reason",
+          "required",
+          "section"
+        ],
+        "title": "BlockedFieldOut",
+        "type": "object"
+      },
+      "CycleOut": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "steps": {
+            "additionalProperties": true,
+            "title": "Steps",
+            "type": "object"
+          },
+          "trigger": {
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "finished_at",
+          "id",
+          "reason",
+          "started_at",
+          "status",
+          "steps",
+          "trigger"
+        ],
+        "title": "CycleOut",
+        "type": "object"
+      },
+      "CyclesSummaryOut": {
+        "properties": {
+          "last": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CycleOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_24h": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Last 24H",
+            "type": "object"
+          }
+        },
+        "required": [
+          "last",
+          "last_24h"
+        ],
+        "title": "CyclesSummaryOut",
+        "type": "object"
+      },
+      "DecisionOut": {
+        "properties": {
+          "decision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision"
+          },
+          "dimensions": {
+            "items": {
+              "$ref": "#/components/schemas/DimensionOut"
+            },
+            "title": "Dimensions",
+            "type": "array"
+          },
+          "matched_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched Keywords",
+            "type": "array"
+          },
+          "review_flags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Review Flags",
+            "type": "array"
+          },
+          "vetoes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Vetoes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "decision",
+          "dimensions",
+          "matched_keywords",
+          "review_flags",
+          "vetoes"
+        ],
+        "title": "DecisionOut",
+        "type": "object"
+      },
+      "DimensionOut": {
+        "properties": {
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "weight": {
+            "title": "Weight",
+            "type": "number"
+          },
+          "weighted_points": {
+            "title": "Weighted Points",
+            "type": "number"
+          }
+        },
+        "required": [
+          "evidence",
+          "name",
+          "score",
+          "weight",
+          "weighted_points"
+        ],
+        "title": "DimensionOut",
+        "type": "object"
+      },
+      "DryRunSummaryOut": {
+        "properties": {
+          "completed_today": {
+            "title": "Completed Today",
+            "type": "integer"
+          },
+          "completed_total": {
+            "title": "Completed Total",
+            "type": "integer"
+          },
+          "daily_cap": {
+            "title": "Daily Cap",
+            "type": "integer"
+          },
+          "today": {
+            "title": "Today",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "completed_today",
+          "completed_total",
+          "daily_cap",
+          "today"
+        ],
+        "title": "DryRunSummaryOut",
+        "type": "object"
+      },
+      "EventOut": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "from_stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Stage"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "to_stage": {
+            "title": "To Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "created_at",
+          "from_stage",
+          "message",
+          "to_stage"
+        ],
+        "title": "EventOut",
+        "type": "object"
+      },
+      "FlagIn": {
+        "properties": {
+          "confirm": {
+            "default": false,
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "FlagIn",
+        "type": "object"
+      },
+      "FlagOut": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "key",
+          "note"
+        ],
+        "title": "FlagOut",
+        "type": "object"
+      },
+      "FormFieldOut": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "legal": {
+            "title": "Legal",
+            "type": "boolean"
+          },
+          "options": {
+            "title": "Options",
+            "type": "integer"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          },
+          "section": {
+            "title": "Section",
+            "type": "string"
+          },
+          "sensitive": {
+            "title": "Sensitive",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "legal",
+          "options",
+          "reason",
+          "required",
+          "section",
+          "sensitive",
+          "status",
+          "type",
+          "value"
+        ],
+        "title": "FormFieldOut",
+        "type": "object"
+      },
+      "FormPreviewOut": {
+        "properties": {
+          "blockers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/FormFieldOut"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "form": {
+            "additionalProperties": true,
+            "title": "Form",
+            "type": "object"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "blockers",
+          "fields",
+          "form",
+          "ready"
+        ],
+        "title": "FormPreviewOut",
+        "type": "object"
+      },
+      "FormStatusOut": {
+        "properties": {
+          "blocked_fields": {
+            "items": {
+              "$ref": "#/components/schemas/BlockedFieldOut"
+            },
+            "title": "Blocked Fields",
+            "type": "array"
+          },
+          "blockers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
+          "fields_filled": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fields Filled"
+          },
+          "fields_required": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fields Required"
+          },
+          "fields_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fields Total"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "state": {
+            "enum": [
+              "no_application",
+              "not_checked",
+              "validated",
+              "unavailable",
+              "blocked",
+              "in_progress"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "blocked_fields",
+          "blockers",
+          "fields_filled",
+          "fields_required",
+          "fields_total",
+          "last_error",
+          "source",
+          "state",
+          "warnings"
+        ],
+        "title": "FormStatusOut",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthOut": {
+        "properties": {
+          "ai": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai"
+          },
+          "allow_live_submission": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow Live Submission"
+          },
+          "auth": {
+            "title": "Auth",
+            "type": "string"
+          },
+          "automation_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Automation Enabled"
+          },
+          "continuous_run_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Continuous Run Enabled"
+          },
+          "flags": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "boolean"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flags"
+          },
+          "live_submission_locked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Live Submission Locked"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "open_review_tasks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Open Review Tasks"
+          },
+          "resume_loaded": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Loaded"
+          },
+          "submissions_today": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submissions Today"
+          },
+          "unattended_allowed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unattended Allowed"
+          },
+          "unattended_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unattended Reason"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "version",
+          "auth"
+        ],
+        "title": "HealthOut",
+        "type": "object"
+      },
+      "HistoryDayOut": {
+        "properties": {
+          "cycles": {
+            "title": "Cycles",
+            "type": "integer"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "discovered": {
+            "title": "Discovered",
+            "type": "integer"
+          },
+          "dry_runs": {
+            "title": "Dry Runs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cycles",
+          "date",
+          "discovered",
+          "dry_runs"
+        ],
+        "title": "HistoryDayOut",
+        "type": "object"
+      },
+      "JobApplicationOut": {
+        "properties": {
+          "adapter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapter"
+          },
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "has_cover_letter": {
+            "title": "Has Cover Letter",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "maturity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maturity"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "adapter",
+          "attempts",
+          "has_cover_letter",
+          "id",
+          "last_error",
+          "maturity",
+          "mode",
+          "stage",
+          "updated_at"
+        ],
+        "title": "JobApplicationOut",
+        "type": "object"
+      },
+      "JobDetailOut": {
+        "properties": {
+          "application": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobApplicationOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "application_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Application Id"
+          },
+          "application_stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Application Stage"
+          },
+          "company": {
+            "title": "Company",
+            "type": "string"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecisionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "discovered_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discovered At"
+          },
+          "eligible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eligible"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/EventOut"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "form_status": {
+            "$ref": "#/components/schemas/FormStatusOut"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "liveness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Liveness"
+          },
+          "location": {
+            "title": "Location",
+            "type": "string"
+          },
+          "open_review_tasks": {
+            "default": 0,
+            "title": "Open Review Tasks",
+            "type": "integer"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "remote": {
+            "title": "Remote",
+            "type": "boolean"
+          },
+          "review_tasks": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewTaskOut"
+            },
+            "title": "Review Tasks",
+            "type": "array"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "scores": {
+            "$ref": "#/components/schemas/ScoresOut"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "application",
+          "application_id",
+          "application_stage",
+          "company",
+          "decision",
+          "description",
+          "discovered_at",
+          "eligible",
+          "events",
+          "form_status",
+          "id",
+          "liveness",
+          "location",
+          "open_review_tasks",
+          "platform",
+          "reason",
+          "remote",
+          "review_tasks",
+          "score",
+          "scores",
+          "stage",
+          "title",
+          "url"
+        ],
+        "title": "JobDetailOut",
+        "type": "object"
+      },
+      "JobOut": {
+        "properties": {
+          "application_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Application Id"
+          },
+          "application_stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Application Stage"
+          },
+          "company": {
+            "title": "Company",
+            "type": "string"
+          },
+          "discovered_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discovered At"
+          },
+          "eligible": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eligible"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "location": {
+            "title": "Location",
+            "type": "string"
+          },
+          "open_review_tasks": {
+            "default": 0,
+            "title": "Open Review Tasks",
+            "type": "integer"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "remote": {
+            "title": "Remote",
+            "type": "boolean"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "application_id",
+          "application_stage",
+          "company",
+          "discovered_at",
+          "eligible",
+          "id",
+          "location",
+          "open_review_tasks",
+          "platform",
+          "reason",
+          "remote",
+          "score",
+          "stage",
+          "title",
+          "url"
+        ],
+        "title": "JobOut",
+        "type": "object"
+      },
+      "JobsSummaryOut": {
+        "properties": {
+          "by_stage": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Stage",
+            "type": "object"
+          },
+          "discovered_today": {
+            "title": "Discovered Today",
+            "type": "integer"
+          },
+          "rejected": {
+            "title": "Rejected",
+            "type": "integer"
+          },
+          "scored": {
+            "title": "Scored",
+            "type": "integer"
+          },
+          "shortlisted": {
+            "title": "Shortlisted",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "by_stage",
+          "discovered_today",
+          "rejected",
+          "scored",
+          "shortlisted",
+          "total"
+        ],
+        "title": "JobsSummaryOut",
+        "type": "object"
+      },
+      "KillSwitchIn": {
+        "properties": {
+          "confirm": {
+            "default": false,
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "engaged": {
+            "title": "Engaged",
+            "type": "boolean"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "engaged"
+        ],
+        "title": "KillSwitchIn",
+        "type": "object"
+      },
+      "KillSwitchOut": {
+        "properties": {
+          "engaged": {
+            "title": "Engaged",
+            "type": "boolean"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "engaged",
+          "note",
+          "updated_at"
+        ],
+        "title": "KillSwitchOut",
+        "type": "object"
+      },
+      "LimitsOut": {
+        "properties": {
+          "cycle_max_dry_runs": {
+            "title": "Cycle Max Dry Runs",
+            "type": "integer"
+          },
+          "cycle_max_prepare": {
+            "title": "Cycle Max Prepare",
+            "type": "integer"
+          },
+          "cycle_max_score": {
+            "title": "Cycle Max Score",
+            "type": "integer"
+          },
+          "max_applications_per_day": {
+            "title": "Max Applications Per Day",
+            "type": "integer"
+          },
+          "max_dry_runs_per_day": {
+            "title": "Max Dry Runs Per Day",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cycle_max_dry_runs",
+          "cycle_max_prepare",
+          "cycle_max_score",
+          "max_applications_per_day",
+          "max_dry_runs_per_day"
+        ],
+        "title": "LimitsOut",
+        "type": "object"
+      },
+      "LiveSubmissionOut": {
+        "properties": {
+          "env_allow_live_submission": {
+            "title": "Env Allow Live Submission",
+            "type": "boolean"
+          },
+          "locked": {
+            "const": true,
+            "title": "Locked",
+            "type": "boolean"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "env_allow_live_submission",
+          "locked",
+          "reason"
+        ],
+        "title": "LiveSubmissionOut",
+        "type": "object"
+      },
+      "NoteIn": {
+        "properties": {
+          "note": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "title": "NoteIn",
+        "type": "object"
+      },
+      "QuietHoursOut": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "end": {
+            "title": "End",
+            "type": "string"
+          },
+          "start": {
+            "title": "Start",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "active",
+          "end",
+          "start",
+          "timezone"
+        ],
+        "title": "QuietHoursOut",
+        "type": "object"
+      },
+      "ResumeFactsIn": {
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "ResumeFactsIn",
+        "type": "object"
+      },
+      "ReviewActionOut": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "application_stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Application Stage"
+          },
+          "job_stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Stage"
+          },
+          "live_submission_locked": {
+            "const": true,
+            "title": "Live Submission Locked",
+            "type": "boolean"
+          },
+          "submitted": {
+            "const": false,
+            "title": "Submitted",
+            "type": "boolean"
+          },
+          "task": {
+            "$ref": "#/components/schemas/ReviewTaskOut"
+          }
+        },
+        "required": [
+          "action",
+          "application_stage",
+          "job_stage",
+          "live_submission_locked",
+          "submitted",
+          "task"
+        ],
+        "title": "ReviewActionOut",
+        "type": "object"
+      },
+      "ReviewApplicationOut": {
+        "properties": {
+          "adapter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapter"
+          },
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "has_materials": {
+            "title": "Has Materials",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "maturity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maturity"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "adapter",
+          "attempts",
+          "has_materials",
+          "id",
+          "last_error",
+          "maturity",
+          "mode",
+          "stage"
+        ],
+        "title": "ReviewApplicationOut",
+        "type": "object"
+      },
+      "ReviewJobOut": {
+        "properties": {
+          "company": {
+            "title": "Company",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "location": {
+            "title": "Location",
+            "type": "string"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "company",
+          "id",
+          "location",
+          "platform",
+          "score",
+          "stage",
+          "title",
+          "url"
+        ],
+        "title": "ReviewJobOut",
+        "type": "object"
+      },
+      "ReviewResolveIn": {
+        "properties": {
+          "resolution": {
+            "default": "resolved",
+            "enum": [
+              "resolved",
+              "dismissed"
+            ],
+            "title": "Resolution",
+            "type": "string"
+          }
+        },
+        "title": "ReviewResolveIn",
+        "type": "object"
+      },
+      "ReviewSummaryOut": {
+        "properties": {
+          "closed_total": {
+            "title": "Closed Total",
+            "type": "integer"
+          },
+          "open": {
+            "title": "Open",
+            "type": "integer"
+          },
+          "open_by_reason": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Open By Reason",
+            "type": "object"
+          }
+        },
+        "required": [
+          "closed_total",
+          "open",
+          "open_by_reason"
+        ],
+        "title": "ReviewSummaryOut",
+        "type": "object"
+      },
+      "ReviewTaskDetailOut": {
+        "properties": {
+          "actions": {
+            "items": {
+              "enum": [
+                "approve",
+                "reject",
+                "resolve"
+              ],
+              "type": "string"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "application": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewApplicationOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "application_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Application Id"
+          },
+          "approve_effect": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approve Effect"
+          },
+          "blocked_fields": {
+            "items": {
+              "$ref": "#/components/schemas/BlockedFieldOut"
+            },
+            "title": "Blocked Fields",
+            "type": "array"
+          },
+          "company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewJobOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "job_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Title"
+          },
+          "live_submission_locked": {
+            "const": true,
+            "title": "Live Submission Locked",
+            "type": "boolean"
+          },
+          "reason_code": {
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "actions",
+          "application",
+          "application_id",
+          "approve_effect",
+          "blocked_fields",
+          "company",
+          "created_at",
+          "detail",
+          "id",
+          "job",
+          "job_id",
+          "job_title",
+          "live_submission_locked",
+          "reason_code",
+          "resolved_at",
+          "status",
+          "title",
+          "url"
+        ],
+        "title": "ReviewTaskDetailOut",
+        "type": "object"
+      },
+      "ReviewTaskOut": {
+        "properties": {
+          "application_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Application Id"
+          },
+          "company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "job_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Title"
+          },
+          "reason_code": {
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "application_id",
+          "company",
+          "created_at",
+          "detail",
+          "id",
+          "job_id",
+          "job_title",
+          "reason_code",
+          "resolved_at",
+          "status",
+          "title",
+          "url"
+        ],
+        "title": "ReviewTaskOut",
+        "type": "object"
+      },
+      "RunCycleOut": {
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "started": {
+            "title": "Started",
+            "type": "boolean"
+          },
+          "status_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Url"
+          }
+        },
+        "required": [
+          "reason",
+          "started",
+          "status_url"
+        ],
+        "title": "RunCycleOut",
+        "type": "object"
+      },
+      "SchedulerStatusOut": {
+        "properties": {
+          "automation_enabled": {
+            "title": "Automation Enabled",
+            "type": "boolean"
+          },
+          "backup": {
+            "$ref": "#/components/schemas/BackupStatusOut"
+          },
+          "continuous_run_enabled": {
+            "title": "Continuous Run Enabled",
+            "type": "boolean"
+          },
+          "current_cycle_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Cycle Id"
+          },
+          "cycle_in_progress": {
+            "title": "Cycle In Progress",
+            "type": "boolean"
+          },
+          "interval_minutes": {
+            "title": "Interval Minutes",
+            "type": "integer"
+          },
+          "kill_switch": {
+            "title": "Kill Switch",
+            "type": "boolean"
+          },
+          "last_cycle": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CycleOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limits": {
+            "$ref": "#/components/schemas/LimitsOut"
+          },
+          "live_submission": {
+            "title": "Live Submission",
+            "type": "string"
+          },
+          "next_run_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run At"
+          },
+          "paused": {
+            "title": "Paused",
+            "type": "boolean"
+          },
+          "quiet_hours": {
+            "$ref": "#/components/schemas/QuietHoursOut"
+          },
+          "scheduler_thread_alive": {
+            "title": "Scheduler Thread Alive",
+            "type": "boolean"
+          },
+          "today": {
+            "$ref": "#/components/schemas/TodayOut"
+          }
+        },
+        "required": [
+          "automation_enabled",
+          "backup",
+          "continuous_run_enabled",
+          "current_cycle_id",
+          "cycle_in_progress",
+          "interval_minutes",
+          "kill_switch",
+          "last_cycle",
+          "limits",
+          "live_submission",
+          "next_run_at",
+          "paused",
+          "quiet_hours",
+          "scheduler_thread_alive",
+          "today"
+        ],
+        "title": "SchedulerStatusOut",
+        "type": "object"
+      },
+      "ScoresOut": {
+        "properties": {
+          "ai": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai"
+          },
+          "deterministic": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deterministic"
+          },
+          "final": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final"
+          }
+        },
+        "required": [
+          "ai",
+          "deterministic",
+          "final"
+        ],
+        "title": "ScoresOut",
+        "type": "object"
+      },
+      "SettingsOut": {
+        "properties": {
+          "application_mode": {
+            "title": "Application Mode",
+            "type": "string"
+          },
+          "auth_mode": {
+            "title": "Auth Mode",
+            "type": "string"
+          },
+          "automation_enabled": {
+            "title": "Automation Enabled",
+            "type": "boolean"
+          },
+          "backup_interval_hours": {
+            "title": "Backup Interval Hours",
+            "type": "integer"
+          },
+          "backup_retention": {
+            "title": "Backup Retention",
+            "type": "integer"
+          },
+          "blacklisted_companies": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blacklisted Companies",
+            "type": "array"
+          },
+          "continuous_run_enabled": {
+            "title": "Continuous Run Enabled",
+            "type": "boolean"
+          },
+          "cycle_interval_minutes": {
+            "title": "Cycle Interval Minutes",
+            "type": "integer"
+          },
+          "cycle_max_dry_runs": {
+            "title": "Cycle Max Dry Runs",
+            "type": "integer"
+          },
+          "cycle_max_prepare": {
+            "title": "Cycle Max Prepare",
+            "type": "integer"
+          },
+          "cycle_max_score": {
+            "title": "Cycle Max Score",
+            "type": "integer"
+          },
+          "editable": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Editable",
+            "type": "array"
+          },
+          "excluded_locations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Excluded Locations",
+            "type": "array"
+          },
+          "excluded_titles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Excluded Titles",
+            "type": "array"
+          },
+          "greenhouse_browser_verify": {
+            "title": "Greenhouse Browser Verify",
+            "type": "boolean"
+          },
+          "live_submission": {
+            "$ref": "#/components/schemas/LiveSubmissionOut"
+          },
+          "llm_fast_model": {
+            "title": "Llm Fast Model",
+            "type": "string"
+          },
+          "llm_provider": {
+            "title": "Llm Provider",
+            "type": "string"
+          },
+          "llm_quality_model": {
+            "title": "Llm Quality Model",
+            "type": "string"
+          },
+          "max_applications_per_day": {
+            "title": "Max Applications Per Day",
+            "type": "integer"
+          },
+          "max_dry_runs_per_day": {
+            "title": "Max Dry Runs Per Day",
+            "type": "integer"
+          },
+          "min_match_score": {
+            "title": "Min Match Score",
+            "type": "integer"
+          },
+          "overridden": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Overridden",
+            "type": "array"
+          },
+          "quiet_hours_end": {
+            "title": "Quiet Hours End",
+            "type": "string"
+          },
+          "quiet_hours_start": {
+            "title": "Quiet Hours Start",
+            "type": "string"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SourcesOut"
+          },
+          "target_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Target Keywords",
+            "type": "array"
+          },
+          "target_locations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Target Locations",
+            "type": "array"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "application_mode",
+          "auth_mode",
+          "automation_enabled",
+          "backup_interval_hours",
+          "backup_retention",
+          "blacklisted_companies",
+          "continuous_run_enabled",
+          "cycle_interval_minutes",
+          "cycle_max_dry_runs",
+          "cycle_max_prepare",
+          "cycle_max_score",
+          "editable",
+          "excluded_locations",
+          "excluded_titles",
+          "greenhouse_browser_verify",
+          "live_submission",
+          "llm_fast_model",
+          "llm_provider",
+          "llm_quality_model",
+          "max_applications_per_day",
+          "max_dry_runs_per_day",
+          "min_match_score",
+          "overridden",
+          "quiet_hours_end",
+          "quiet_hours_start",
+          "sources",
+          "target_keywords",
+          "target_locations",
+          "timezone"
+        ],
+        "title": "SettingsOut",
+        "type": "object"
+      },
+      "SettingsPatch": {
+        "additionalProperties": false,
+        "description": "The only settings the API may change. Anything else is a 422.",
+        "properties": {
+          "automation_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Automation Enabled"
+          },
+          "blacklisted_companies": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blacklisted Companies"
+          },
+          "cycle_interval_minutes": {
+            "anyOf": [
+              {
+                "maximum": 1440.0,
+                "minimum": 5.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cycle Interval Minutes"
+          },
+          "cycle_max_dry_runs": {
+            "anyOf": [
+              {
+                "maximum": 20.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cycle Max Dry Runs"
+          },
+          "cycle_max_prepare": {
+            "anyOf": [
+              {
+                "maximum": 20.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cycle Max Prepare"
+          },
+          "cycle_max_score": {
+            "anyOf": [
+              {
+                "maximum": 500.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cycle Max Score"
+          },
+          "excluded_locations": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded Locations"
+          },
+          "excluded_titles": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded Titles"
+          },
+          "max_applications_per_day": {
+            "anyOf": [
+              {
+                "maximum": 50.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Applications Per Day"
+          },
+          "max_dry_runs_per_day": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Dry Runs Per Day"
+          },
+          "min_match_score": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Match Score"
+          },
+          "quiet_hours_end": {
+            "anyOf": [
+              {
+                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Hours End"
+          },
+          "quiet_hours_start": {
+            "anyOf": [
+              {
+                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quiet Hours Start"
+          },
+          "target_keywords": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Keywords"
+          },
+          "target_locations": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Locations"
+          }
+        },
+        "title": "SettingsPatch",
+        "type": "object"
+      },
+      "SourcesOut": {
+        "properties": {
+          "generic_feeds": {
+            "title": "Generic Feeds",
+            "type": "integer"
+          },
+          "greenhouse_boards": {
+            "title": "Greenhouse Boards",
+            "type": "integer"
+          },
+          "lever_companies": {
+            "title": "Lever Companies",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "generic_feeds",
+          "greenhouse_boards",
+          "lever_companies"
+        ],
+        "title": "SourcesOut",
+        "type": "object"
+      },
+      "SubmissionSummaryOut": {
+        "properties": {
+          "daily_cap": {
+            "title": "Daily Cap",
+            "type": "integer"
+          },
+          "today": {
+            "title": "Today",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "daily_cap",
+          "today",
+          "total"
+        ],
+        "title": "SubmissionSummaryOut",
+        "type": "object"
+      },
+      "SummaryOut": {
+        "properties": {
+          "applications": {
+            "$ref": "#/components/schemas/ApplicationsSummaryOut"
+          },
+          "cycles": {
+            "$ref": "#/components/schemas/CyclesSummaryOut"
+          },
+          "dry_runs": {
+            "$ref": "#/components/schemas/DryRunSummaryOut"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryDayOut"
+            },
+            "title": "History",
+            "type": "array"
+          },
+          "jobs": {
+            "$ref": "#/components/schemas/JobsSummaryOut"
+          },
+          "live_submission_locked": {
+            "const": true,
+            "title": "Live Submission Locked",
+            "type": "boolean"
+          },
+          "review": {
+            "$ref": "#/components/schemas/ReviewSummaryOut"
+          },
+          "submissions": {
+            "$ref": "#/components/schemas/SubmissionSummaryOut"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "applications",
+          "cycles",
+          "dry_runs",
+          "generated_at",
+          "history",
+          "jobs",
+          "live_submission_locked",
+          "review",
+          "submissions",
+          "timezone"
+        ],
+        "title": "SummaryOut",
+        "type": "object"
+      },
+      "TodayOut": {
+        "properties": {
+          "dry_runs": {
+            "title": "Dry Runs",
+            "type": "integer"
+          },
+          "submissions": {
+            "title": "Submissions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "dry_runs",
+          "submissions"
+        ],
+        "title": "TodayOut",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "HunterXJob v2",
+    "version": "0.4.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "dashboard__get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Dashboard"
+      }
+    },
+    "/api/adapters": {
+      "get": {
+        "operationId": "adapters_api_adapters_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Adapters Api Adapters Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Adapters"
+      }
+    },
+    "/api/answers": {
+      "post": {
+        "operationId": "save_answer_api_answers_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnswerIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Save Answer Api Answers Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Answer"
+      }
+    },
+    "/api/applications": {
+      "get": {
+        "operationId": "list_applications_api_applications_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Applications Api Applications Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Applications"
+      }
+    },
+    "/api/applications/{application_id}/apply": {
+      "post": {
+        "operationId": "apply_api_applications__application_id__apply_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "title": "Application Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Apply Api Applications  Application Id  Apply Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Apply"
+      }
+    },
+    "/api/applications/{application_id}/approve": {
+      "post": {
+        "operationId": "approve_api_applications__application_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "title": "Application Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Approve Api Applications  Application Id  Approve Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve"
+      }
+    },
+    "/api/applications/{application_id}/generate": {
+      "post": {
+        "operationId": "generate_api_applications__application_id__generate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "title": "Application Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Generate Api Applications  Application Id  Generate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate"
+      }
+    },
+    "/api/auth/check": {
+      "get": {
+        "description": "Succeeds only with a valid API key (used by the app's connection test).",
+        "operationId": "auth_check_api_auth_check_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthCheckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Auth Check",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/backups": {
+      "get": {
+        "description": "Backup file names, sizes and times (newest first). Never the file contents.",
+        "operationId": "backups_api_backups_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Backups",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/discovery/run": {
+      "post": {
+        "operationId": "run_discovery_api_discovery_run_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Discovery Api Discovery Run Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Run Discovery"
+      }
+    },
+    "/api/events/{job_id}": {
+      "get": {
+        "operationId": "events_api_events__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Events Api Events  Job Id  Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Events"
+      }
+    },
+    "/api/flags": {
+      "get": {
+        "operationId": "flags_api_flags_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Flags Api Flags Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Flags",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/flags/{key}": {
+      "put": {
+        "description": "Set a known flag. Live-submission flags can only be turned off.",
+        "operationId": "update_flag_api_flags__key__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlagIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlagOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Flag",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/health": {
+      "get": {
+        "description": "Liveness probe. Open to everyone; details only for authenticated callers.",
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/api/jobs": {
+      "get": {
+        "operationId": "jobs_api_jobs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stage",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Stage"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/JobOut"
+                  },
+                  "title": "Response Jobs Api Jobs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Jobs",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/jobs/{job_id}": {
+      "get": {
+        "operationId": "job_api_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Job",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/jobs/{job_id}/form": {
+      "get": {
+        "description": "Fetch the job's real application form (read-only) and plan it against the vault.\n\nNo state changes, no evidence, nothing submitted. Values for sensitive or\nlegal fields are redacted in the response.",
+        "operationId": "job_form_api_jobs__job_id__form_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FormPreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Job Form",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/kill-switch": {
+      "get": {
+        "operationId": "kill_switch_api_kill_switch_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KillSwitchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Kill Switch",
+        "tags": [
+          "remote"
+        ]
+      },
+      "post": {
+        "description": "Engage (always allowed) or disengage (needs ``confirm: true``) the kill switch.",
+        "operationId": "set_kill_switch_api_kill_switch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KillSwitchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KillSwitchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Kill Switch",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/reports/summary": {
+      "get": {
+        "operationId": "reports_summary_api_reports_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SummaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Reports Summary",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/resume-facts": {
+      "put": {
+        "operationId": "save_resume_facts_api_resume_facts_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeFactsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Save Resume Facts Api Resume Facts Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Resume Facts"
+      }
+    },
+    "/api/review-tasks": {
+      "get": {
+        "operationId": "review_tasks_api_review_tasks_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": "open",
+              "enum": [
+                "open",
+                "closed",
+                "all"
+              ],
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReviewTaskOut"
+                  },
+                  "title": "Response Review Tasks Api Review Tasks Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Tasks",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/review-tasks/{task_id}": {
+      "get": {
+        "operationId": "review_task_api_review_tasks__task_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewTaskDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Task",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/review-tasks/{task_id}/approve": {
+      "post": {
+        "description": "Approve the job/application behind a task. Never applies or submits.",
+        "operationId": "approve_review_api_review_tasks__task_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewActionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Review",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/review-tasks/{task_id}/reject": {
+      "post": {
+        "operationId": "reject_review_api_review_tasks__task_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewActionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Review",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/review-tasks/{task_id}/resolve": {
+      "post": {
+        "description": "Close a task without changing the job (e.g. you handled it by hand).",
+        "operationId": "resolve_review_api_review_tasks__task_id__resolve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ReviewResolveIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewActionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve Review",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/scheduler/cycles": {
+      "get": {
+        "operationId": "scheduler_cycles_api_scheduler_cycles_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CycleOut"
+                  },
+                  "title": "Response Scheduler Cycles Api Scheduler Cycles Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scheduler Cycles",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/scheduler/pause": {
+      "post": {
+        "description": "Stop starting new scheduled cycles (a running cycle finishes).",
+        "operationId": "scheduler_pause_api_scheduler_pause_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/NoteIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulerStatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scheduler Pause",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/scheduler/resume": {
+      "post": {
+        "description": "Allow scheduled cycles again (the kill switch, if engaged, still blocks them).",
+        "operationId": "scheduler_resume_api_scheduler_resume_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/NoteIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulerStatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scheduler Resume",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/scheduler/run": {
+      "post": {
+        "description": "Start one cycle now in the background (same gates and caps as scheduled cycles).",
+        "operationId": "scheduler_run_api_scheduler_run_post",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunCycleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunCycleOut"
+                }
+              }
+            },
+            "description": "Conflict"
+          }
+        },
+        "summary": "Scheduler Run",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/scheduler/status": {
+      "get": {
+        "operationId": "scheduler_status_api_scheduler_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulerStatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Scheduler Status",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/scoring/run": {
+      "post": {
+        "operationId": "run_scoring_api_scoring_run_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Run Scoring Api Scoring Run Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Run Scoring"
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "operationId": "get_remote_settings_api_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Remote Settings",
+        "tags": [
+          "remote"
+        ]
+      },
+      "patch": {
+        "description": "Change the safe subset (caps, quiet hours, targeting, automation on/off).\n\nUnknown keys (including ``allow_live_submission``) are rejected with 422.",
+        "operationId": "patch_remote_settings_api_settings_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Remote Settings",
+        "tags": [
+          "remote"
+        ]
+      }
+    }
+  }
+}

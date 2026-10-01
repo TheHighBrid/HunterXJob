@@ -55,12 +55,13 @@ def test_pre_versioning_database_is_adopted_without_losing_data(tmp_path):
     assert not inspect(engine).has_table("scheduler_cycles")
 
     seen = []
-    assert run_migrations(engine, before=lambda pending: seen.append([m.version for m in pending])) == [1, 2]
-    assert seen == [[1, 2]]
+    assert run_migrations(engine, before=lambda pending: seen.append([m.version for m in pending])) == [1, 2, 3]
+    assert seen == [[1, 2, 3]]
     assert inspect(engine).has_table("scheduler_cycles")
+    assert inspect(engine).has_table("setting_overrides")
     with Session() as db:
         assert db.execute(select(Job.title)).scalar_one() == "Fraud Analyst"
-        assert [row.version for row in db.execute(select(SchemaVersion)).scalars()] == [1, 2]
+        assert [row.version for row in db.execute(select(SchemaVersion)).scalars()] == [1, 2, 3]
 
 
 def test_before_hook_not_called_when_up_to_date(tmp_path):

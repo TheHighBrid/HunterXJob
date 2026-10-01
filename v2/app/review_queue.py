@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Application, Job, PipelineStage, ReviewTask
@@ -62,18 +59,3 @@ def open_task(
     db.refresh(task)
     return task
 
-
-def list_open(db: Session) -> list[ReviewTask]:
-    return list(db.execute(select(ReviewTask).where(ReviewTask.status == "open").order_by(ReviewTask.created_at.desc())).scalars())
-
-
-def resolve_task(db: Session, task_id: str, resolution: str = "resolved") -> ReviewTask:
-    task = db.get(ReviewTask, task_id)
-    if task is None:
-        raise ValueError("review task not found")
-    task.status = resolution
-    task.resolved_at = datetime.now(UTC)
-    db.add(task)
-    db.commit()
-    db.refresh(task)
-    return task

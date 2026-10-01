@@ -275,11 +275,12 @@ case "$cmd" in
   cycle) py_cli cycle ;;
   api-key) py_cli api-key ;;
   version) py_cli version ;;
+  openapi) shift; py_cli openapi "$@" ;;
   stop) stop_app ;;
   restart) stop_app; start_app ;;
   status) status_app ;;
   doctor) doctor_app ;;
   test) .venv/bin/pytest -q ;;
   logs) tail -n 100 -f logs/api.log ;;
-  *) echo "Usage: ./hunterx {install|start|serve|stop|restart|status|doctor|test|logs|backup [--keep N]|backups|migrate|cycle|api-key|version|service-install|boot-install}" ;;
+  *) echo "Usage: ./hunterx {install|start|serve|stop|restart|status|doctor|test|logs|backup [--keep N]|backups|migrate|cycle|api-key|version|openapi [--check]|service-install|boot-install}" ;;
 esac

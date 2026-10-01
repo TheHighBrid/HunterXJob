@@ -308,6 +308,7 @@ def env_backups(env):
 
 def test_scheduler_api_reports_status_and_cycles(env, monkeypatch):
     from app import main
+    from app.runtime import get_runner
 
     key = "s" * 40
     runner = env["make_runner"]()
@@ -318,7 +319,7 @@ def test_scheduler_api_reports_status_and_cycles(env, monkeypatch):
         with Session() as session:
             yield session
 
-    monkeypatch.setattr(main, "runner", runner)
+    main.app.dependency_overrides[get_runner] = lambda: runner
     main.app.dependency_overrides[main.get_db] = _get_db
     main.app.dependency_overrides[get_settings] = lambda: Settings(_env_file=None, api_key=key)
     try:
