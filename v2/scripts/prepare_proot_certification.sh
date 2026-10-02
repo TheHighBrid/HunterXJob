@@ -1,17 +1,63 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 mkdir -p data logs run
+
+LOG_FILE="$ROOT/logs/prepare-certification-latest.log"
+: > "$LOG_FILE"
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+on_error() {
+  local code=$?
+  local line="${BASH_LINENO[0]:-unknown}"
+  echo
+  echo "Certification preparation failed (exit ${code}, line ${line})."
+  echo "Persistent log: $LOG_FILE"
+  exit "$code"
+}
+trap on_error ERR
+
+echo "HunterXJob Greenhouse certification preparation"
+echo "Runtime root: $ROOT"
+echo "Log: $LOG_FILE"
 
 if ! command -v apt-get >/dev/null 2>&1; then
   echo "This preparation command is for the Ubuntu/Debian PRoot runtime (apt-get not found)." >&2
   exit 2
 fi
 
+# Surface resource pressure before Android kills the PRoot/XFCE process. The
+# setup is allowed to continue above 1 GiB free, but warns below 3 GiB because
+# Python wheels plus Playwright Chromium can temporarily consume substantial
+# writable storage. Android root is never required.
+available_kb="$(df -Pk "$ROOT" | awk 'NR==2 {print $4}')"
+available_mb=$((available_kb / 1024))
+echo "Writable space available: ${available_mb} MiB"
+if [ "$available_kb" -lt 1048576 ]; then
+  echo "Less than 1 GiB is free on the filesystem containing HunterXJob." >&2
+  echo "Stopping before Chromium/Python installation can destabilize the Android session." >&2
+  exit 3
+elif [ "$available_kb" -lt 3145728 ]; then
+  echo "WARNING: less than 3 GiB is free. Setup will minimize caches and reuse existing installs."
+fi
+
+if [ -r /proc/meminfo ]; then
+  mem_available_kb="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
+  if [ -n "${mem_available_kb:-}" ]; then
+    mem_available_mb=$((mem_available_kb / 1024))
+    echo "Memory available: ${mem_available_mb} MiB"
+    if [ "$mem_available_kb" -lt 786432 ]; then
+      echo "WARNING: less than 768 MiB RAM is currently available. Close heavy Android/XFCE apps before browser certification."
+    fi
+  fi
+fi
+
 export DEBIAN_FRONTEND=noninteractive
-export PATH="$HOME/.local/bin:$PATH"
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+export PIP_NO_CACHE_DIR=1
+export UV_NO_CACHE=1
 
 # Android itself does not need to be rooted. When the current PRoot session is
 # uid 0, apt-get is running under PRoot's emulated root identity. When it is a
@@ -52,23 +98,35 @@ ensure_uv() {
   fi
 }
 
-rm -rf .venv
+venv_is_312() {
+  [ -x .venv/bin/python ] && \
+    .venv/bin/python -c 'import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 12) else 1)' >/dev/null 2>&1
+}
 
-if have_python_312; then
-  # python3.12-venv may be absent in a non-root PRoot session. Prefer stdlib
-  # venv, then fall back to uv which does not require apt or sudo.
-  if ! python3.12 -m venv .venv >/dev/null 2>&1; then
-    ensure_uv
-    uv venv --python "$(command -v python3.12)" --seed .venv
-  fi
+# Resume a partially completed setup instead of deleting a valid environment on
+# every retry. Only replace .venv when it is missing or uses the wrong Python.
+if venv_is_312; then
+  echo "Reusing existing Python 3.12 virtual environment."
 else
-  echo "Python 3.12 is not installed system-wide; installing it in user space with uv."
-  ensure_uv
-  uv python install 3.12
-  uv venv --python 3.12 --seed .venv
+  if [ -d .venv ]; then
+    echo "Existing .venv is incomplete or not Python 3.12; rebuilding it once."
+    rm -rf .venv
+  fi
+
+  if have_python_312; then
+    if ! python3.12 -m venv .venv >/dev/null 2>&1; then
+      ensure_uv
+      uv venv --python "$(command -v python3.12)" --seed .venv
+    fi
+  else
+    echo "Python 3.12 is not installed system-wide; installing it in user space with uv."
+    ensure_uv
+    uv python install 3.12
+    uv venv --python 3.12 --seed .venv
+  fi
 fi
 
-if ! .venv/bin/python -c 'import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 12) else 1)' >/dev/null 2>&1; then
+if ! venv_is_312; then
   echo "Python 3.12 is required for the certification runtime." >&2
   exit 2
 fi
@@ -87,25 +145,32 @@ if ! grep -Eq '^API_KEY=.{32,}$' .env; then
 fi
 chmod 600 .env
 
-# `--with-deps` asks Playwright to elevate through sudo/apt on Linux. That is
-# wrong for a non-root Android PRoot session and can hit Termux's real-root
-# sudo wrapper. Download Chromium only; the browser preflight below verifies
-# whether the existing Ubuntu userspace already has the required libraries.
-.venv/bin/python -m playwright install chromium
+chromium_path="$(.venv/bin/python - <<'PY'
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    print(p.chromium.executable_path)
+PY
+)"
+
+if [ -x "$chromium_path" ]; then
+  echo "Reusing existing Playwright Chromium: $chromium_path"
+else
+  echo "Installing Playwright Chromium without OS dependency elevation."
+  .venv/bin/python -m playwright install chromium
+fi
 
 if ! .venv/bin/python - <<'PY'
 from playwright.sync_api import sync_playwright
 
 with sync_playwright() as playwright:
-    browser = playwright.chromium.launch(headless=True)
+    browser = playwright.chromium.launch(headless=True, args=["--disable-dev-shm-usage"])
     browser.close()
 PY
 then
   cat >&2 <<'EOF'
-Chromium downloaded but could not launch with the libraries currently present in this Ubuntu PRoot.
-Android root is NOT required. If OS libraries are missing, open the Ubuntu PRoot using its default
-emulated root user, install the missing Ubuntu packages there, then rerun this script. Do not use
-Termux/Android sudo or root the device.
+Chromium is installed but could not launch with the libraries currently present in this Ubuntu PRoot.
+Android root is NOT required. The complete failure is preserved in logs/prepare-certification-latest.log.
+Do not use Termux/Android sudo and do not root the device.
 EOF
   exit 2
 fi
@@ -155,5 +220,6 @@ chmod 600 .env
 
 echo
 echo "Certification runtime is prepared in read-only dry-run mode."
+echo "Persistent setup log: $LOG_FILE"
 echo "Next gate: load/verify the real profile, then run:"
 echo "  .venv/bin/python scripts/greenhouse_certify.py"
