@@ -30,13 +30,14 @@ bash scripts/prepare_proot_certification.sh
 The preparation command is deliberately opinionated for certification:
 
 - installs and uses Python 3.12, matching CI;
-- creates a fresh `.venv`;
+- creates or reuses a valid `.venv`;
 - installs HunterXJob test/browser dependencies and Playwright Chromium;
 - keeps `APPLICATION_MODE=dry_run`;
 - forces `ALLOW_LIVE_SUBMISSION=false` and `CONTINUOUS_RUN_ENABLED=false`;
 - enables Greenhouse browser verification and leaves browser fallback off;
 - fills the starter Greenhouse board list only when no Greenhouse boards are configured;
-- migrates the database and runs `./hunterx doctor`.
+- migrates the database and runs `./hunterx doctor`;
+- logs the complete preparation run to `logs/prepare-certification-latest.log` and fails early on critically low disk space.
 
 It does not enable automatic submission, submit an application, or create a cloud account.
 
@@ -62,7 +63,33 @@ Defaults:
 - the real verified profile and scoped answer policies from SQLite;
 - Playwright Chromium rendering for every selected form;
 - no typing, clicking, uploading, POSTing, or submitting;
-- report written to `data/certification/greenhouse-<UTC timestamp>.json`.
+- final report written to `data/certification/greenhouse-<UTC timestamp>.json`;
+- in-progress state written atomically to `data/certification/greenhouse-in-progress.json` after every posting.
+
+### Crash-safe resume
+
+The certification runner is resumable by default. If Android kills Ubuntu PRoot, Chromium crashes, the terminal closes, or the Python process is interrupted after some forms have completed, run the exact same command again:
+
+```bash
+.venv/bin/python scripts/greenhouse_certify.py
+```
+
+The runner reloads the checkpoint, preserves the exact original posting sample and order, skips already completed forms, and continues from the first unfinished posting. A crash can therefore lose at most the single posting that was executing when the process died, not the entire certification session.
+
+A checkpoint is accepted only when all of these still match the run that created it:
+
+- Greenhouse board set;
+- requested run count and minimum board count;
+- verified profile and stored answer-policy state, represented only by a SHA-256 fingerprint in the checkpoint/report;
+- certification-relevant HunterXJob code, represented by a SHA-256 fingerprint of the runner and the form/profile modules it depends on.
+
+If any of those changed, the runner fails closed instead of mixing evidence from different configurations. Start a new certification sample explicitly with:
+
+```bash
+.venv/bin/python scripts/greenhouse_certify.py --restart
+```
+
+A passing gate deletes the in-progress checkpoint. A failing gate keeps it for inspection. JSON writes use a temporary file followed by an atomic replace so a process kill during checkpoint writing cannot destroy the previous valid checkpoint.
 
 A `needs_review` plan counts when its rendered form was successfully browser-verified. Certification is testing that HunterXJob understands the live form and fails closed when it cannot safely answer a field. A fetch failure or a run without DOM verification does not count.
 
@@ -72,6 +99,12 @@ Optional overrides:
 
 ```bash
 .venv/bin/python scripts/greenhouse_certify.py --boards d2l,geotab,faire,later,hootsuite --count 30 --min-boards 5
+```
+
+A custom checkpoint location is also available when needed:
+
+```bash
+.venv/bin/python scripts/greenhouse_certify.py --checkpoint /path/to/greenhouse-in-progress.json
 ```
 
 ## Pass gate
