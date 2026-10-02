@@ -9,15 +9,14 @@ outcome when the rendered form was inspected and the blocker was surfaced.
 
 Progress is checkpointed after every posting so Android/PRoot process death does
 not discard completed browser-verified runs. A checkpoint is resumed only when
-the certification parameters, verified profile/answer policies, and repository
-revision still match the original run.
+the certification parameters, verified profile/answer policies, and relevant
+certification code still match the original run.
 """
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
-import subprocess
 import sys
 from collections import Counter
 from datetime import UTC, datetime
@@ -105,22 +104,26 @@ def _profile_state() -> tuple[list[str], int, int, str]:
 
 
 def _code_revision() -> str:
-    repo_root = Path(__file__).resolve().parents[2]
-    try:
-        completed = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=repo_root,
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        revision = completed.stdout.strip()
-        if revision:
-            return revision
-    except (OSError, subprocess.SubprocessError):
-        pass
-    return "script:" + hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    """Fingerprint code that can change certification interpretation or evidence."""
+    v2_root = Path(__file__).resolve().parents[1]
+    relevant_paths = (
+        Path(__file__).resolve(),
+        v2_root / "app" / "answer_vault.py",
+        v2_root / "app" / "certification.py",
+        v2_root / "app" / "form_engine.py",
+        v2_root / "app" / "greenhouse_browser.py",
+        v2_root / "app" / "greenhouse_form.py",
+        v2_root / "app" / "profile.py",
+        v2_root / "app" / "vault_store.py",
+    )
+    digest = hashlib.sha256()
+    for path in relevant_paths:
+        relative = path.relative_to(v2_root)
+        digest.update(str(relative).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return "files:" + digest.hexdigest()
 
 
 def _browser_preflight() -> None:
@@ -223,7 +226,9 @@ def _posting_key(record: JobRecord) -> str:
 
 
 def _result_key(result: dict[str, object]) -> str:
-    return f"{str(result.get('board') or '').casefold()}:{str(result.get('job_id') or '')}"
+    board = str(result.get("board") or "").casefold()
+    job_id = result.get("job_id") or ""
+    return f"{board}:{job_id!s}"
 
 
 def _checkpoint_config(
@@ -257,7 +262,9 @@ def _load_checkpoint(
     if not isinstance(payload, dict) or payload.get("schema") != CHECKPOINT_SCHEMA or payload.get("kind") != CHECKPOINT_KIND:
         raise RuntimeError("checkpoint format is not recognized; rerun with --restart")
     if payload.get("config") != expected_config:
-        raise RuntimeError("checkpoint does not match the current profile, answer policies, code, or gate settings; rerun with --restart")
+        raise RuntimeError(
+            "checkpoint does not match the current profile, answer policies, code, or gate settings; rerun with --restart"
+        )
 
     raw_selection = payload.get("selection")
     raw_results = payload.get("results")
@@ -282,16 +289,14 @@ def _load_checkpoint(
 
 
 def _resume_selection(records_by_board: dict[str, list[JobRecord]], saved_keys: list[str]) -> list[JobRecord]:
-    available = {
-        _posting_key(record): record
-        for records in records_by_board.values()
-        for record in records
-    }
+    available = {_posting_key(record): record for records in records_by_board.values() for record in records}
     missing = [key for key in saved_keys if key not in available]
     if missing:
         preview = ", ".join(missing[:3])
         suffix = "..." if len(missing) > 3 else ""
-        raise RuntimeError(f"saved certification postings are no longer discoverable ({preview}{suffix}); rerun with --restart")
+        raise RuntimeError(
+            f"saved certification postings are no longer discoverable ({preview}{suffix}); rerun with --restart"
+        )
     return [available[key] for key in saved_keys]
 
 
