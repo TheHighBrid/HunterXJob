@@ -81,7 +81,7 @@ A checkpoint is accepted only when all of these still match the run that created
 - Greenhouse board set;
 - requested run count and minimum board count;
 - verified profile and stored answer-policy state, represented only by a SHA-256 fingerprint in the checkpoint/report;
-- checked-out HunterXJob Git revision.
+- certification-relevant HunterXJob code, represented by a SHA-256 fingerprint of the runner and the form/profile modules it depends on.
 
 If any of those changed, the runner fails closed instead of mixing evidence from different configurations. Start a new certification sample explicitly with:
 
