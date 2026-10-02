@@ -23,8 +23,56 @@ echo "HunterXJob Greenhouse certification preparation"
 echo "Runtime root: $ROOT"
 echo "Log: $LOG_FILE"
 
-if ! command -v apt-get >/dev/null 2>&1; then
-  echo "This preparation command is for the Ubuntu/Debian PRoot runtime (apt-get not found)." >&2
+# Termux also provides apt-get, so checking for apt-get alone does not prove
+# that this process is inside the Ubuntu PRoot. Native Termux uses Android's
+# bionic libc and its own Python/Rust toolchain, which cannot consume the Linux
+# Python/Playwright environment used for certification. If this script is
+# launched from Termux, cross into the existing Ubuntu PRoot automatically and
+# continue there as PRoot root. Android root is never required.
+is_native_termux() {
+  local apt_path
+  apt_path="$(command -v apt-get 2>/dev/null || true)"
+  case "$apt_path" in
+    /data/data/com.termux/files/usr/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+if is_native_termux; then
+  echo "Native Termux detected. Re-entering the certification setup inside Ubuntu PRoot."
+
+  if ! command -v proot-distro >/dev/null 2>&1; then
+    cat >&2 <<'EOF_TERMUX'
+HunterXJob certification requires the Ubuntu PRoot runtime for Python 3.12 and Playwright Chromium.
+The proot-distro command is not installed in Termux.
+Install proot-distro and an Ubuntu distro, then rerun this same preparation command.
+EOF_TERMUX
+    exit 2
+  fi
+
+  # Confirm the expected distro exists before replacing this process. This is a
+  # read-only probe and avoids turning a missing distro into a confusing nested
+  # shell error.
+  if ! proot-distro login ubuntu -- /bin/true >/dev/null 2>&1; then
+    cat >&2 <<'EOF_UBUNTU'
+The Ubuntu PRoot distro is not available under the alias "ubuntu".
+HunterXJob will not install a new distro automatically because that can consume substantial storage.
+Install or restore the Ubuntu PRoot distro, then rerun this same preparation command.
+EOF_UBUNTU
+    exit 2
+  fi
+
+  # proot-distro exposes the Termux home tree inside normal Linux guests, so
+  # the repository remains reachable at the same absolute path. Pass the path
+  # explicitly rather than assuming /root/HunterXJob.
+  exec proot-distro login ubuntu -- \
+    env HUNTERX_CERT_ROOT="$ROOT" \
+    bash -lc 'cd "$HUNTERX_CERT_ROOT" && exec bash scripts/prepare_proot_certification.sh'
+fi
+
+apt_path="$(command -v apt-get 2>/dev/null || true)"
+if [ -z "$apt_path" ] || [ "$apt_path" != "/usr/bin/apt-get" ]; then
+  echo "This preparation command requires the Ubuntu/Debian PRoot runtime (/usr/bin/apt-get)." >&2
   exit 2
 fi
 
@@ -61,13 +109,13 @@ export UV_NO_CACHE=1
 
 # Android itself does not need to be rooted. When the current PRoot session is
 # uid 0, apt-get is running under PRoot's emulated root identity. When it is a
-# regular PRoot user, never call Android/Termux sudo: bootstrap the Python
-# runtime in user space instead and leave OS packages untouched.
+# regular PRoot user, leave OS packages untouched and use a user-space Python
+# bootstrap instead.
 if [ "$(id -u)" -eq 0 ]; then
   apt-get update
   apt-get install -y ca-certificates curl git python3.12 python3.12-venv python3-pip
 else
-  echo "Non-root PRoot session detected; skipping apt/sudo. Android root is not required."
+  echo "Non-root Ubuntu/Debian PRoot session detected; skipping apt. Android root is not required."
 fi
 
 have_python_312() {
@@ -80,14 +128,17 @@ ensure_uv() {
     return 0
   fi
 
-  if command -v python3 >/dev/null 2>&1 && python3 -m pip --version >/dev/null 2>&1; then
-    python3 -m pip install --user --upgrade uv
-  elif command -v curl >/dev/null 2>&1; then
+  # Prefer Astral's prebuilt installer. `pip install uv` on native Termux has no
+  # compatible Android wheel and falls back to a large Rust source build, which
+  # eventually fails at the Android linker with a missing -lgcc.
+  if command -v curl >/dev/null 2>&1; then
     curl -LsSf https://astral.sh/uv/install.sh | sh
   elif command -v wget >/dev/null 2>&1; then
     wget -qO- https://astral.sh/uv/install.sh | sh
+  elif command -v python3 >/dev/null 2>&1 && python3 -m pip --version >/dev/null 2>&1; then
+    python3 -m pip install --user --upgrade uv
   else
-    echo "Need either Python+pip, curl, or wget to bootstrap user-space Python 3.12." >&2
+    echo "Need curl, wget, or Python+pip to bootstrap user-space Python 3.12." >&2
     exit 2
   fi
 
@@ -167,11 +218,11 @@ with sync_playwright() as playwright:
     browser.close()
 PY
 then
-  cat >&2 <<'EOF'
+  cat >&2 <<'EOF_CHROMIUM'
 Chromium is installed but could not launch with the libraries currently present in this Ubuntu PRoot.
 Android root is NOT required. The complete failure is preserved in logs/prepare-certification-latest.log.
 Do not use Termux/Android sudo and do not root the device.
-EOF
+EOF_CHROMIUM
   exit 2
 fi
 
