@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+mkdir -p data logs run
 
 if ! command -v apt-get >/dev/null 2>&1; then
   echo "This preparation command is for the Ubuntu/Debian PRoot runtime (apt-get not found)." >&2
@@ -29,8 +30,24 @@ if ! python3.12 -c 'import sys; raise SystemExit(0 if sys.version_info[:2] == (3
   exit 2
 fi
 
-HUNTERX_PYTHON=python3.12 ./hunterx install
+# Build the certification venv explicitly with 3.12. The generic installer also
+# supports newer Pythons, but certification must match the CI/runtime baseline.
+rm -rf .venv
+python3.12 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip wheel setuptools
 .venv/bin/pip install -e '.[browser,test]'
+
+[ -f .env ] || cp .env.example .env
+if ! grep -Eq '^API_KEY=.{32,}$' .env; then
+  generated_key="$(.venv/bin/python -m app.cli api-key)"
+  if grep -q '^API_KEY=' .env; then
+    sed -i "s|^API_KEY=.*|API_KEY=${generated_key}|" .env
+  else
+    printf '\nAPI_KEY=%s\n' "$generated_key" >> .env
+  fi
+fi
+chmod 600 .env
+
 .venv/bin/python -m playwright install --with-deps chromium
 
 .venv/bin/python - <<'PY'
@@ -73,8 +90,10 @@ env_path.write_text("\n".join(out) + "\n", encoding="utf-8")
 PY
 chmod 600 .env
 
+./hunterx migrate
 ./hunterx doctor
 
 echo
 echo "Certification runtime is prepared in read-only dry-run mode."
-echo "Next gate: load/verify the real profile, then run ./hunterx certify-greenhouse"
+echo "Next gate: load/verify the real profile, then run:"
+echo "  .venv/bin/python scripts/greenhouse_certify.py"
