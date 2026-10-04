@@ -377,7 +377,8 @@ def test_untrusted_session_reasons(network, submits, final, expected):
         assert fragment in reason
 
 
-def test_dry_run_ledger_binds_the_browser_trace_hash():
+def _seeded_dry_run():
+    """An in-memory DB with the fake answers and one fixture job/application at ready_to_apply."""
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     db = sessionmaker(bind=engine)()
@@ -392,13 +393,21 @@ def test_dry_run_ledger_binds_the_browser_trace_hash():
     application = Application(job_id=job.id, mode="dry_run", adapter_name="greenhouse")
     db.add(application)
     db.commit()
-    form = reconcile(parse_greenhouse_payload(load_fixture_json("d2l_7696196.json"), D2L), _snapshot(_evidence()))
+    return db, application
 
+
+def _dry_run(db, application, form):
     class Provider:
         def fetch(self, _job):
             return form
 
-    result = execute_apply(db, Settings(_env_file=None, automation_enabled=True), application.id, form_provider=Provider())
+    return execute_apply(db, Settings(_env_file=None, automation_enabled=True), application.id, form_provider=Provider())
+
+
+def test_dry_run_ledger_binds_the_browser_trace_hash():
+    db, application = _seeded_dry_run()
+    form = reconcile(parse_greenhouse_payload(load_fixture_json("d2l_7696196.json"), D2L), _snapshot(_evidence()))
+    result = _dry_run(db, application, form)
     assert result["status"] == "dry_run_complete"
     row = db.execute(select(SubmissionEvidence)).scalars().one()
     assert row.kind == "dry_run" and row.sufficient is False
@@ -413,30 +422,12 @@ def test_dry_run_ledger_binds_the_browser_trace_hash():
 
 def test_aborted_analytics_beacon_does_not_stop_a_production_dry_run():
     """A real page's analytics beacon (POST, aborted by the router) is recorded and warned, not fatal."""
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(engine)
-    db = sessionmaker(bind=engine)()
-    ensure_flags(db)
-    for key, value in gate.FAKE_ANSWERS.items():
-        upsert_answer(db, key=key, value=value, source="user", scope="global")
-    job = Job(source="greenhouse", external_id="7696196", title="Fixture", company="d2l", location="Toronto, Ontario",
-              url="https://job-boards.greenhouse.io/d2l/jobs/7696196", stage=PipelineStage.ready_to_apply.value,
-              platform="greenhouse")
-    db.add(job)
-    db.commit()
-    application = Application(job_id=job.id, mode="dry_run", adapter_name="greenhouse")
-    db.add(application)
-    db.commit()
+    db, application = _seeded_dry_run()
     beacon = {"method": "POST", "url": "https://www.google-analytics.com/g/collect", "resource_type": "ping",
               "action": "aborted"}
     evidence = _evidence(non_get_attempts=1, aborted=1, request_count=2, requests=[*_evidence()["requests"], beacon])
     form = reconcile(parse_greenhouse_payload(load_fixture_json("d2l_7696196.json"), D2L), _snapshot(evidence))
-
-    class Provider:
-        def fetch(self, _job):
-            return form
-
-    result = execute_apply(db, Settings(_env_file=None, automation_enabled=True), application.id, form_provider=Provider())
+    result = _dry_run(db, application, form)
     assert result["status"] == "dry_run_complete" and result["submitted"] is False
     assert any("all were aborted" in warning for warning in result["form"]["warnings"])
     assert browser_ledger_entry(result["form"])["non_get_attempts"] == 1
