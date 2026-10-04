@@ -124,10 +124,65 @@ def test_production_config_cannot_enable_the_loopback_origin(monkeypatch, tmp_pa
     assert settings.application_mode == "dry_run"
 
 
+@pytest.mark.parametrize("payload", [
+    {"fixture_origin": "http://127.0.0.1:8123"},
+    {"gate1_fixture_origin": "http://127.0.0.1:8123"},
+    {"greenhouse_api_base": "http://127.0.0.1:8123"},
+    {"browser_trace_dir": "traces"},
+])
+def test_phone_settings_api_cannot_enable_the_loopback_origin(tmp_path, payload):
+    from fastapi.testclient import TestClient
+    from sqlalchemy.pool import StaticPool
+
+    from app import main
+    from app.config import get_settings
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine, expire_on_commit=False)
+    settings = Settings(_env_file=None, api_key="g" * 40, backup_dir=str(tmp_path / "b"), materials_dir=str(tmp_path / "m"))
+
+    def _db():
+        with session() as db:
+            yield db
+
+    main.app.dependency_overrides[get_settings] = lambda: settings
+    main.app.dependency_overrides[main.get_db] = _db
+    try:
+        client = TestClient(main.app, client=("203.0.113.9", 50000))
+        response = client.patch("/api/settings", headers={"X-API-Key": "g" * 40}, json=payload)
+    finally:
+        main.app.dependency_overrides.clear()
+    assert response.status_code == 422
+    assert fixture_origin.active_origin() is None
+    assert D2L.api_url.startswith("https://boards-api.greenhouse.io/")
+
+
 def test_no_app_module_enables_the_loopback_origin():
     callers = [path.name for path in (V2 / "app").rglob("*.py")
                if "enable_for_gate1(" in path.read_text(encoding="utf-8") and path.name != "fixture_origin.py"]
     assert callers == []
+
+
+def test_app_code_only_ever_reads_the_loopback_origin():
+    """Parsed, not grepped: an alias or ``from`` import cannot reach enable_for_gate1 from app code either."""
+    import ast
+
+    users: dict[str, set[str]] = {}
+    for path in (V2 / "app").rglob("*.py"):
+        if path.name == "fixture_origin.py":
+            continue
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.ImportFrom) and (node.module or "").endswith("fixture_origin"):
+                users.setdefault(path.name, set()).update(f"from-import {alias.name}" for alias in node.names)
+            elif isinstance(node, ast.Import | ast.ImportFrom) and any(
+                    alias.name.endswith("fixture_origin") for alias in node.names):
+                users.setdefault(path.name, set()).add("import")
+            elif isinstance(node, ast.alias) and node.name == "fixture_origin" and node.asname:
+                users.setdefault(path.name, set()).add(f"alias {node.asname}")
+            elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "fixture_origin":
+                users.setdefault(path.name, set()).add(node.attr)
+    assert users == {"greenhouse_form.py": {"import", "active_origin"}}
 
 
 def test_app_code_never_attaches_to_an_external_browser():
