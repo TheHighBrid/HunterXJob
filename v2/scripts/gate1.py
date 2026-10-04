@@ -70,6 +70,7 @@ from gate1_checks import (
     run_checks,
     run_summary,
     still_running,
+    terminate,
 )
 
 SPAWN = multiprocessing.get_context("spawn")
@@ -324,6 +325,33 @@ def _child_entry(run_dir: str, variant: str, inject_leak: bool) -> None:
     (folder / "run.json").write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
 
 
+def supervise(child: Any, timeout: float, grace: float = 5.0) -> dict[str, Any]:
+    """Wait for a started run process; on timeout kill it *and* every descendant it started.
+
+    The parent samples the child's whole process tree while it runs, so even
+    Chromium (which Playwright starts in its own process group) and processes
+    reparented after a crash are found. Anything that outlives the child is an
+    orphan: it fails the run and is killed and reaped here.
+    """
+    with ProcessSampler(interval=0.1, pid=child.pid) as sampler:
+        child.join(timeout)
+        timed_out = child.is_alive()
+        if timed_out:
+            tree = live_descendants(child.pid)  # snapshot before killing the child breaks the tree
+            child.kill()
+            child.join(10)
+            terminate(tree)
+    seen = sampler.processes
+    deadline = time.monotonic() + grace
+    orphans = still_running(seen)
+    while orphans and not timed_out and time.monotonic() < deadline:
+        time.sleep(0.2)
+        orphans = still_running(seen)
+    survivors = terminate(orphans)
+    return {"timed_out": timed_out, "exit_code": child.exitcode, "descendants_seen": len(seen),
+            "orphans": orphans, "orphans_not_killed": survivors}
+
+
 def run_child(index: int, out: Path, variant: str, inject_leak: bool, timeout: float) -> dict[str, Any]:
     run_dir = (out / f"run-{index + 1}").resolve()
     shutil.rmtree(run_dir, ignore_errors=True)  # every run starts from an empty database and trace folder
@@ -332,19 +360,20 @@ def run_child(index: int, out: Path, variant: str, inject_leak: bool, timeout: f
     begin = time.monotonic()
     child = SPAWN.Process(target=_child_entry, args=(str(run_dir), variant, inject_leak), name=f"gate1-run-{index + 1}")
     child.start()
-    child.join(timeout)
-    if child.is_alive():
-        child.kill()
-        child.join(10)
-    returncode = child.exitcode
-    if not result_path.is_file():
+    supervision = supervise(child, timeout)
+    returncode = supervision["exit_code"]
+    if supervision["timed_out"] or not result_path.is_file():
         log = run_dir / "child.log"
-        return {"run": index + 1, "ok": False, "error": f"run process exited {returncode} without a result",
-                "log_tail": log.read_text(encoding="utf-8")[-4000:] if log.is_file() else "", "run_dir": str(run_dir)}
+        reason = f"timed out after {timeout:g}s" if supervision["timed_out"] else f"exited {returncode}"
+        return {"run": index + 1, "ok": False, "error": f"run process {reason} without a result",
+                "supervision": supervision, "run_dir": str(run_dir),
+                "log_tail": log.read_text(encoding="utf-8")[-4000:] if log.is_file() else ""}
     result = json.loads(result_path.read_text(encoding="utf-8"))
-    # Independent re-check after the run process is gone: no browser it started may survive it.
+    # Independent re-check after the run process is gone: no browser it started, and no other
+    # descendant the parent saw, may survive it (survivors are killed by supervise()).
     orphans = still_running(result.get("browser_processes") or [])
     result["checks"]["browser_gone_after_child_exit"] = {"ok": not orphans, "detail": {"orphans": orphans}}
+    result["checks"]["no_process_outlived_the_run"] = {"ok": not supervision["orphans"], "detail": supervision}
     result.update(run=index + 1, child_exit_code=returncode, wall_s=round(time.monotonic() - begin, 3),
                   run_dir=str(run_dir))
     result["ok"] = returncode == 0 and all(item["ok"] for item in result["checks"].values())

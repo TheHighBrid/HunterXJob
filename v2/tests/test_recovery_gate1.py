@@ -470,6 +470,30 @@ def test_process_leak_detection_sees_a_stray_child_and_its_exit():
     assert not [item for item in gate.live_descendants() if item["pid"] == proc.pid]
 
 
+def _detached_sleeper():
+    os.setsid()  # like Playwright's Chromium: its own process group, so killing the run's group misses it
+    time.sleep(120)
+
+
+def _run_that_hangs_with_a_grandchild():
+    grandchild = multiprocessing.get_context("spawn").Process(target=_detached_sleeper)
+    grandchild.start()
+    time.sleep(120)
+
+
+def test_a_timed_out_run_is_killed_with_every_descendant():
+    child = multiprocessing.get_context("spawn").Process(target=_run_that_hangs_with_a_grandchild)
+    child.start()
+    deadline = time.monotonic() + 20
+    while len(gate.live_descendants(child.pid)) < 1 and time.monotonic() < deadline:
+        time.sleep(0.1)
+    supervision = runner.supervise(child, timeout=0.5)
+    assert supervision["timed_out"] is True and not child.is_alive()
+    assert supervision["descendants_seen"] >= 1 and supervision["orphans_not_killed"] == []
+    survivors = [item for item in supervision["orphans"] if gate.still_running([item])]
+    assert survivors == []
+
+
 def test_report_is_never_green_for_fewer_than_three_runs_or_a_negative_variant():
     run = {"ok": True, "checks": {}}
     assert gate.build_report([run, run], variant="clean", requested=2)["verdict"] == "fail"

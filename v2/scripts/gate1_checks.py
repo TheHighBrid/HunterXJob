@@ -6,6 +6,7 @@ docs/RECOVERY_CONTRACT.md for what each check proves.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import os
 import sys
@@ -235,23 +236,43 @@ def still_running(processes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return leftover
 
 
+def terminate(processes: list[dict[str, Any]], timeout: float = 10.0) -> list[dict[str, Any]]:
+    """Kill the given processes (same PID *and* start time only) and reap them; return any that survive."""
+    import psutil
+
+    victims = {}
+    for item in still_running(processes):
+        with contextlib.suppress(psutil.NoSuchProcess):
+            victims[item["pid"]] = (psutil.Process(item["pid"]), item)
+    for proc, _item in victims.values():
+        with contextlib.suppress(psutil.NoSuchProcess):
+            proc.kill()
+    _gone, alive = psutil.wait_procs([proc for proc, _item in victims.values()], timeout=timeout)
+    return [victims[proc.pid][1] for proc in alive]
+
+
 def is_browser(info: dict[str, Any]) -> bool:
     name = (info.get("name") or "").lower()
     return any(token in name for token in BROWSER_NAMES)
 
 
 class ProcessSampler:
-    """Polls this process's descendants while the dry-run runs, to see the browser Playwright starts."""
+    """Polls the descendants of ``pid`` (default: this process), e.g. to see the browser Playwright starts.
 
-    def __init__(self, interval: float = 0.05) -> None:
+    Playwright starts Chromium in its own process group, so a sampled list (not a
+    process group) is what lets a supervisor find and reap every descendant.
+    """
+
+    def __init__(self, interval: float = 0.05, pid: int | None = None) -> None:
         self.interval = interval
+        self.pid = pid
         self.seen: dict[tuple[int, float], dict[str, Any]] = {}
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._loop, name="gate1-sampler", daemon=True)
 
     def _loop(self) -> None:
         while not self._stop.is_set():
-            for info in live_descendants():
+            for info in live_descendants(self.pid):
                 self.seen.setdefault((info["pid"], info["create_time"]), info)
             self._stop.wait(self.interval)
 
