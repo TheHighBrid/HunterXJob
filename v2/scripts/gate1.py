@@ -333,14 +333,15 @@ def supervise(child: Any, timeout: float, grace: float = 5.0) -> dict[str, Any]:
     reparented after a crash are found. Anything that outlives the child is an
     orphan: it fails the run and is killed and reaped here.
     """
+    killed: list[dict[str, Any]] = []
     with ProcessSampler(interval=0.1, pid=child.pid) as sampler:
         child.join(timeout)
         timed_out = child.is_alive()
         if timed_out:
-            tree = live_descendants(child.pid)  # snapshot before killing the child breaks the tree
+            killed = live_descendants(child.pid)  # snapshot before killing the child breaks the tree
             child.kill()
             child.join(10)
-            terminate(tree)
+            terminate(killed)
     seen = sampler.processes
     deadline = time.monotonic() + grace
     orphans = still_running(seen)
@@ -349,6 +350,7 @@ def supervise(child: Any, timeout: float, grace: float = 5.0) -> dict[str, Any]:
         orphans = still_running(seen)
     survivors = terminate(orphans)
     return {"timed_out": timed_out, "exit_code": child.exitcode, "descendants_seen": len(seen),
+            "killed_on_timeout": [{"pid": item["pid"], "name": item["name"]} for item in killed],
             "orphans": orphans, "orphans_not_killed": survivors}
 
 

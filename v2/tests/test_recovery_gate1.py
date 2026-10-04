@@ -545,6 +545,7 @@ def test_a_timed_out_run_is_killed_with_every_descendant():
     supervision = runner.supervise(child, timeout=0.5)
     assert supervision["timed_out"] is True and not child.is_alive()
     assert supervision["descendants_seen"] >= 1 and supervision["orphans_not_killed"] == []
+    assert len(supervision["killed_on_timeout"]) >= 1
     survivors = [item for item in supervision["orphans"] if gate.still_running([item])]
     assert survivors == []
 
