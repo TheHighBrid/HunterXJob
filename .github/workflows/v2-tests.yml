@@ -56,7 +56,9 @@ jobs:
   # Linux with Playwright-owned Chromium against repo fixtures over loopback.
   # Fake fixture data only; no real employer site is contacted.
   gate1:
-    runs-on: ubuntu-latest
+    # Pinned: Playwright 1.47's `install --with-deps` targets Ubuntu <= 24.04, and
+    # ubuntu-latest moves to a newer release on 2026-10-19.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
       run:
@@ -82,7 +84,7 @@ jobs:
       - name: Run Gate 1 (3 independent runs)
         run: python scripts/gate1.py --runs 3
 
-      - name: Gate 1 negative proofs (POST, auto-submit, process leak)
+      - name: Gate 1 negative proofs (POST, HEAD, auto-submit, iframe submit, process leak)
         run: python -m pytest -m gate1 -q
 
       - name: Upload Gate 1 report and traces
