@@ -356,6 +356,26 @@ def _stop_for_review(db: Session, application: Application, job: Job, plan: Fill
     }
 
 
+def browser_ledger_entry(form_summary: dict[str, object]) -> dict[str, object] | None:
+    """The part of a browser verification session bound into the dry-run ledger hash."""
+    metadata = form_summary.get("metadata")
+    evidence = metadata.get("browser_evidence") if isinstance(metadata, dict) else None
+    if not isinstance(evidence, dict):
+        return None
+    trace = evidence.get("trace") if isinstance(evidence.get("trace"), dict) else {}
+    return {
+        "launcher": evidence.get("launcher"),
+        "browser_version": evidence.get("browser_version"),
+        "request_count": evidence.get("request_count"),
+        "non_get_attempts": evidence.get("non_get_attempts"),
+        "submit_events": len(evidence.get("submit_events") or []),
+        "main_frame_navigations": len(evidence.get("main_frame_navigations") or []),
+        "trace_sha256": trace.get("sha256"),
+        "trace_bytes": trace.get("bytes"),
+        "trace_zip_ok": trace.get("zip_ok"),
+    }
+
+
 def _complete_dry_run(db: Session, application: Application, job: Job, plan: FillPlan, form_summary: dict[str, object],
                       platform: str) -> tuple[list[str], dict[str, object]]:
     filled = {item.control.key: item.value for item in plan.items if item.status == "fill"}
@@ -375,13 +395,20 @@ def _complete_dry_run(db: Session, application: Application, job: Job, plan: Fil
     # evidence merely because configuration flags say live submission is allowed.
     # A future certified adapter must perform the real submission and collect
     # confirmation evidence before the application can enter submitted/confirmed.
+    browser = browser_ledger_entry(form_summary)
+    note = f"dry-run complete against {form_summary['source']} form; submit button was not clicked"
+    if browser and browser.get("trace_sha256"):
+        note += f"; browser trace sha256={browser['trace_sha256']}"
+    payload: dict[str, object] = {"filled": filled, "form_source": form_summary["source"], "materials": materials}
+    if browser:
+        payload["browser"] = browser
     record_evidence(
         db,
         application,
         kind="dry_run",
-        confirmation_text=f"dry-run complete against {form_summary['source']} form; submit button was not clicked",
+        confirmation_text=note,
         final_url=job.url,
-        payload={"filled": filled, "form_source": form_summary["source"], "materials": materials},
+        payload=payload,
         adapter_name=platform,
     )
     application.stage = PipelineStage.validated.value

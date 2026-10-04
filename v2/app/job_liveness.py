@@ -38,7 +38,7 @@ from sqlalchemy.orm import Session
 from app.ashby_form import LIVENESS_QUERY, ashby_ref_for_job, graphql_get
 from app.config import Settings
 from app.dedup import deactivate, regate, release_duplicates
-from app.greenhouse_form import GREENHOUSE_API_HOST, FormFetchError, ref_for_job
+from app.greenhouse_form import FormFetchError, api_base, ref_for_job
 from app.lever_form import LEVER_API_HOST, USER_AGENT, lever_ref_for_job
 from app.liveness import Liveness, classify_liveness
 from app.models import Job, LivenessCheck, PipelineStage, ReviewTask
@@ -154,7 +154,7 @@ def probe_posting(job: Job, *, client: httpx.Client | None = None, timeout: floa
     try:
         greenhouse = ref_for_job(job) if job.source == "greenhouse" or "greenhouse" in (job.url or "") else None
         if greenhouse is not None:
-            return _json_probe(http, greenhouse.api_url, GREENHOUSE_API_HOST)
+            return _json_probe(http, greenhouse.api_url, httpx.URL(api_base()).host)
         lever = lever_ref_for_job(job)
         if lever is not None:
             return _json_probe(http, lever.api_url, LEVER_API_HOST)

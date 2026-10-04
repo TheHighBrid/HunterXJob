@@ -2,7 +2,25 @@
 
 Tracking issue: [#9](https://github.com/TheHighBrid/HunterXJob/issues/9)
 
-Updated: 2026-10-01
+Updated: 2026-10-04
+
+## Recovery gates (current scope)
+
+Scope is set by [RECOVERY_CONTRACT.md](RECOVERY_CONTRACT.md). Android execution
+is frozen. The execution host is plain Linux at $0: the developer box plus
+GitHub Actions `ubuntu-latest`. Nothing outside these gates enters scope until
+both pass.
+
+| Gate | Status | What it proves |
+|---|---|---|
+| Gate 1: fixture proof on plain Linux | Implemented: `v2/scripts/gate1.py`, CI job `gate1` in `v2-tests.yml`. The latest run results are in the job's `gate1-report` artifact. | Existing v2 API, then the dry-run route, then the production form engine plus browser verification, then a Playwright-owned `chromium.launch()`, then repo fixtures over loopback. Requires at least 3 independent runs. Each run checks: trace zip hashed, ledger evidence, zero submit and zero non-GET, no leftover browser or child PIDs, and no human input. Not proven, and recorded in the report: real employer site, anti-bot/CAPTCHA, in-page typing, upload, and live submission. |
+| Gate 2: one real public Greenhouse posting | Not started. Starts only after Gate 1 is green in CI. | Same runtime, fake identity, dry-run only, trace plus evidence plus clean shutdown, and zero submit/non-GET. A CAPTCHA or bot challenge fails closed and is recorded as a finding. |
+| 30-run certification, Lever/Ashby, phone, hosting | Out of scope until Gates 1 and 2 pass | — |
+
+Legacy, frozen and kept but not extended: the Android Termux/Ubuntu PRoot
+certification setup and the resumable certification flow from PRs #21 to #25
+(`docs/GREENHOUSE_CERTIFICATION.md`, `v2/scripts/prepare_proot_certification.sh`,
+`v2/scripts/greenhouse_certify.py`).
 
 ## Honest readiness
 
@@ -26,7 +44,7 @@ Updated: 2026-10-01
 | Continuous run (v0.3) | Ready, off by default | Discover → score → prepare → dry-run on an interval inside the API process. Kill switch, pause flag, quiet hours, per-cycle and daily caps; no overlap; every cycle in the `scheduler_cycles` ledger; `GET /api/scheduler/status` |
 | API authentication (v0.3) | Ready | `X-API-Key` on every endpoint except health; refuses requests when no key is set, except loopback-only local dev mode |
 | Schema migrations and backups (v0.3) | Ready | `schema_version` table, pre-migration backup, `./hunterx backup` with retention, periodic backups, WAL |
-| Unattended hosting (v0.3) | Ready | systemd user service on a Linux VM (primary, see `docs/DEPLOY_VM.md`); Termux:Boot fallback |
+| Unattended hosting (v0.3) | On hold (recovery contract) | systemd user service and Termux:Boot scripts exist. No cloud VM or phone hosting until Gates 1 and 2 pass |
 | Phone remote-control API (v0.4) | Ready | Settings (safe subset, no secrets), reports summary, jobs with score and form status, review approve/reject/resolve, scheduler pause/resume/run, kill switch, backups list. No route can unlock live submission or record a submission. Schema committed as `v2/openapi.json` |
 | Mobile app on v2 (v2.0.0) | Ready | Configurable server URL (Tailscale), API key in secure store, connection test, Dashboard, Jobs, Review, Reports and Settings screens. Types generated from the OpenAPI schema; jest unit tests |
 | v1 `backend/` | Legacy / donor | Nothing depends on it, including the mobile app. Kept for reference; deletion deferred to a later milestone |
@@ -48,12 +66,10 @@ Updated: 2026-10-01
 - Most real forms carry employer-specific questions, legal attestations, and verbose yes/no options. They stop for review until the owner answers them per question.
 - Greenhouse embed pages load reCAPTCHA. Dry-runs record it as `submit_boundary=captcha_detected`, so any future live submit would need a manual handoff.
 
-## What still needs a real device
+## After the recovery gates (not in scope yet)
 
-1. Greenhouse live dry-runs against actual employer boards (30 browser-verified real-form plans across employers for certification).
+1. Greenhouse live dry-runs across employer boards (the 30-run certification). Only after Gates 1 and 2.
 2. Supervised real submissions with owner approval.
 3. Session continuity after a manual CAPTCHA or MFA.
 4. Inbox-derived confirmation matching.
 5. Workday / SmartRecruiters / government adapters beyond detect-only.
-
-Those are operational certification steps, not missing software gates.

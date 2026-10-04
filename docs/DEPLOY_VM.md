@@ -1,5 +1,9 @@
 # Running HunterXJob v2 on a Linux VM
 
+> **On hold (2026-10-04) per [RECOVERY_CONTRACT.md](RECOVERY_CONTRACT.md):**
+> the execution host is plain Linux at $0, meaning the developer box plus
+> GitHub Actions runners. No cloud VM, no paid service, no card.
+
 This is the primary way to run v2 unattended: a small Linux VM runs the API and
 the background scheduler as a systemd **user** service, and your Android phone
 talks to it remotely. The API is never exposed without authentication, and it
