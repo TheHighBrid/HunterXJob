@@ -1,12 +1,12 @@
 """Gate 1 negative proofs with a real Playwright-owned Chromium (``pytest -m gate1``).
 
-Each case runs ``scripts/gate1.py`` for one independent run against a fixture
+Each case runs ``scripts/gate1.py`` (its ``main``) for one independent run against a fixture
 that misbehaves, and asserts the gate fails for the right reason. Deselected
 from the default suite (it needs ``playwright install chromium``); the
 ``gate1`` CI job runs it.
 """
+import importlib
 import json
-import subprocess  # nosec B404
 import sys
 from pathlib import Path
 
@@ -14,14 +14,14 @@ import pytest
 
 pytestmark = pytest.mark.gate1
 V2 = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(V2 / "scripts"))
+runner = importlib.import_module("gate1")
 
 
 def _gate(tmp_path: Path, *args: str) -> tuple[int, dict]:
-    command = [sys.executable, str(V2 / "scripts" / "gate1.py"), "--runs", "1", "--out", str(tmp_path), *args]
-    options = {"cwd": V2, "capture_output": True, "text": True, "timeout": 600, "check": False, "stdin": subprocess.DEVNULL}
-    proc = subprocess.run(command, **options)  # noqa: S603  # nosec B603
+    code = runner.main(["--runs", "1", "--out", str(tmp_path), *args])
     report = json.loads((tmp_path / "gate1-report.json").read_text(encoding="utf-8"))
-    return proc.returncode, report
+    return code, report
 
 
 def _failed(report: dict) -> set[str]:

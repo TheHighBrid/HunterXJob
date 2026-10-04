@@ -3,9 +3,9 @@
 Offline and browser-free. The end-to-end gate itself (real Chromium) runs in the
 ``gate1`` CI job through ``scripts/gate1.py`` and ``tests/test_gate1_e2e.py``.
 """
-import importlib.util
+import importlib
 import json
-import subprocess  # nosec B404
+import multiprocessing
 import sys
 import time
 import zipfile
@@ -32,14 +32,9 @@ D2L = GreenhouseJobRef("d2l", "7696196")
 SAFE = Settings(_env_file=None)
 
 
-def _gate():
-    spec = importlib.util.spec_from_file_location("gate1_script", V2 / "scripts" / "gate1.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-gate = _gate()
+sys.path.insert(0, str(V2 / "scripts"))
+gate = importlib.import_module("gate1_checks")
+runner = importlib.import_module("gate1")
 
 
 @pytest.fixture(autouse=True)
@@ -288,7 +283,8 @@ def test_trace_zip_is_checked_independently(tmp_path):
 
 
 def test_process_leak_detection_sees_a_stray_child_and_its_exit():
-    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])  # nosec B603
+    proc = multiprocessing.get_context("spawn").Process(target=time.sleep, args=(60,))
+    proc.start()
     try:
         deadline = time.monotonic() + 5
         seen = []
@@ -298,7 +294,7 @@ def test_process_leak_detection_sees_a_stray_child_and_its_exit():
         assert gate.still_running(seen) == seen
     finally:
         proc.kill()
-        proc.wait(timeout=10)
+        proc.join(timeout=10)
     assert gate.still_running(seen) == []
     assert not [item for item in gate.live_descendants() if item["pid"] == proc.pid]
 
@@ -319,7 +315,7 @@ def test_child_environment_is_dry_run_only_and_ignores_the_developer_shell(monke
     monkeypatch.setenv("ALLOW_LIVE_SUBMISSION", "true")
     monkeypatch.setenv("APPLICATION_MODE", "autonomous")
     monkeypatch.setenv("GREENHOUSE_BOARD_TOKENS", "real-employer")
-    env = gate.child_env(tmp_path)
+    env = runner.child_env(tmp_path)
     assert env["ALLOW_LIVE_SUBMISSION"] == "false" and env["APPLICATION_MODE"] == "dry_run"
     assert "GREENHOUSE_BOARD_TOKENS" not in env
     assert env["GREENHOUSE_BROWSER_VERIFY"] == "true" and env["BROWSER_TRACE_DIR"].startswith(str(tmp_path))
