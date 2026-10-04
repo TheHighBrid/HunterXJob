@@ -27,6 +27,7 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 
+from app import fixture_origin
 from app.answer_vault import SENSITIVE_KEYS
 from app.form_engine import (
     AUTH_PATTERNS,
@@ -38,6 +39,24 @@ from app.form_engine import (
 
 GREENHOUSE_API_HOST = "boards-api.greenhouse.io"
 GREENHOUSE_EMBED_HOST = "job-boards.greenhouse.io"
+
+
+def api_base() -> str:
+    """Scheme and host for the public boards API (a loopback fixture server only under Gate 1)."""
+    return fixture_origin.active_origin() or f"https://{GREENHOUSE_API_HOST}"
+
+
+def embed_base() -> str:
+    """Scheme and host for the hosted embed form (a loopback fixture server only under Gate 1)."""
+    return fixture_origin.active_origin() or f"https://{GREENHOUSE_EMBED_HOST}"
+
+
+def is_api_request(url: httpx.URL) -> bool:
+    """True only for a request to the boards API origin (exact scheme, host, and port)."""
+    base = httpx.URL(api_base())
+    return url.scheme == base.scheme and url.host == base.host and url.port == base.port
+
+
 _TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{1,100}$")
 _JOB_ID_RE = re.compile(r"^[0-9]{1,20}$")
 
@@ -69,11 +88,11 @@ class GreenhouseJobRef:
 
     @property
     def api_url(self) -> str:
-        return f"https://{GREENHOUSE_API_HOST}/v1/boards/{self.board}/jobs/{self.job_id}"
+        return f"{api_base()}/v1/boards/{self.board}/jobs/{self.job_id}"
 
     @property
     def embed_url(self) -> str:
-        return f"https://{GREENHOUSE_EMBED_HOST}/embed/job_app?for={self.board}&token={self.job_id}"
+        return f"{embed_base()}/embed/job_app?for={self.board}&token={self.job_id}"
 
     @property
     def vault_scopes(self) -> list[str]:
@@ -545,7 +564,7 @@ def fetch_greenhouse_payload(ref: GreenhouseJobRef, *, client: httpx.Client | No
     http = client or httpx.Client(timeout=timeout, follow_redirects=False, headers={"Accept": "application/json"})
     try:
         request = http.build_request("GET", ref.api_url, params={"questions": "true"})
-        if request.method != "GET" or request.url.host != GREENHOUSE_API_HOST:
+        if request.method != "GET" or not is_api_request(request.url):
             raise FormFetchError("form_fetch_failed", "refusing non-GET or off-host form request")
         try:
             response = http.send(request)

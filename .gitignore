@@ -19,6 +19,8 @@ backend/data/*.db
 v2/data/
 v2/logs/
 v2/run/
+# Gate 1 reports and Playwright traces (uploaded as CI artifacts, never committed)
+v2/gate-artifacts/
 
 # Node / Expo
 node_modules/

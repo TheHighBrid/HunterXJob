@@ -91,6 +91,9 @@ class Settings(BaseSettings):
     # Browser verification is optional and uses the same timeout as Greenhouse.
     lever_browser_verify: bool = False
     ashby_browser_verify: bool = False
+    # Directory for Playwright trace zips of browser verification sessions
+    # (hashed into the dry-run evidence). Empty = no trace is written.
+    browser_trace_dir: str = ""
 
     # Liveness / closed-listing detection. A posting is closed only after two
     # definitive "gone" answers at least ``liveness_confirm_minutes`` apart;

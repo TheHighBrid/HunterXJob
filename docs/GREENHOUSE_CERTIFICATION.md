@@ -1,5 +1,11 @@
 # Greenhouse live certification
 
+> **Superseded (2026-10-04) by [RECOVERY_CONTRACT.md](RECOVERY_CONTRACT.md).**
+> Android execution is frozen. Ubuntu PRoot is no longer the certification
+> host, and the 30-run certification is out of scope until Gates 1 and 2 pass
+> on plain Linux. This page and the PR #21 to #25 code it describes are kept as
+> legacy reference. They are not extended.
+
 This is the next production milestone after PR #20. It does not require a cloud VM.
 
 ## Runtime

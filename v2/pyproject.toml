@@ -25,7 +25,7 @@ dependencies = [
 
 [project.optional-dependencies]
 browser = ["playwright==1.47.0"]
-test = ["pytest==8.3.3"]
+test = ["pytest==8.3.3", "psutil==7.2.2"]
 
 [tool.setuptools.dynamic]
 version = { attr = "app.__version__" }
@@ -38,3 +38,6 @@ exclude = ["data*", "logs*", "run*", "tests*"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+# Gate 1 browser proofs need Playwright Chromium; the gate1 CI job runs them with `-m gate1`.
+addopts = "-m 'not gate1'"
+markers = ["gate1: Gate 1 end-to-end proofs with a real Playwright-owned Chromium (docs/RECOVERY_CONTRACT.md)"]

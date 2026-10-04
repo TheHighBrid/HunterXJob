@@ -38,13 +38,13 @@ class FormProvider(Protocol):
     def fetch(self, job: Any) -> RealForm: ...
 
 
-def default_inspector(ref: JobRef, timeout_ms: int) -> DomSnapshot:
+def default_inspector(ref: JobRef, timeout_ms: int, trace_dir: str | None = None) -> DomSnapshot:
     """Read-only page inspection for a posting's hosted application form."""
     if isinstance(ref, GreenhouseJobRef):
-        return inspect_hosted_form(ref, timeout_ms=timeout_ms)
+        return inspect_hosted_form(ref, timeout_ms=timeout_ms, trace_dir=trace_dir)
     if isinstance(ref, LeverJobRef):
-        return inspect_page(ref.apply_url, timeout_ms=timeout_ms)
-    return inspect_page(ref.page_url, timeout_ms=timeout_ms, graphql_ops=ASHBY_READ_OPS)
+        return inspect_page(ref.apply_url, timeout_ms=timeout_ms, trace_dir=trace_dir)
+    return inspect_page(ref.page_url, timeout_ms=timeout_ms, graphql_ops=ASHBY_READ_OPS, trace_dir=trace_dir)
 
 
 class LiveFormProvider:
@@ -60,7 +60,8 @@ class LiveFormProvider:
         self.settings = settings
         self.client = client
         timeout_ms = int(settings.greenhouse_browser_timeout * 1000)
-        self.inspector = inspector or (lambda ref: default_inspector(ref, timeout_ms))
+        trace_dir = settings.browser_trace_dir or None
+        self.inspector = inspector or (lambda ref: default_inspector(ref, timeout_ms, trace_dir))
 
     def fetch(self, job: Any) -> RealForm:
         platform = platform_for_job(job)

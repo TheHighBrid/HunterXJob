@@ -4,14 +4,26 @@ Used to *verify* an API-derived form (Greenhouse, Lever, Ashby) and, for
 Greenhouse, as a fallback when the API fails for transient reasons. The
 browser session is strictly read-only:
 
-* every request whose method is not GET/HEAD is aborted at the network layer,
-  so no form post, upload, or analytics beacon can leave the browser. The one
+* every request whose method is not GET is aborted at the network layer
+  (HEAD included), so no form post, upload, or analytics beacon can leave the
+  browser. The one
   exception is opt-in per call (Ashby): a POST to Ashby's public GraphQL
   endpoint whose operation is on an allowlist and whose document is a plain
   ``query`` is re-issued as the equivalent GET (see :func:`graphql_get_rewrite`);
   anything else, including every mutation, is still aborted;
 * the page is never clicked, typed into, or otherwise interacted with;
-* only the posting's own hosted application URL is opened.
+* the page cannot submit a form: an init script in every frame cancels
+  ``submit`` events and replaces ``form.submit()``/``form.requestSubmit()``
+  (``submit()`` fires no event) with a recorder, so every attempt is recorded
+  and refused, and the session then fails closed;
+* service workers are blocked, so no worker can make requests that bypass the
+  network-layer router;
+* only the posting's own hosted application URL is opened;
+* every request the page makes is recorded (method, URL, resource type, and
+  whether it was continued, aborted, or rewritten), together with main-frame
+  navigations and form submit attempts, so a dry-run carries network
+  evidence that nothing was posted. With ``BROWSER_TRACE_DIR`` set, a
+  Playwright trace zip is written, integrity-checked, and hashed as well.
 
 Playwright is an optional dependency (``pip install -e '.[browser]'`` plus
 ``python -m playwright install chromium``). When it is missing,
@@ -20,10 +32,15 @@ Playwright is an optional dependency (``pip install -e '.[browser]'`` plus
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
+import uuid
+import zipfile
 from collections.abc import Collection
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
@@ -79,6 +96,38 @@ DOM_EXTRACT_JS = r"""
 }
 """
 
+# Added to every frame before any page script runs. It records every form submit
+# attempt and refuses it: ``submit`` events are cancelled (registered first, in the
+# capture phase on ``window``, so page listeners cannot hide them), and
+# ``HTMLFormElement.submit()`` -- which dispatches no ``submit`` event -- and
+# ``requestSubmit()`` are replaced by recorders. It never triggers anything itself.
+SUBMIT_MONITOR_JS = r"""
+(() => {
+  const seen = [];
+  Object.defineProperty(window, '__hunterxSubmitEvents', { value: seen, enumerable: false });
+  const record = (form, via) => {
+    if (seen.length < 50) {
+      seen.push({ via, action: String((form && form.action) || ''), method: String((form && form.method) || '') });
+    }
+  };
+  window.addEventListener('submit', (event) => {
+    record(event.target, 'submit_event');
+    event.preventDefault();
+  }, true);
+  const refuse = (via) => function () { record(this, via); };
+  for (const [name, via] of [['submit', 'form.submit()'], ['requestSubmit', 'form.requestSubmit()']]) {
+    Object.defineProperty(HTMLFormElement.prototype, name, {
+      value: refuse(via), writable: false, configurable: false, enumerable: false,
+    });
+  }
+})();
+"""
+READ_SUBMIT_EVENTS_JS = "() => (window.__hunterxSubmitEvents || []).slice(0, 50)"
+MAX_RECORDED_REQUESTS = 500
+MAX_SUBMIT_EVENTS = 50
+# Only GET may leave the browser (HEAD is not a GET, so it is aborted and counted too).
+READ_ONLY_METHODS = frozenset({"GET"})
+
 _CHALLENGE_RE = re.compile(r"verify you are human|checking your browser|are you a robot|access denied|unusual traffic", re.IGNORECASE)
 _IGNORED_IDS = re.compile(r"^(?:iti-\d+__search-input|g-recaptcha-response.*)$")
 _IGNORED_NAMES = frozenset({"g-recaptcha-response", "h-captcha-response"})
@@ -128,6 +177,8 @@ class DomSnapshot:
     captcha: bool
     body_text: str
     fields: list[DomField]
+    # Network/trace evidence from the read-only session (see _inspect); empty for stored snapshots.
+    evidence: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> DomSnapshot:
@@ -153,6 +204,7 @@ class DomSnapshot:
             captcha=bool(data.get("captcha")),
             body_text=str(data.get("body_text", "")),
             fields=fields,
+            evidence=dict(data.get("evidence") or {}),
         )
 
     @property
@@ -218,6 +270,28 @@ def _merge_submit_boundary(form: RealForm, snapshot: DomSnapshot) -> None:
         form.warnings.append("page carries a CAPTCHA at submit; a live submission would require manual handoff")
 
 
+def _attach_evidence(form: RealForm, snapshot: DomSnapshot) -> None:
+    """Keep the session's network evidence with the form; warn if the page tried to write anything."""
+    if not snapshot.evidence:
+        return
+    form.metadata["browser_evidence"] = {
+        **snapshot.evidence,
+        "dom_fields": [{
+            "key": item.form_key, "id": item.id, "name": item.name, "tag": item.tag, "type": item.type,
+            "required": item.required, "options": item.options[:50],
+        } for item in snapshot.fields],
+    }
+    # Informational only: a real page commonly fires analytics beacons (POST), which the
+    # router aborts. Allowlisted GraphQL reads re-issued as GET are by design and not warned.
+    aborted = int(snapshot.evidence.get("aborted") or 0)
+    submits = len(snapshot.evidence.get("submit_events") or [])
+    if aborted:
+        form.warnings.append(f"page attempted {aborted} non-GET request(s) during read-only inspection (for example "
+                             "analytics beacons); all were aborted before leaving the browser")
+    if submits:
+        form.warnings.append(f"page attempted {submits} form submission(s) during read-only inspection; all were refused")
+
+
 def reconcile(form: RealForm, snapshot: DomSnapshot) -> RealForm:
     """Cross-check an API-derived form against the rendered page.
 
@@ -243,6 +317,7 @@ def reconcile(form: RealForm, snapshot: DomSnapshot) -> RealForm:
     form.metadata["dom_url"] = snapshot.url
     form.metadata["dom_only_required_fields"] = added
     form.metadata["api_fields_not_rendered"] = missing_from_page
+    _attach_evidence(form, snapshot)
     if added:
         form.warnings.append(f"page requires fields absent from the API payload: {', '.join(added)}")
     _merge_submit_boundary(form, snapshot)
@@ -254,12 +329,14 @@ def reconcile(form: RealForm, snapshot: DomSnapshot) -> RealForm:
 def form_from_dom(ref: GreenhouseJobRef, snapshot: DomSnapshot) -> RealForm:
     """Fallback form built only from the rendered page."""
     if snapshot.challenge:
-        return RealForm(
+        challenged = RealForm(
             platform="greenhouse", source="greenhouse_dom", url=snapshot.url, title=snapshot.title,
             controls=[], vault_scopes=ref.vault_scopes, handoff=snapshot.challenge,
             warnings=["page showed an anti-bot challenge instead of the form"],
             metadata={"board": ref.board, "job_id": ref.job_id, "dom_url": snapshot.url},
         )
+        _attach_evidence(challenged, snapshot)
+        return challenged
     if not snapshot.fields:
         raise FormFetchError("form_fetch_failed", "rendered page contained no application fields")
     controls: list[FormControl] = []
@@ -273,7 +350,7 @@ def form_from_dom(ref: GreenhouseJobRef, snapshot: DomSnapshot) -> RealForm:
     warnings = ["form built from the rendered page only; option lists were not read"]
     if snapshot.captcha:
         warnings.append("page carries a CAPTCHA at submit; a live submission would require manual handoff")
-    return RealForm(
+    form = RealForm(
         platform="greenhouse",
         source="greenhouse_dom",
         url=snapshot.url,
@@ -288,6 +365,8 @@ def form_from_dom(ref: GreenhouseJobRef, snapshot: DomSnapshot) -> RealForm:
             "submit_boundary": "captcha_detected" if snapshot.captcha else None,
         },
     )
+    _attach_evidence(form, snapshot)
+    return form
 
 
 def _is_rewrite_endpoint(scheme: str, netloc: str, path: str) -> bool:
@@ -327,53 +406,205 @@ def graphql_get_rewrite(method: str, url: str, post_data: str | None, allowed_op
     return GRAPHQL_REWRITE_URL + "?" + urlencode(params)
 
 
-async def _inspect(url: str, timeout_ms: int, graphql_ops: Collection[str] = ()) -> dict[str, Any]:
+def trace_record(path: Path) -> dict[str, Any]:
+    """Integrity check and hash of a written Playwright trace zip."""
+    record: dict[str, Any] = {"path": str(path), "exists": path.is_file()}
+    if not record["exists"]:
+        return {**record, "zip_ok": False}
+    data = path.read_bytes()
+    record["bytes"] = len(data)
+    record["sha256"] = hashlib.sha256(data).hexdigest()
+    try:
+        with zipfile.ZipFile(path) as archive:
+            names = archive.namelist()
+            record["zip_ok"] = archive.testzip() is None and any(name.endswith(".trace") for name in names)
+            record["entries"] = len(names)
+    except zipfile.BadZipFile:
+        record["zip_ok"] = False
+    return record
+
+
+def _trace_path(trace_dir: str | None) -> Path | None:
+    if not trace_dir:
+        return None
+    folder = Path(trace_dir).expanduser()
+    folder.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    return folder / f"browser-trace-{stamp}-{uuid.uuid4().hex[:8]}.zip"
+
+
+class _NetworkLog:
+    """Every request the page made, and what the read-only router did with it."""
+
+    def __init__(self) -> None:
+        self.requests: list[dict[str, str]] = []
+        self.total = 0
+        self.non_get = 0
+        self.aborted = 0
+        self.rewritten = 0
+        self.navigations: list[str] = []
+        self.main_frame_documents = 0
+
+    def record(self, request: Any, action: str) -> None:
+        self.total += 1
+        if request.is_navigation_request() and request.frame.parent_frame is None:
+            self.main_frame_documents += 1
+        if request.method not in READ_ONLY_METHODS:
+            self.non_get += 1
+        if action == "aborted":
+            self.aborted += 1
+        elif action == "rewritten_to_get":
+            self.rewritten += 1
+        if len(self.requests) < MAX_RECORDED_REQUESTS:
+            self.requests.append({
+                "method": request.method,
+                "url": request.url[:300],
+                "resource_type": request.resource_type,
+                "action": action,
+            })
+
+    def summary(self) -> dict[str, Any]:
+        return {
+            "request_count": self.total,
+            "requests_truncated": self.total > len(self.requests),
+            "non_get_attempts": self.non_get,
+            "aborted": self.aborted,
+            "rewritten_to_get": self.rewritten,
+            "requests": self.requests,
+            "main_frame_navigations": self.navigations,
+            "main_frame_document_requests": self.main_frame_documents,
+        }
+
+
+def _origin_and_path(url: str) -> tuple[str, str, str]:
+    parsed = urlparse(url or "")
+    return parsed.scheme, parsed.netloc.lower(), parsed.path
+
+
+def untrusted_session_reasons(network: dict[str, Any], submit_events: list[Any], form_url: str, final_url: str) -> list[str]:
+    """Why a read-only session cannot vouch for the form: the page tried to submit or left it.
+
+    A DOM read after the page fired a submit or navigated its main frame away
+    describes some other page (a confirmation, an error page), not the form.
+    """
+    reasons = []
+    if submit_events:
+        reasons.append(f"page attempted {len(submit_events)} form submission(s)")
+    documents = int(network.get("main_frame_document_requests") or 0)
+    if documents > 1:
+        reasons.append(f"page started {documents - 1} extra main-frame navigation(s)")
+    if form_url and _origin_and_path(final_url) != _origin_and_path(form_url):
+        reasons.append(f"page ended on {final_url[:120]} instead of the form")
+    return reasons
+
+
+class _ReadOnlyRouter:
+    """Route handler: GET continues, allowlisted GraphQL reads become GETs, everything else is aborted."""
+
+    def __init__(self, network: _NetworkLog, graphql_ops: Collection[str]) -> None:
+        self.network = network
+        self.graphql_ops = graphql_ops
+        self.blocked: list[str] = []
+        self.rewritten: list[str] = []
+
+    async def __call__(self, route: Any) -> None:
+        request = route.request
+        if request.method in READ_ONLY_METHODS:
+            self.network.record(request, "continued")
+            await route.continue_()
+            return
+        get_url = graphql_get_rewrite(request.method, request.url, request.post_data, self.graphql_ops)
+        if get_url is None:
+            self.network.record(request, "aborted")
+            self.blocked.append(f"{request.method} {request.url[:120]}")
+            await route.abort()
+            return
+        self.network.record(request, "rewritten_to_get")
+        self.rewritten.append(f"{request.method}->GET {request.url[:120]}")
+        response = await route.fetch(url=get_url, method="GET", headers={"apollo-require-preflight": "true"})
+        await route.fulfill(response=response)
+
+
+async def _submit_attempts(page: Any, evidence: dict[str, Any]) -> list[Any]:
+    """Submit attempts recorded in every frame of the page (an iframe can host a form too)."""
+    from playwright.async_api import Error as PlaywrightError
+
+    attempts: list[Any] = []
+    unreadable: list[str] = []
+    for frame in page.frames:
+        try:
+            attempts.extend(await frame.evaluate(READ_SUBMIT_EVENTS_JS))
+        except PlaywrightError:  # a frame detached or navigated while being read
+            unreadable.append(frame.url[:300])
+    evidence["unreadable_frames"] = unreadable
+    return attempts[:MAX_SUBMIT_EVENTS]
+
+
+async def _read_page(context: Any, url: str, timeout_ms: int, network: _NetworkLog, evidence: dict[str, Any]) -> dict[str, Any]:
+    """Open the form, read its structure, and refuse a session in which the page submitted or left the form."""
+    page = await context.new_page()
+    page.on("framenavigated", lambda frame: network.navigations.append(frame.url[:300]) if frame == page.main_frame else None)
+    response = await page.goto(url, wait_until="networkidle", timeout=timeout_ms)
+    if response is not None and response.status == 404:
+        raise FormFetchError("form_unavailable", "hosted application page returned 404")
+    data = await page.evaluate(DOM_EXTRACT_JS)
+    evidence["submit_events"] = await _submit_attempts(page, evidence)
+    form_url = response.url if response is not None else url
+    reasons = untrusted_session_reasons(network.summary(), evidence["submit_events"], form_url, str(data.get("url", "")))
+    if reasons:
+        if network.aborted:
+            reasons.append(f"it also attempted {network.aborted} non-GET request(s), all aborted")
+        raise FormFetchError("form_fetch_failed", "read-only page inspection is not trustworthy: " + "; ".join(reasons))
+    return data
+
+
+async def _inspect(url: str, timeout_ms: int, graphql_ops: Collection[str] = (),
+                   trace_dir: str | None = None) -> dict[str, Any]:
     try:
         from playwright.async_api import async_playwright
     except ImportError as exc:  # pragma: no cover - depends on optional extra
         raise BrowserUnavailable("Playwright is not installed (pip install -e '.[browser]')") from exc
 
-    blocked: list[str] = []
-    rewritten: list[str] = []
-
-    async def read_only(route: Any) -> None:
-        request = route.request
-        if request.method in {"GET", "HEAD"}:
-            await route.continue_()
-            return
-        get_url = graphql_get_rewrite(request.method, request.url, request.post_data, graphql_ops)
-        if get_url is None:
-            blocked.append(f"{request.method} {request.url[:120]}")
-            await route.abort()
-            return
-        rewritten.append(f"{request.method}->GET {request.url[:120]}")
-        response = await route.fetch(url=get_url, method="GET", headers={"apollo-require-preflight": "true"})
-        await route.fulfill(response=response)
+    network = _NetworkLog()
+    router = _ReadOnlyRouter(network, graphql_ops)
+    trace_path = _trace_path(trace_dir)
+    evidence: dict[str, Any] = {"launcher": "playwright.chromium.launch", "headless": True, "service_workers": "block"}
 
     async with async_playwright() as playwright:
         try:
             browser = await playwright.chromium.launch()
         except Exception as exc:  # pragma: no cover - environment dependent
             raise BrowserUnavailable(f"could not launch Chromium: {exc}") from exc
+        evidence["browser_version"] = browser.version
+        evidence["executable_path"] = playwright.chromium.executable_path
         try:
-            context = await browser.new_context(accept_downloads=False)
-            await context.route("**/*", read_only)
-            page = await context.new_page()
-            response = await page.goto(url, wait_until="networkidle", timeout=timeout_ms)
-            if response is not None and response.status == 404:
-                raise FormFetchError("form_unavailable", "hosted application page returned 404")
-            data = await page.evaluate(DOM_EXTRACT_JS)
+            # Service workers are blocked: requests a worker makes are not guaranteed to pass context.route().
+            context = await browser.new_context(accept_downloads=False, service_workers="block")
+            await context.add_init_script(SUBMIT_MONITOR_JS)
+            await context.route("**/*", router)
+            if trace_path is not None:
+                await context.tracing.start(screenshots=True, snapshots=True)
+            try:
+                data = await _read_page(context, url, timeout_ms, network, evidence)
+            finally:
+                if trace_path is not None:
+                    await context.tracing.stop(path=str(trace_path))
+                await context.close()
         finally:
             await browser.close()
-    data["blocked_requests"] = blocked
-    data["rewritten_requests"] = rewritten
+    evidence.update(network.summary())
+    evidence["trace"] = trace_record(trace_path) if trace_path is not None else None
+    data["blocked_requests"] = router.blocked
+    data["rewritten_requests"] = router.rewritten
+    data["evidence"] = evidence
     return data
 
 
-def inspect_page(url: str, *, timeout_ms: int = 45000, graphql_ops: Collection[str] = ()) -> DomSnapshot:
+def inspect_page(url: str, *, timeout_ms: int = 45000, graphql_ops: Collection[str] = (),
+                 trace_dir: str | None = None) -> DomSnapshot:
     """Load a hosted application page read-only and return its field structure."""
     try:
-        data = asyncio.run(_inspect(url, timeout_ms, graphql_ops))
+        data = asyncio.run(_inspect(url, timeout_ms, graphql_ops, trace_dir))
     except FormFetchError:
         raise
     except Exception as exc:
@@ -381,6 +612,6 @@ def inspect_page(url: str, *, timeout_ms: int = 45000, graphql_ops: Collection[s
     return DomSnapshot.from_dict(data)
 
 
-def inspect_hosted_form(ref: GreenhouseJobRef, *, timeout_ms: int = 45000) -> DomSnapshot:
+def inspect_hosted_form(ref: GreenhouseJobRef, *, timeout_ms: int = 45000, trace_dir: str | None = None) -> DomSnapshot:
     """Load the Greenhouse embed page read-only and return its field structure."""
-    return inspect_page(ref.embed_url, timeout_ms=timeout_ms)
+    return inspect_page(ref.embed_url, timeout_ms=timeout_ms, trace_dir=trace_dir)
