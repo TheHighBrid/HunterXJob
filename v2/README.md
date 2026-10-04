@@ -6,8 +6,8 @@ Android-first, zero-cost, local-first job hunting system with bounded autonomy.
 
 > Current scope and execution host follow [docs/RECOVERY_CONTRACT.md](../docs/RECOVERY_CONTRACT.md). Android execution is frozen; the host is plain Linux at $0 (developer box plus GitHub Actions). Gate 1 (`scripts/gate1.py`) proves the dry-run path on Linux with Playwright-owned Chromium against repo fixtures.
 
-- Primary host: a small Linux VM (e.g. Oracle Cloud Always Free, Ubuntu 24.04) running the systemd user service, with the Android phone as the remote control through the mobile app. See [docs/DEPLOY_VM.md](../docs/DEPLOY_VM.md).
-- Fallback: Termux (or Ubuntu `proot-distro`) on non-root Android, or any local Python 3.12.
+- Legacy, on hold under the recovery contract: a small cloud Linux VM running the systemd user service ([docs/DEPLOY_VM.md](../docs/DEPLOY_VM.md)), and Termux (or Ubuntu `proot-distro`) on non-root Android. Neither is a supported execution host until Gates 1 and 2 pass; the phone is a client only.
+- Runs on any local Python 3.12 on Linux.
 - Uses SQLite, FastAPI, and optional Ollama. No paid API is required.
 - Every pipeline stage is durable and resumable.
 - Deterministic eligibility runs before local AI.

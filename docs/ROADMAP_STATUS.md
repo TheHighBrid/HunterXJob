@@ -8,12 +8,12 @@ Updated: 2026-10-04
 
 Scope is set by [RECOVERY_CONTRACT.md](RECOVERY_CONTRACT.md). Android execution
 is frozen. The execution host is plain Linux at $0: the developer box plus
-GitHub Actions `ubuntu-latest`. Nothing outside these gates enters scope until
-both pass.
+GitHub-hosted Ubuntu runners (the `gate1` job is pinned to `ubuntu-24.04`).
+Nothing outside these gates enters scope until both pass.
 
 | Gate | Status | What it proves |
 |---|---|---|
-| Gate 1: fixture proof on plain Linux | Implemented: `v2/scripts/gate1.py`, CI job `gate1` in `v2-tests.yml`. The latest run results are in the job's `gate1-report` artifact. | Existing v2 API, then the dry-run route, then the production form engine plus browser verification, then a Playwright-owned `chromium.launch()`, then repo fixtures over loopback. Requires at least 3 independent runs. Each run checks: trace zip hashed, ledger evidence, zero submit and zero non-GET, no leftover browser or child PIDs, and no human input. Not proven, and recorded in the report: real employer site, anti-bot/CAPTCHA, in-page typing, upload, and live submission. |
+| Gate 1: fixture proof on plain Linux | Implemented: `v2/scripts/gate1.py`, CI job `gate1` in `v2-tests.yml`. The latest run results are in the job's `gate1-report` artifact. | Existing v2 API, then the dry-run route, then the production form engine plus browser verification, then a Playwright-owned `chromium.launch()`, then repo fixtures over loopback. Requires at least 3 independent runs. Each run checks: rendered fields match the fixture, planned values match a hand-written plan, trace zip hashed, ledger evidence, zero submit and zero non-GET (HEAD counts as non-GET), no leftover browser or child PIDs, and no human input. Not proven, and recorded in the report: real employer site, anti-bot/CAPTCHA, in-page typing, upload, and live submission. |
 | Gate 2: one real public Greenhouse posting | Not started. Starts only after Gate 1 is green in CI. | Same runtime, fake identity, dry-run only, trace plus evidence plus clean shutdown, and zero submit/non-GET. A CAPTCHA or bot challenge fails closed and is recorded as a finding. |
 | 30-run certification, Lever/Ashby, phone, hosting | Out of scope until Gates 1 and 2 pass | — |
 

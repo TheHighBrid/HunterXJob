@@ -1,6 +1,6 @@
 # Recovery contract
 
-Owner: Mohamed Alem. Decided 2026-10-04. This decision is locked.
+Owner: TheHighBrid (repository owner). Decided 2026-10-04. This decision is locked.
 
 This contract is modeled on what the sister project learned. It replaces the
 Android-hosted certification plan from PRs #21 to #25. Until this contract is
@@ -16,8 +16,10 @@ changed, it takes precedence over every other plan in this repository.
 
 ## Execution host
 
-- Plain Linux at $0: the developer box plus GitHub Actions `ubuntu-latest`
-  runners.
+- Plain Linux at $0: the developer box plus GitHub-hosted Ubuntu runners on
+  GitHub Actions. The `gate1` job is pinned to `ubuntu-24.04` so the
+  Playwright 1.47 browser dependencies keep installing when `ubuntu-latest`
+  moves to a newer release.
 - No cloud VM, no paid service, no card.
 
 ## Keep the existing product
@@ -44,8 +46,9 @@ across at least 3 independent runs:
 
 1. Chromium was launched by Playwright.
 2. The fixture loads.
-3. Fields are extracted, and the filled values are read back and match what
-   was expected.
+3. Fields are extracted, and the values planned for them are read back and
+   match what was expected. (This is planned values, not values typed into
+   the page; see below.)
 4. A valid Playwright trace zip is written, integrity-checked, and hashed.
 5. Evidence is persisted in the ledger.
 6. Zero submit actions and zero non-GET requests, shown by network evidence.
@@ -57,11 +60,13 @@ across at least 3 independent runs:
 The gate report must explicitly record anything that was NOT proven (for
 example `real_employer_site = false`).
 
-What "filled values" means here: the production form engine plans values
+Planned values, not typed values: the production form engine plans values
 from the vault and checks the rendered page read-only. It never types into the
-page. Gate 1 therefore reads the planned values back from the ledger and
-compares them with a hand-written expected plan. In-page typing is recorded as
-not proven.
+page, so there are no in-page "filled values" to read back. Gate 1 reads the
+planned values back from the ledger and compares them with a hand-written
+expected plan, and it checks the rendered fields against an independent parse
+of the fixture HTML. Typing values into the page is therefore NOT proven, and
+the report records it as `in_page_typing_of_values: false`.
 
 ### How Gate 1 is run
 
@@ -72,7 +77,7 @@ not proven.
 cd v2
 pip install -e '.[test,browser]' && python -m playwright install --with-deps chromium
 python scripts/gate1.py --runs 3      # writes v2/gate-artifacts/gate1-report.json
-python -m pytest -m gate1             # negative proofs: POST, auto-submit, process leak
+python -m pytest -m gate1             # negative proofs: POST, HEAD, auto-submit, iframe submit, process leak
 ```
 
 Each run is a fresh process with an empty SQLite database. Each run does the
@@ -96,11 +101,19 @@ The Greenhouse fetcher is pointed at the loopback server through
 - It refuses outright unless the mode is `dry_run` with live submission off.
 - Tests cover every one of these rules.
 
+The browser session is read-only: only GET requests leave the browser (HEAD
+and every other method are aborted and counted), service workers are blocked,
+and the page cannot submit a form (submit events are cancelled and
+`form.submit()`/`requestSubmit()` are replaced by recorders in every frame).
+A submit attempt makes the dry-run fail closed to review.
+
 The report lists every browser request (method and URL) and the fixture
 server's own request log. It also lists the trace SHA-256 values, the browser
 PIDs that were seen, and the PIDs left after shutdown. Any non-GET attempt,
-submit event, extra navigation, off-origin request, or unexpected server
-request fails the run.
+submit attempt, extra navigation, off-origin request, or unexpected server
+request fails the run. The parent process also samples each run's process
+tree; a run that times out is killed together with every descendant, and any
+process that outlives a run fails it.
 
 ## Gate 2: one real public Greenhouse posting
 
@@ -121,11 +134,12 @@ certification, Lever/Ashby, phone hosting, and any other hosting.
 
 The owner is never the debugging harness.
 
-- Do not ask him to paste commands, reproduce failures, fetch logs, or test
-  speculative fixes.
-- He is involved only for genuine human gates: CAPTCHA, final review or
-  submit, account auth, product decisions, and access only he can grant.
-- He may also be asked for a final verification after automated proof.
+- Do not ask the owner to paste commands, reproduce failures, fetch logs, or
+  test speculative fixes.
+- The owner is involved only for genuine human gates: CAPTCHA, final review
+  or submit, account auth, product decisions, and access only the owner can
+  grant.
+- The owner may also be asked for a final verification after automated proof.
 - A failed test goes back into automated investigation.
 
 ## Failure rule
@@ -157,8 +171,11 @@ Do not add infrastructure to work around an unproven assumption.
 If the local fixture proof needs Android, external browser ownership, CDP, or
 cross-layer hacks, reconsider the runtime, not the product.
 
-## Superseded documents
+## Superseded and on-hold documents
 
 - `docs/GREENHOUSE_CERTIFICATION.md` (the Android Ubuntu PRoot certification
   host from PRs #21 to #25) is superseded by this contract. It is kept as
   legacy reference.
+- `docs/DEPLOY_VM.md` (unattended hosting on a cloud VM) is on hold, because
+  this contract rules out a cloud VM and puts hosting out of scope until
+  Gates 1 and 2 pass. Its content is unchanged and kept for later.

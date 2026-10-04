@@ -1,8 +1,12 @@
 # Running HunterXJob v2 on a Linux VM
 
-> **On hold (2026-10-04) per [RECOVERY_CONTRACT.md](RECOVERY_CONTRACT.md):**
-> the execution host is plain Linux at $0, meaning the developer box plus
-> GitHub Actions runners. No cloud VM, no paid service, no card.
+> **On hold (2026-10-04) under [RECOVERY_CONTRACT.md](RECOVERY_CONTRACT.md).**
+> The contract sets the execution host to plain Linux at $0 (the developer
+> box plus GitHub Actions runners) and rules out a cloud VM, a paid service,
+> or a card. Unattended hosting of any kind is out of scope until Gates 1 and
+> 2 pass. The instructions below are unchanged and still describe how the
+> systemd user service works. They are kept, not deleted, for when hosting is
+> back in scope.
 
 This is the primary way to run v2 unattended: a small Linux VM runs the API and
 the background scheduler as a systemd **user** service, and your Android phone

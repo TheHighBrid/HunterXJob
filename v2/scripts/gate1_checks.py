@@ -97,7 +97,8 @@ NOT_PROVEN_NOTES = {
     "real_greenhouse_network_or_anti_bot_behaviour": "No real Greenhouse host is contacted.",
     "captcha_or_bot_challenge_handling": "The fixture has no CAPTCHA or interstitial challenge.",
     "in_page_typing_of_values": "The production engine plans values and verifies the rendered page read-only; it never types "
-                                "into the page. 'Filled values' here are the planned values read back from the ledger.",
+                                "into the page. Gate 1 compares the planned values read back from the ledger with a "
+                                "hand-written plan; no value typed into a page is read back.",
     "file_upload": "Résumé is a planned vault value; nothing is uploaded.",
     "live_submission": "Out of scope by design; live submit stays locked.",
     "discovery_scoring_and_materials_approval_path": "The job and application are seeded at ready_to_apply; answers go "
