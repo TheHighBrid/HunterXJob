@@ -8,6 +8,8 @@ anything. They contain no real data and are never served by the app itself.
 
 | File | What the page tries to do | The gate must report |
 |---|---|---|
-| `inject_post_beacon.html` | `fetch()` POST to the fixture origin | `zero_submit_and_non_get` fails (non-GET attempt) |
-| `inject_auto_submit_post.html` | switches the form to POST and calls `requestSubmit()` | `zero_submit_and_non_get` fails (submit event and non-GET attempt) |
-| `inject_auto_submit_get.html` | calls `form.submit()` on a GET form (no non-GET request at all) | `zero_submit_and_non_get` fails (navigation away / unexpected request) |
+| `inject_post_beacon.html` | `fetch()` POST to the fixture origin (like an analytics beacon) | `zero_submit_and_non_get` fails (non-GET attempt, aborted in the browser); the dry-run itself still completes with a warning |
+| `inject_head_request.html` | `fetch()` HEAD to an expected fixture route | `zero_submit_and_non_get` fails (HEAD is not a GET, so it is aborted and counted) |
+| `inject_auto_submit_post.html` | switches the form to POST and calls `requestSubmit()` | the submission is refused in the page and recorded; the dry-run fails closed (`needs_review`) |
+| `inject_auto_submit_get.html` | calls `form.submit()` on a GET form (fires no `submit` event, no non-GET request) | the call is refused in the page and recorded; the dry-run fails closed (`needs_review`) |
+| `inject_iframe_form_submit.html` | `form.submit()` of a GET form targeting a hidden iframe, and a form inside an `srcdoc` iframe submitting itself to `_top` | both attempts are refused and recorded (submit attempts are read from every frame); the dry-run fails closed |

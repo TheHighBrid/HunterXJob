@@ -4,17 +4,24 @@ Used to *verify* an API-derived form (Greenhouse, Lever, Ashby) and, for
 Greenhouse, as a fallback when the API fails for transient reasons. The
 browser session is strictly read-only:
 
-* every request whose method is not GET/HEAD is aborted at the network layer,
-  so no form post, upload, or analytics beacon can leave the browser. The one
+* every request whose method is not GET is aborted at the network layer
+  (HEAD included), so no form post, upload, or analytics beacon can leave the
+  browser. The one
   exception is opt-in per call (Ashby): a POST to Ashby's public GraphQL
   endpoint whose operation is on an allowlist and whose document is a plain
   ``query`` is re-issued as the equivalent GET (see :func:`graphql_get_rewrite`);
   anything else, including every mutation, is still aborted;
 * the page is never clicked, typed into, or otherwise interacted with;
+* the page cannot submit a form: an init script in every frame cancels
+  ``submit`` events and replaces ``form.submit()``/``form.requestSubmit()``
+  (``submit()`` fires no event) with a recorder, so every attempt is recorded
+  and refused, and the session then fails closed;
+* service workers are blocked, so no worker can make requests that bypass the
+  network-layer router;
 * only the posting's own hosted application URL is opened;
 * every request the page makes is recorded (method, URL, resource type, and
   whether it was continued, aborted, or rewritten), together with main-frame
-  navigations and form ``submit`` events, so a dry-run carries network
+  navigations and form submit attempts, so a dry-run carries network
   evidence that nothing was posted. With ``BROWSER_TRACE_DIR`` set, a
   Playwright trace zip is written, integrity-checked, and hashed as well.
 
@@ -89,21 +96,37 @@ DOM_EXTRACT_JS = r"""
 }
 """
 
-# Added before any page script runs. Passive: it only records submit events and
-# never cancels, alters, or triggers anything.
+# Added to every frame before any page script runs. It records every form submit
+# attempt and refuses it: ``submit`` events are cancelled (registered first, in the
+# capture phase on ``window``, so page listeners cannot hide them), and
+# ``HTMLFormElement.submit()`` -- which dispatches no ``submit`` event -- and
+# ``requestSubmit()`` are replaced by recorders. It never triggers anything itself.
 SUBMIT_MONITOR_JS = r"""
 (() => {
   const seen = [];
   Object.defineProperty(window, '__hunterxSubmitEvents', { value: seen, enumerable: false });
-  document.addEventListener('submit', (event) => {
-    const form = event.target;
-    seen.push({ action: String((form && form.action) || ''), method: String((form && form.method) || '') });
+  const record = (form, via) => {
+    if (seen.length < 50) {
+      seen.push({ via, action: String((form && form.action) || ''), method: String((form && form.method) || '') });
+    }
+  };
+  window.addEventListener('submit', (event) => {
+    record(event.target, 'submit_event');
+    event.preventDefault();
   }, true);
+  const refuse = (via) => function () { record(this, via); };
+  for (const [name, via] of [['submit', 'form.submit()'], ['requestSubmit', 'form.requestSubmit()']]) {
+    Object.defineProperty(HTMLFormElement.prototype, name, {
+      value: refuse(via), writable: false, configurable: false, enumerable: false,
+    });
+  }
 })();
 """
 READ_SUBMIT_EVENTS_JS = "() => (window.__hunterxSubmitEvents || []).slice(0, 50)"
 MAX_RECORDED_REQUESTS = 500
-READ_ONLY_METHODS = frozenset({"GET", "HEAD"})
+MAX_SUBMIT_EVENTS = 50
+# Only GET may leave the browser (HEAD is not a GET, so it is aborted and counted too).
+READ_ONLY_METHODS = frozenset({"GET"})
 
 _CHALLENGE_RE = re.compile(r"verify you are human|checking your browser|are you a robot|access denied|unusual traffic", re.IGNORECASE)
 _IGNORED_IDS = re.compile(r"^(?:iti-\d+__search-input|g-recaptcha-response.*)$")
@@ -258,12 +281,15 @@ def _attach_evidence(form: RealForm, snapshot: DomSnapshot) -> None:
             "required": item.required, "options": item.options[:50],
         } for item in snapshot.fields],
     }
-    attempts = int(snapshot.evidence.get("non_get_attempts") or 0)
+    # Informational only: a real page commonly fires analytics beacons (POST), which the
+    # router aborts. Allowlisted GraphQL reads re-issued as GET are by design and not warned.
+    aborted = int(snapshot.evidence.get("aborted") or 0)
     submits = len(snapshot.evidence.get("submit_events") or [])
-    if attempts:
-        form.warnings.append(f"page attempted {attempts} non-GET request(s) during read-only inspection; all were blocked")
+    if aborted:
+        form.warnings.append(f"page attempted {aborted} non-GET request(s) during read-only inspection (for example "
+                             "analytics beacons); all were aborted before leaving the browser")
     if submits:
-        form.warnings.append(f"page fired {submits} form submit event(s) during read-only inspection")
+        form.warnings.append(f"page attempted {submits} form submission(s) during read-only inspection; all were refused")
 
 
 def reconcile(form: RealForm, snapshot: DomSnapshot) -> RealForm:
@@ -415,6 +441,7 @@ class _NetworkLog:
         self.total = 0
         self.non_get = 0
         self.aborted = 0
+        self.rewritten = 0
         self.navigations: list[str] = []
         self.main_frame_documents = 0
 
@@ -426,6 +453,8 @@ class _NetworkLog:
             self.non_get += 1
         if action == "aborted":
             self.aborted += 1
+        elif action == "rewritten_to_get":
+            self.rewritten += 1
         if len(self.requests) < MAX_RECORDED_REQUESTS:
             self.requests.append({
                 "method": request.method,
@@ -440,6 +469,7 @@ class _NetworkLog:
             "requests_truncated": self.total > len(self.requests),
             "non_get_attempts": self.non_get,
             "aborted": self.aborted,
+            "rewritten_to_get": self.rewritten,
             "requests": self.requests,
             "main_frame_navigations": self.navigations,
             "main_frame_document_requests": self.main_frame_documents,
@@ -452,14 +482,14 @@ def _origin_and_path(url: str) -> tuple[str, str, str]:
 
 
 def untrusted_session_reasons(network: dict[str, Any], submit_events: list[Any], form_url: str, final_url: str) -> list[str]:
-    """Why a read-only session cannot vouch for the form: the page submitted or left it.
+    """Why a read-only session cannot vouch for the form: the page tried to submit or left it.
 
     A DOM read after the page fired a submit or navigated its main frame away
     describes some other page (a confirmation, an error page), not the form.
     """
     reasons = []
     if submit_events:
-        reasons.append(f"page fired {len(submit_events)} form submit event(s)")
+        reasons.append(f"page attempted {len(submit_events)} form submission(s)")
     documents = int(network.get("main_frame_document_requests") or 0)
     if documents > 1:
         reasons.append(f"page started {documents - 1} extra main-frame navigation(s)")
@@ -469,7 +499,7 @@ def untrusted_session_reasons(network: dict[str, Any], submit_events: list[Any],
 
 
 class _ReadOnlyRouter:
-    """Route handler: GET/HEAD continue, allowlisted GraphQL reads become GETs, everything else is aborted."""
+    """Route handler: GET continues, allowlisted GraphQL reads become GETs, everything else is aborted."""
 
     def __init__(self, network: _NetworkLog, graphql_ops: Collection[str]) -> None:
         self.network = network
@@ -495,6 +525,21 @@ class _ReadOnlyRouter:
         await route.fulfill(response=response)
 
 
+async def _submit_attempts(page: Any, evidence: dict[str, Any]) -> list[Any]:
+    """Submit attempts recorded in every frame of the page (an iframe can host a form too)."""
+    from playwright.async_api import Error as PlaywrightError
+
+    attempts: list[Any] = []
+    unreadable: list[str] = []
+    for frame in page.frames:
+        try:
+            attempts.extend(await frame.evaluate(READ_SUBMIT_EVENTS_JS))
+        except PlaywrightError:  # a frame detached or navigated while being read
+            unreadable.append(frame.url[:300])
+    evidence["unreadable_frames"] = unreadable
+    return attempts[:MAX_SUBMIT_EVENTS]
+
+
 async def _read_page(context: Any, url: str, timeout_ms: int, network: _NetworkLog, evidence: dict[str, Any]) -> dict[str, Any]:
     """Open the form, read its structure, and refuse a session in which the page submitted or left the form."""
     page = await context.new_page()
@@ -503,12 +548,12 @@ async def _read_page(context: Any, url: str, timeout_ms: int, network: _NetworkL
     if response is not None and response.status == 404:
         raise FormFetchError("form_unavailable", "hosted application page returned 404")
     data = await page.evaluate(DOM_EXTRACT_JS)
-    evidence["submit_events"] = await page.evaluate(READ_SUBMIT_EVENTS_JS)
+    evidence["submit_events"] = await _submit_attempts(page, evidence)
     form_url = response.url if response is not None else url
     reasons = untrusted_session_reasons(network.summary(), evidence["submit_events"], form_url, str(data.get("url", "")))
     if reasons:
-        if network.non_get:
-            reasons.append(f"it also attempted {network.non_get} non-GET request(s), all blocked")
+        if network.aborted:
+            reasons.append(f"it also attempted {network.aborted} non-GET request(s), all aborted")
         raise FormFetchError("form_fetch_failed", "read-only page inspection is not trustworthy: " + "; ".join(reasons))
     return data
 
@@ -523,7 +568,7 @@ async def _inspect(url: str, timeout_ms: int, graphql_ops: Collection[str] = (),
     network = _NetworkLog()
     router = _ReadOnlyRouter(network, graphql_ops)
     trace_path = _trace_path(trace_dir)
-    evidence: dict[str, Any] = {"launcher": "playwright.chromium.launch", "headless": True}
+    evidence: dict[str, Any] = {"launcher": "playwright.chromium.launch", "headless": True, "service_workers": "block"}
 
     async with async_playwright() as playwright:
         try:
@@ -533,7 +578,8 @@ async def _inspect(url: str, timeout_ms: int, graphql_ops: Collection[str] = (),
         evidence["browser_version"] = browser.version
         evidence["executable_path"] = playwright.chromium.executable_path
         try:
-            context = await browser.new_context(accept_downloads=False)
+            # Service workers are blocked: requests a worker makes are not guaranteed to pass context.route().
+            context = await browser.new_context(accept_downloads=False, service_workers="block")
             await context.add_init_script(SUBMIT_MONITOR_JS)
             await context.route("**/*", router)
             if trace_path is not None:

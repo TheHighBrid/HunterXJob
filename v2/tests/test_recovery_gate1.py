@@ -3,11 +3,14 @@
 Offline and browser-free. The end-to-end gate itself (real Chromium) runs in the
 ``gate1`` CI job through ``scripts/gate1.py`` and ``tests/test_gate1_e2e.py``.
 """
+import asyncio
 import importlib
 import json
 import multiprocessing
+import os
 import sys
 import time
+import types
 import zipfile
 from pathlib import Path
 
@@ -16,7 +19,7 @@ from conftest import FIXTURES, load_fixture_json
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
-from app import fixture_origin
+from app import fixture_origin, greenhouse_browser
 from app.config import Settings
 from app.db import Base
 from app.flags import ensure_flags
@@ -139,6 +142,7 @@ def test_app_code_never_attaches_to_an_external_browser():
 def _evidence(**extra):
     return {
         "launcher": "playwright.chromium.launch", "browser_version": "129", "executable_path": "/x/ms-playwright/chrome",
+        "service_workers": "block",
         "request_count": 1, "non_get_attempts": 0, "aborted": 0, "submit_events": [],
         "requests": [{"method": "GET", "url": "http://127.0.0.1:1/embed/job_app", "resource_type": "document",
                       "action": "continued"}],
@@ -166,7 +170,137 @@ def test_reconcile_keeps_network_evidence_and_dom_fields():
 def test_reconcile_warns_when_the_page_attempted_a_write():
     form = reconcile(parse_greenhouse_payload(load_fixture_json("d2l_7696196.json"), D2L),
                      _snapshot(_evidence(non_get_attempts=2, aborted=2)))
-    assert any("attempted 2 non-GET request(s)" in warning for warning in form.warnings)
+    assert any("attempted 2 non-GET request(s)" in warning and "all were aborted" in warning
+               for warning in form.warnings)
+    assert form.metadata["dom_verified"] is True
+
+
+def test_allowlisted_graphql_rewrites_are_not_reported_as_blocked_writes():
+    form = reconcile(parse_greenhouse_payload(load_fixture_json("d2l_7696196.json"), D2L),
+                     _snapshot(_evidence(non_get_attempts=3, aborted=1, rewritten_to_get=2)))
+    warnings = [warning for warning in form.warnings if "non-GET" in warning]
+    assert len(warnings) == 1 and "attempted 1 non-GET request(s)" in warnings[0]
+    form = reconcile(parse_greenhouse_payload(load_fixture_json("d2l_7696196.json"), D2L),
+                     _snapshot(_evidence(non_get_attempts=2, aborted=0, rewritten_to_get=2)))
+    assert not [warning for warning in form.warnings if "non-GET" in warning]
+
+
+def test_only_get_is_read_only_and_head_is_aborted():
+    assert frozenset({"GET"}) == greenhouse_browser.READ_ONLY_METHODS
+    network = greenhouse_browser._NetworkLog()
+    router = greenhouse_browser._ReadOnlyRouter(network, ())
+    calls = []
+
+    class Request:
+        def __init__(self, method):
+            self.method, self.url, self.post_data, self.resource_type = method, "http://127.0.0.1:1/x", None, "fetch"
+            self.frame = types.SimpleNamespace(parent_frame=object())
+
+        def is_navigation_request(self):
+            return False
+
+    class Route:
+        def __init__(self, method):
+            self.request = Request(method)
+
+        async def continue_(self):
+            calls.append(("continue", self.request.method))
+
+        async def abort(self):
+            calls.append(("abort", self.request.method))
+
+    for method in ("GET", "HEAD", "POST"):
+        asyncio.run(router(Route(method)))
+    assert calls == [("continue", "GET"), ("abort", "HEAD"), ("abort", "POST")]
+    summary = network.summary()
+    assert summary["non_get_attempts"] == 2 and summary["aborted"] == 2 and summary["rewritten_to_get"] == 0
+
+
+def test_submit_monitor_refuses_and_records_every_submit_path():
+    script = greenhouse_browser.SUBMIT_MONITOR_JS
+    assert "window.addEventListener('submit'" in script and "event.preventDefault()" in script
+    # HTMLFormElement.submit() fires no submit event, so the method itself is replaced (in every frame).
+    assert "['submit', 'form.submit()']" in script and "['requestSubmit', 'form.requestSubmit()']" in script
+    assert "HTMLFormElement.prototype" in script and "configurable: false" in script
+
+
+def _fake_playwright(captured):
+    """A stand-in for playwright.async_api that records how _inspect sets up the browser context."""
+    url = "http://127.0.0.1:1/embed/job_app"
+
+    class Frame:
+        def __init__(self, events):
+            self.url, self.events = url, events
+
+        async def evaluate(self, _script):
+            return self.events
+
+    class Page:
+        main_frame = object()
+        frames = (Frame([]), Frame([{"via": "form.submit()", "action": url, "method": "get"}]))
+
+        def on(self, *_args):
+            return None
+
+        async def goto(self, target, **_kwargs):
+            return types.SimpleNamespace(status=200, url=target)
+
+        async def evaluate(self, _script):
+            return {"url": url, "title": "t", "form_count": 1, "captcha": False, "body_text": "", "fields": []}
+
+    class Context:
+        tracing = None
+
+        async def add_init_script(self, script):
+            captured["init_script"] = script
+
+        async def route(self, pattern, _handler):
+            captured["route"] = pattern
+
+        async def new_page(self):
+            return Page()
+
+        async def close(self):
+            captured["context_closed"] = True
+
+    class Browser:
+        version = "129"
+
+        async def new_context(self, **kwargs):
+            captured["context_kwargs"] = kwargs
+            return Context()
+
+        async def close(self):
+            captured["browser_closed"] = True
+
+    class Chromium:
+        executable_path = "/x/ms-playwright/chrome"
+
+        async def launch(self, **kwargs):
+            captured["launch_kwargs"] = kwargs
+            return Browser()
+
+    class Manager:
+        async def __aenter__(self):
+            return types.SimpleNamespace(chromium=Chromium())
+
+        async def __aexit__(self, *_exc):
+            return False
+
+    return types.SimpleNamespace(async_playwright=Manager, Error=RuntimeError)
+
+
+def test_inspection_blocks_service_workers_and_reads_submit_attempts_from_every_frame(monkeypatch):
+    captured = {}
+    monkeypatch.setitem(sys.modules, "playwright", types.ModuleType("playwright"))
+    monkeypatch.setitem(sys.modules, "playwright.async_api", _fake_playwright(captured))
+    with pytest.raises(greenhouse_browser.FormFetchError) as failure:
+        asyncio.run(greenhouse_browser._inspect("http://127.0.0.1:1/embed/job_app", 1000))
+    assert captured["context_kwargs"] == {"accept_downloads": False, "service_workers": "block"}
+    assert captured["init_script"] == greenhouse_browser.SUBMIT_MONITOR_JS and captured["route"] == "**/*"
+    assert captured["launch_kwargs"] == {} and captured["context_closed"] and captured["browser_closed"]
+    # The submit attempt was recorded in a subframe, not the main frame, and still fails the session closed.
+    assert "page attempted 1 form submission(s)" in failure.value.detail
 
 
 def test_snapshot_without_evidence_adds_nothing():
@@ -176,7 +310,7 @@ def test_snapshot_without_evidence_adds_nothing():
 
 @pytest.mark.parametrize("network, submits, final, expected", [
     ({"main_frame_document_requests": 1}, [], "http://h/embed/job_app?for=a", []),
-    ({"main_frame_document_requests": 1}, [{"action": "x"}], "http://h/embed/job_app", ["submit event"]),
+    ({"main_frame_document_requests": 1}, [{"action": "x"}], "http://h/embed/job_app", ["form submission"]),
     ({"main_frame_document_requests": 2}, [], "http://h/embed/job_app", ["extra main-frame navigation"]),
     ({"main_frame_document_requests": 1}, [], "http://h/confirmation", ["instead of the form"]),
     ({"main_frame_document_requests": 1}, [], "chrome-error://chromewebdata/", ["instead of the form"]),
@@ -222,6 +356,38 @@ def test_dry_run_ledger_binds_the_browser_trace_hash():
                                              "materials": result["materials"], "browser": entry})
 
 
+def test_aborted_analytics_beacon_does_not_stop_a_production_dry_run():
+    """A real page's analytics beacon (POST, aborted by the router) is recorded and warned, not fatal."""
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    ensure_flags(db)
+    for key, value in gate.FAKE_ANSWERS.items():
+        upsert_answer(db, key=key, value=value, source="user", scope="global")
+    job = Job(source="greenhouse", external_id="7696196", title="Fixture", company="d2l", location="Toronto, Ontario",
+              url="https://job-boards.greenhouse.io/d2l/jobs/7696196", stage=PipelineStage.ready_to_apply.value,
+              platform="greenhouse")
+    db.add(job)
+    db.commit()
+    application = Application(job_id=job.id, mode="dry_run", adapter_name="greenhouse")
+    db.add(application)
+    db.commit()
+    beacon = {"method": "POST", "url": "https://www.google-analytics.com/g/collect", "resource_type": "ping",
+              "action": "aborted"}
+    evidence = _evidence(non_get_attempts=1, aborted=1, request_count=2, requests=[*_evidence()["requests"], beacon])
+    form = reconcile(parse_greenhouse_payload(load_fixture_json("d2l_7696196.json"), D2L), _snapshot(evidence))
+
+    class Provider:
+        def fetch(self, _job):
+            return form
+
+    result = execute_apply(db, Settings(_env_file=None, automation_enabled=True), application.id, form_provider=Provider())
+    assert result["status"] == "dry_run_complete" and result["submitted"] is False
+    assert any("all were aborted" in warning for warning in result["form"]["warnings"])
+    assert browser_ledger_entry(result["form"])["non_get_attempts"] == 1
+    assert db.execute(select(SubmissionEvidence)).scalars().one().kind == "dry_run"
+
+
 def test_browser_trace_dir_is_not_phone_editable():
     assert "browser_trace_dir" not in EDITABLE_KEYS
     assert Settings(_env_file=None).browser_trace_dir == ""
@@ -259,14 +425,19 @@ def test_network_evaluation_passes_only_a_clean_read_only_session():
     origin, embed = "http://127.0.0.1:1", "http://127.0.0.1:1/embed/job_app"
     clean = _evidence()
     assert gate.evaluate_network(clean, [_server()], origin, embed) == []
-    bad = _evidence(non_get_attempts=1, aborted=1, submit_events=[{"action": "/apply"}],
-                    requests=[{"method": "POST", "url": f"{origin}/collect"}, {"method": "GET", "url": "https://evil.test/x"}],
+    bad = _evidence(non_get_attempts=2, aborted=2, submit_events=[{"action": "/apply"}], service_workers="allow",
+                    requests=[{"method": "POST", "url": f"{origin}/collect"}, {"method": "HEAD", "url": f"{origin}/x"},
+                              {"method": "GET", "url": "https://evil.test/x"}],
                     main_frame_navigations=[embed, f"{origin}/confirmation"])
-    problems = gate.evaluate_network(bad, [_server(method="POST", expected=False)], origin, embed)
+    problems = gate.evaluate_network(bad, [_server(method="POST", expected=False), _server(method="HEAD")], origin, embed)
     text = "\n".join(problems)
-    for fragment in ("non-GET request(s)", "aborted 1", "submit event", "main frame navigations", "non-GET browser request POST",
-                     "left the fixture origin", "fixture server received POST", "unexpected request"):
+    for fragment in ("non-GET request(s)", "aborted 2", "form submission", "service workers were not blocked",
+                     "main frame navigations", "non-GET browser request POST", "non-GET browser request HEAD",
+                     "left the fixture origin", "fixture server received POST", "fixture server received HEAD",
+                     "unexpected request"):
         assert fragment in text
+    missing = gate.evaluate_network({}, [_server()], origin, embed)
+    assert missing == ["the API result carries no browser evidence (browser verification did not complete)"]
 
 
 def test_trace_zip_is_checked_independently(tmp_path):

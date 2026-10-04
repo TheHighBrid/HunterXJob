@@ -32,6 +32,8 @@ VARIANTS = {
     "post_beacon": "inject_post_beacon.html",
     "auto_submit_post": "inject_auto_submit_post.html",
     "auto_submit_get": "inject_auto_submit_get.html",
+    "iframe_form_submit": "inject_iframe_form_submit.html",
+    "head_request": "inject_head_request.html",
 }
 BROWSER_NAMES = ("chrome", "chromium", "headless_shell")
 
@@ -267,13 +269,17 @@ class ProcessSampler:
 
 
 def _browser_problems(evidence: dict[str, Any], origin: str, embed_url: str) -> list[str]:
+    if not evidence:
+        return ["the API result carries no browser evidence (browser verification did not complete)"]
     problems = []
     if evidence.get("non_get_attempts"):
         problems.append(f"browser attempted {evidence['non_get_attempts']} non-GET request(s)")
     if evidence.get("aborted"):
         problems.append(f"browser router aborted {evidence['aborted']} request(s)")
     if evidence.get("submit_events"):
-        problems.append(f"page fired {len(evidence['submit_events'])} submit event(s)")
+        problems.append(f"page attempted {len(evidence['submit_events'])} form submission(s)")
+    if evidence.get("service_workers") != "block":
+        problems.append("service workers were not blocked in the browser context")
     navigations = evidence.get("main_frame_navigations") or []
     if navigations != [embed_url]:
         problems.append(f"main frame navigations {navigations!r} != [{embed_url!r}]")
@@ -285,7 +291,7 @@ def _browser_problems(evidence: dict[str, Any], origin: str, embed_url: str) -> 
 def _request_problems(evidence: dict[str, Any], origin: str) -> list[str]:
     problems = []
     for item in evidence.get("requests") or []:
-        if item.get("method") not in {"GET", "HEAD"}:
+        if item.get("method") != "GET":
             problems.append(f"non-GET browser request {item.get('method')} {item.get('url')}")
         if not str(item.get("url", "")).startswith(origin + "/"):
             problems.append(f"browser request left the fixture origin: {item.get('url')}")
@@ -295,7 +301,7 @@ def _request_problems(evidence: dict[str, Any], origin: str) -> list[str]:
 def _server_problems(server_log: list[dict[str, Any]]) -> list[str]:
     problems = []
     for entry in server_log:
-        if entry["method"] not in {"GET", "HEAD"}:
+        if entry["method"] != "GET":
             problems.append(f"fixture server received {entry['method']} {entry['path']}")
         if not entry["expected"]:
             problems.append(f"fixture server received unexpected request {entry['method']} {entry['path']}?{entry['query']}")

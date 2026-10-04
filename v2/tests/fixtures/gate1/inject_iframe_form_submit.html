@@ -1,0 +1,17 @@
+<iframe name="gate1-sink" title="gate1 sink" style="display:none"></iframe>
+<iframe title="gate1 nested form" style="display:none" srcdoc="<form id='nested' method='get' action='/v1/boards/d2l/jobs/7696196' target='_top'><input type='hidden' name='questions' value='true'></form><script>window.addEventListener('load', () => document.getElementById('nested').submit());</script>"></iframe>
+<script>
+  window.addEventListener('load', () => {
+    const form = document.createElement('form');
+    form.method = 'get';
+    form.action = '/v1/boards/d2l/jobs/7696196';
+    form.target = 'gate1-sink';
+    const field = document.createElement('input');
+    field.type = 'hidden';
+    field.name = 'questions';
+    field.value = 'true';
+    form.appendChild(field);
+    document.body.appendChild(form);
+    HTMLFormElement.prototype.submit.call(form);
+  });
+</script>

@@ -113,13 +113,12 @@ def _fixture_handler(form_html: bytes, api_json: bytes, log: list[dict[str, Any]
                 self._record(False, 404)
                 self._send(404, b"not a gate1 fixture", "text/plain")
 
-        do_HEAD = do_GET
-
         def _refuse(self) -> None:
             self._record(False, 405)
-            self._send(405, b"gate1 fixtures are read-only", "text/plain")
+            self._send(405, b"gate1 fixtures are GET-only", "text/plain")
 
-        do_POST = do_PUT = do_PATCH = do_DELETE = do_OPTIONS = _refuse
+        # Only GET is expected: HEAD is not a GET, so it is refused and recorded as unexpected too.
+        do_HEAD = do_POST = do_PUT = do_PATCH = do_DELETE = do_OPTIONS = _refuse
 
     return Handler
 
