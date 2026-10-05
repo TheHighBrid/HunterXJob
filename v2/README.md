@@ -4,9 +4,9 @@ Android-first, zero-cost, local-first job hunting system with bounded autonomy.
 
 ## Design contract
 
-> Current scope and execution host follow [docs/RECOVERY_CONTRACT.md](../docs/RECOVERY_CONTRACT.md). Android execution is frozen; the host is plain Linux at $0 (developer box plus GitHub Actions). Gate 1 (`scripts/gate1.py`) proves the dry-run path on Linux with Playwright-owned Chromium against repo fixtures.
+> Current scope and execution host follow [docs/RECOVERY_CONTRACT.md](../docs/RECOVERY_CONTRACT.md). Android execution is frozen; the host is plain Linux at $0 (developer box plus GitHub Actions). Gate 1 (`scripts/gate1.py`) proves the dry-run path on Linux with Playwright-owned Chromium against repo fixtures, Gate 2 (`scripts/gate2.py`) proved it once on a real public Greenhouse posting, and `scripts/dryrun_batch.py` ran it read-only over 30 real Greenhouse, Lever and Ashby postings. Both gates have passed; status is in [docs/ROADMAP_STATUS.md](../docs/ROADMAP_STATUS.md).
 
-- Legacy, on hold under the recovery contract: a small cloud Linux VM running the systemd user service ([docs/DEPLOY_VM.md](../docs/DEPLOY_VM.md)), and Termux (or Ubuntu `proot-distro`) on non-root Android. Neither is a supported execution host until Gates 1 and 2 pass; the phone is a client only.
+- Legacy, on hold under the recovery contract: a small cloud Linux VM running the systemd user service ([docs/DEPLOY_VM.md](../docs/DEPLOY_VM.md)), and Termux (or Ubuntu `proot-distro`) on non-root Android. Neither is a supported execution host: the gates have passed, but hosting stays out of scope until the owner opens it in the recovery contract. The phone is a client only.
 - Runs on any local Python 3.12 on Linux.
 - Uses SQLite, FastAPI, and optional Ollama. No paid API is required.
 - Every pipeline stage is durable and resumable.
