@@ -203,13 +203,16 @@ def _start_fixtures(variant: str, log: list[dict[str, Any]]) -> ThreadingHTTPSer
     return server
 
 
-def _drive_api(data: dict[str, Any], seed: Any, answers: dict[str, Any] = FAKE_ANSWERS,
+def _drive_api(data: dict[str, Any], seed: Any, answers: dict[str, Any] | None = None,
                api_key: str = API_KEY) -> tuple[ProcessSampler, str]:
     """Start the real app, seed fake data, call the production dry-run route, and shut the app down.
 
     ``seed()`` creates the job and application and returns their ids (Gate 2 reuses this).
+    ``answers`` defaults to Gate 1's fake answers.
     """
     import httpx
+
+    answers = FAKE_ANSWERS if answers is None else answers
 
     server, api_thread, api = _start_api()
     data["api_base"] = api
