@@ -23,7 +23,8 @@ browser session is strictly read-only:
   whether it was continued, aborted, or rewritten), together with main-frame
   navigations and form submit attempts, so a dry-run carries network
   evidence that nothing was posted. With ``BROWSER_TRACE_DIR`` set, a
-  Playwright trace zip is written, integrity-checked, and hashed as well.
+  Playwright trace zip is written, integrity-checked, and hashed as well, and
+  a full-page screenshot of the page as seen is saved and hashed next to it.
 
 Playwright is an optional dependency (``pip install -e '.[browser]'`` plus
 ``python -m playwright install chromium``). When it is missing,
@@ -540,15 +541,41 @@ async def _submit_attempts(page: Any, evidence: dict[str, Any]) -> list[Any]:
     return attempts[:MAX_SUBMIT_EVENTS]
 
 
-async def _read_page(context: Any, url: str, timeout_ms: int, network: _NetworkLog, evidence: dict[str, Any]) -> dict[str, Any]:
+def file_record(path: Path) -> dict[str, Any]:
+    """Path, size, and SHA-256 of an evidence file (screenshot)."""
+    if not path.is_file():
+        return {"path": str(path), "exists": False}
+    data = path.read_bytes()
+    return {"path": str(path), "exists": True, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+
+
+async def _screenshot(page: Any, path: Path) -> dict[str, Any]:
+    """Full-page screenshot of the page as seen (a local render; it does not interact with the page)."""
+    from playwright.async_api import Error as PlaywrightError
+
+    try:
+        await page.screenshot(path=str(path), full_page=True, animations="disabled", timeout=15000)
+    except PlaywrightError as exc:
+        return {"path": str(path), "exists": False, "error": str(exc).splitlines()[0][:200]}
+    return file_record(path)
+
+
+async def _read_page(context: Any, url: str, timeout_ms: int, network: _NetworkLog, evidence: dict[str, Any],
+                     screenshot_path: Path | None = None) -> dict[str, Any]:
     """Open the form, read its structure, and refuse a session in which the page submitted or left the form."""
     page = await context.new_page()
     page.on("framenavigated", lambda frame: network.navigations.append(frame.url[:300]) if frame == page.main_frame else None)
-    response = await page.goto(url, wait_until="networkidle", timeout=timeout_ms)
-    if response is not None and response.status == 404:
-        raise FormFetchError("form_unavailable", "hosted application page returned 404")
-    data = await page.evaluate(DOM_EXTRACT_JS)
-    evidence["submit_events"] = await _submit_attempts(page, evidence)
+    try:
+        response = await page.goto(url, wait_until="networkidle", timeout=timeout_ms)
+        evidence["main_document_status"] = response.status if response is not None else None
+        if response is not None and response.status == 404:
+            raise FormFetchError("form_unavailable", "hosted application page returned 404")
+        data = await page.evaluate(DOM_EXTRACT_JS)
+        evidence["submit_events"] = await _submit_attempts(page, evidence)
+    finally:
+        # Taken even when loading or reading failed, so a block page or challenge is on record too.
+        if screenshot_path is not None:
+            evidence["screenshot"] = await _screenshot(page, screenshot_path)
     form_url = response.url if response is not None else url
     reasons = untrusted_session_reasons(network.summary(), evidence["submit_events"], form_url, str(data.get("url", "")))
     if reasons:
@@ -585,7 +612,8 @@ async def _inspect(url: str, timeout_ms: int, graphql_ops: Collection[str] = (),
             if trace_path is not None:
                 await context.tracing.start(screenshots=True, snapshots=True)
             try:
-                data = await _read_page(context, url, timeout_ms, network, evidence)
+                screenshot_path = trace_path.with_suffix(".png") if trace_path is not None else None
+                data = await _read_page(context, url, timeout_ms, network, evidence, screenshot_path)
             finally:
                 if trace_path is not None:
                     await context.tracing.stop(path=str(trace_path))

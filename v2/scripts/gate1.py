@@ -203,15 +203,23 @@ def _start_fixtures(variant: str, log: list[dict[str, Any]]) -> ThreadingHTTPSer
     return server
 
 
-def _drive_api(data: dict[str, Any], origin: str) -> tuple[ProcessSampler, str]:
-    """Start the real app, seed fake data, call the production dry-run route, and shut the app down."""
+def _drive_api(data: dict[str, Any], seed: Any, answers: dict[str, Any] | None = None,
+               api_key: str = API_KEY) -> tuple[ProcessSampler, str]:
+    """Start the real app, seed fake data, call the production dry-run route, and shut the app down.
+
+    ``seed()`` creates the job and application and returns their ids (Gate 2 reuses this).
+    ``answers`` defaults to Gate 1's fake answers.
+    """
     import httpx
 
+    answers = FAKE_ANSWERS if answers is None else answers
+
     server, api_thread, api = _start_api()
-    with httpx.Client(base_url=api, headers={"X-API-Key": API_KEY}, timeout=240, trust_env=False) as client:
-        for key, value in FAKE_ANSWERS.items():
+    data["api_base"] = api
+    with httpx.Client(base_url=api, headers={"X-API-Key": api_key}, timeout=240, trust_env=False) as client:
+        for key, value in answers.items():
             client.post("/api/answers", json={"key": key, "value": value, "source": "user"}).raise_for_status()
-        job_id, application_id = _seed_job(origin)
+        job_id, application_id = seed()
         with ProcessSampler() as sampler:
             begin = time.monotonic()
             response = client.post(f"/api/applications/{application_id}/apply")
@@ -252,7 +260,7 @@ def run_once(run_dir: Path, variant: str, inject_leak: bool) -> dict[str, Any]:
     try:
         fixture_origin.enable_for_gate1(origin, get_settings(), acknowledgement=fixture_origin.GATE1_ACKNOWLEDGEMENT)
         baseline = live_descendants()
-        sampler, application_id = _drive_api(data, origin)
+        sampler, application_id = _drive_api(data, lambda: _seed_job(origin))
         if inject_leak:
             # Negative test hook: a stray child process the cleanup check must catch.
             leak = SPAWN.Process(target=time.sleep, args=(120,), name="gate1-injected-leak")

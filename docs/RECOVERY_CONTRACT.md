@@ -130,6 +130,65 @@ Gate 2 starts only after Gate 1 is green in CI.
 Nothing else enters scope until Gates 1 and 2 pass. That includes the 30-run
 certification, Lever/Ashby, phone hosting, and any other hosting.
 
+### How Gate 2 is run
+
+`v2/scripts/gate2.py` runs it, on plain Linux, by hand. It never runs in CI:
+`--live` refuses to start when `CI` is set. CI only runs the same runner
+against Gate 1's loopback fixtures (`--rehearse`, plus
+`tests/test_gate2_rehearsal.py` under `-m gate1`).
+
+```bash
+cd v2
+python scripts/gate2.py --live --board <board> --job-id <id>   # one real posting, once
+python scripts/gate2.py --recheck --out gate-artifacts/gate2    # re-evaluate saved observations; no network
+python scripts/gate2.py --rehearse                              # loopback fixtures (what CI runs)
+```
+
+- The parent confirms the posting is open with one GET to
+  `boards-api.greenhouse.io`. It retries once on a transport error or 5xx and
+  never on anything else.
+- A fresh process then runs the same path as Gate 1:
+  - uvicorn on `127.0.0.1`;
+  - the fake identity (Test / Applicant / test@example.com / 555-0100, no
+    résumé) through `POST /api/answers`;
+  - one job seeded at `ready_to_apply`;
+  - the apply route with `GREENHOUSE_BROWSER_VERIFY=true` and
+    `BROWSER_TRACE_DIR` set.
+- The production engine probes the posting and fetches the form (both GET).
+  Playwright then launches its own Chromium (`chromium.launch()`, never CDP)
+  and loads the hosted form once, read-only.
+- Real pages fire analytics beacons. The router aborts every non-GET before it
+  leaves the browser, and the report records each one. An aborted attempt is
+  allowed. A non-GET that was not aborted fails the run, as does any of these:
+  - a rewrite;
+  - a submit attempt;
+  - more than one main-frame document load;
+  - a main-frame URL off the form's origin and path (same-document history
+    updates are allowed);
+  - app HTTP that is not GET to the boards API.
+- Outcome:
+  - `pass`;
+  - `fail`;
+  - `blocked_by_bot_check`: an anti-bot handoff, or a 401/403/429/503 on the
+    form document. This counts only if every safety check still held. It is a
+    valid finding. Nothing retries the page or tries to get past a challenge.
+
+Artifacts stay local and gitignored under `v2/gate-artifacts/`:
+
+- the report (`gate2-report.json`), with:
+  - the field mapping;
+  - requests by method, action, and host;
+  - proven and not-proven;
+- `run/observations.json`;
+- the Playwright trace zip, plus a full-page screenshot of the form as seen;
+- the run's SQLite ledger.
+
+The dry-run usually stops for review on a real form, because employer
+questions are not in a fake vault. The ledger then holds a `dry_run_review`
+row with the planned values, the fields that need review, and the trace and
+screenshot hashes. That row is never sufficient and never counts as a
+completed dry-run.
+
 ## Human intervention rule
 
 The owner is never the debugging harness.

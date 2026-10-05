@@ -3,6 +3,8 @@
 All tests are offline: payloads come from sanitized fixtures and HTTP is
 served by httpx.MockTransport.
 """
+import json
+
 import httpx
 import pytest
 from conftest import load_fixture_json
@@ -427,7 +429,13 @@ def test_blocked_real_form_lists_the_blocking_fields():
     assert "question_64283527" in result["blocked_fields"]
     task = db.execute(select(ReviewTask)).scalars().one()
     assert "Are you legally eligible to work in Canada" in task.detail
-    assert not db.execute(select(SubmissionEvidence)).scalars().all()
+    # The stop is on the ledger (planned values and review fields bound by hash), never as a completed dry-run.
+    rows = db.execute(select(SubmissionEvidence)).scalars().all()
+    assert [(row.kind, row.sufficient) for row in rows] == [("dry_run_review", False)]
+    assert "need review" in rows[0].confirmation_text and "submit button was not clicked" in rows[0].confirmation_text
+    validation = json.loads(application.validation_json)
+    assert validation["planned"]["first_name"] == IDENTITY["first_name"]
+    assert "question_64283527" not in validation["planned"]
 
 
 def test_fetch_failure_flags_review_and_does_not_fall_back_to_a_sample():
