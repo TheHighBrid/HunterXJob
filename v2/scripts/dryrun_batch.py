@@ -41,7 +41,6 @@ import argparse
 import hashlib
 import json
 import os
-import re
 import shutil
 import sys
 import time
@@ -56,13 +55,17 @@ from batch_checks import (
     PLATFORMS,
     batch_outcome,
     claims_hits,
+    clear_reports_from,
+    ensure_under_output,
     inspector_source_evidence,
     is_transient,
     material_texts,
     open_check_url,
     parse_open_posting,
+    run_directory,
     run_extra_checks,
     run_row,
+    sanitize_board,
     summarize,
     trace_marker,
 )
@@ -82,37 +85,6 @@ REHEARSAL_GUARDRAILS = {"claims_to_avoid": [{"claim": "rehearsal: never claim a 
 
 
 # --------------------------------------------------------------------------- inputs
-
-BOARD_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$")
-
-
-def sanitize_board(board: str) -> str:
-    """Reject path separators / traversal so a board slug cannot escape the output root."""
-    if not isinstance(board, str) or not BOARD_RE.fullmatch(board) or ".." in board:
-        raise SystemExit(f"unsafe board identifier: {board!r}")
-    return board
-
-
-def run_directory(out: Path, index: int, platform: str, board: str) -> Path:
-    """Build ``out/run-NN-platform-board`` and prove the resolved path stays under ``out``."""
-    board = sanitize_board(board)
-    if platform not in PLATFORMS:
-        raise SystemExit(f"unsupported platform: {platform!r}")
-    out_root = out.resolve()
-    run_dir = (out_root / f"run-{index:02d}-{platform}-{board}").resolve()
-    if run_dir != out_root and out_root not in run_dir.parents:
-        raise SystemExit(f"run directory {run_dir} escapes output root {out_root}")
-    return run_dir
-
-
-def ensure_under_output(out: Path, run_dir: Path) -> Path:
-    """Re-check before rmtree/mkdir: the resolved run dir must stay under ``out``."""
-    out_root = out.resolve()
-    resolved = run_dir.resolve()
-    if resolved != out_root and out_root not in resolved.parents:
-        raise SystemExit(f"run directory {resolved} escapes output root {out_root}")
-    return resolved
-
 
 def load_inputs(profile: Path, answers: Path, guardrails: Path) -> dict[str, Any]:
     """Load answers/guardrails and snapshot the profile bytes so every run sees the same identity."""
@@ -469,6 +441,45 @@ class BatchDeps:
                          sleep=self.sleep or time.sleep)
 
 
+def _save_report(out: Path, index: int, report: dict[str, Any]) -> None:
+    (out / f"run-{index:02d}-report.json").write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
+
+
+def _live_posting(deps: BatchDeps, target: dict[str, Any], index: int, out: Path
+                  ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, str | None]:
+    """Return (posting, early_report, stop_reason). early_report set when the target is not run."""
+    posting = deps.fetch(target)
+    if posting.get("probe_error"):
+        failed = {"index": index, "posting": posting, "outcome": "probe_error", "checks": {},
+                  "error": posting["reason"]}
+        _save_report(out, index, failed)
+        reason = (f"run {index} board API unavailable ({posting['reason']}); "
+                  "batch stopped rather than treating it as a closed posting")
+        return None, failed, reason
+    if not posting["open"]:
+        skipped = {"index": index, "posting": posting, "outcome": "skipped_closed", "checks": {},
+                   "error": posting["reason"]}
+        _save_report(out, index, skipped)
+        return None, skipped, None
+    return posting, None, None
+
+
+def _execute_with_retry(deps: BatchDeps, out: Path, index: int, mode: str, posting: dict[str, Any],
+                        inputs: dict[str, Any], timeout: float, pause: float) -> tuple[dict[str, Any], bool]:
+    run_dir = run_directory(out, index, posting["platform"], posting["board"])
+    result = _invoke_runner(deps.runner, run_dir, mode, posting, inputs, timeout, out)
+    attempts = [{"attempt": 1, "outcome": result.get("outcome"), "error": result.get("error")}]
+    if transient_failure(result):
+        deps.sleep(max(pause, 5))
+        result = _invoke_runner(deps.runner, run_dir.with_name(run_dir.name + "-retry"), mode, posting,
+                                inputs, timeout, out)
+        attempts.append({"attempt": 2, "outcome": result.get("outcome"), "error": result.get("error"),
+                         "reason": "retry after a transient network error"})
+    report = run_report(index, posting, result, attempts)
+    _save_report(out, index, report)
+    return report, bool(result.get("crashed"))
+
+
 def run_batch(targets: list[dict[str, Any]], inputs: dict[str, Any], out: Path, *, mode: str, pause: float,
               timeout: float, first_index: int = 1,
               deps: BatchDeps | None = None) -> tuple[list[dict[str, Any]], str | None]:
@@ -476,49 +487,28 @@ def run_batch(targets: list[dict[str, Any]], inputs: dict[str, Any], out: Path, 
     deps = (deps or BatchDeps()).resolve()
     reports: list[dict[str, Any]] = []
     stopped = None
+    last = first_index + len(targets) - 1
     for index, target in enumerate(targets, start=first_index):
         if index > first_index and pause:
             deps.sleep(pause)
         if mode == "live":
-            posting = deps.fetch(target)
-            if posting.get("probe_error"):
-                failed = {"index": index, "posting": posting, "outcome": "probe_error", "checks": {},
-                          "error": posting["reason"]}
-                reports.append(failed)
-                (out / f"run-{index:02d}-report.json").write_text(json.dumps(failed, indent=2, default=str),
-                                                                  encoding="utf-8")
-                stopped = (f"run {index} board API unavailable ({posting['reason']}); "
-                           "batch stopped rather than treating it as a closed posting")
-                break
-            if not posting["open"]:
-                skipped = {"index": index, "posting": posting, "outcome": "skipped_closed", "checks": {},
-                           "error": posting["reason"]}
-                reports.append(skipped)
-                (out / f"run-{index:02d}-report.json").write_text(json.dumps(skipped, indent=2, default=str),
-                                                                   encoding="utf-8")
+            posting, early, stopped = _live_posting(deps, target, index, out)
+            if early is not None:
+                reports.append(early)
+                if stopped:
+                    break
                 continue
         else:
             posting = {**target, "id": str(target["id"]), "title": target.get("title", "fixture posting"),
                        "company": target.get("company", BOARD), "url": "", "location": "Toronto, Ontario"}
-        attempts = []
-        run_dir = run_directory(out, index, posting["platform"], posting["board"])
-        result = _invoke_runner(deps.runner, run_dir, mode, posting, inputs, timeout, out)
-        attempts.append({"attempt": 1, "outcome": result.get("outcome"), "error": result.get("error")})
-        if transient_failure(result):
-            deps.sleep(max(pause, 5))
-            result = _invoke_runner(deps.runner, run_dir.with_name(run_dir.name + "-retry"), mode, posting,
-                                    inputs, timeout, out)
-            attempts.append({"attempt": 2, "outcome": result.get("outcome"), "error": result.get("error"),
-                             "reason": "retry after a transient network error"})
-        report = run_report(index, posting, result, attempts)
+        report, crashed = _execute_with_retry(deps, out, index, mode, posting, inputs, timeout, pause)
         reports.append(report)
-        (out / f"run-{index:02d}-report.json").write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
-        print(f"[{index}/{first_index + len(targets) - 1}] {posting['platform']}:{posting['board']} {report['outcome']} "
+        print(f"[{index}/{last}] {posting['platform']}:{posting['board']} {report['outcome']} "
               f"planned={(report.get('field_mapping') or {}).get('planned_count')} "
               f"review={(report.get('field_mapping') or {}).get('needs_review_count')} "
               f"failed={report['failed_checks'] or report.get('error')}", flush=True)
-        if result.get("crashed"):
-            stopped = f"run {index} crashed ({result.get('error')}); batch stopped so the cause can be fixed first"
+        if crashed:
+            stopped = f"run {index} crashed ({report.get('error')}); batch stopped so the cause can be fixed first"
             break
     return reports, stopped
 
@@ -562,17 +552,6 @@ def recheck(out: Path, guardrails: list[dict[str, str]] | None = None) -> list[d
         path.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
         reports.append(report)
     return reports
-
-
-def clear_reports_from(out: Path, start: int) -> None:
-    """Drop reports at/after ``start`` so a reused --out cannot mix a new/partial batch with stale runs."""
-    for path in out.glob("run-*-report.json"):
-        try:
-            index = int(json.loads(path.read_text(encoding="utf-8")).get("index") or 0)
-        except (json.JSONDecodeError, TypeError, ValueError):
-            index = 0
-        if index >= start:
-            path.unlink()
 
 
 def _build_parser() -> argparse.ArgumentParser:

@@ -19,6 +19,52 @@ from gate2_checks import OUTCOME_BLOCKED, OUTCOME_OK, SAFETY_CHECKS
 
 V2_ROOT = Path(__file__).resolve().parents[1]
 
+# --------------------------------------------------------------------------- run directories (under --out)
+
+BOARD_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$")
+
+
+def sanitize_board(board: str) -> str:
+    """Reject path separators / traversal so a board slug cannot escape the output root."""
+    if not isinstance(board, str) or not BOARD_RE.fullmatch(board) or ".." in board:
+        raise SystemExit(f"unsafe board identifier: {board!r}")
+    return board
+
+
+def run_directory(out: Path, index: int, platform: str, board: str) -> Path:
+    """Build ``out/run-NN-platform-board`` and prove the resolved path stays under ``out``."""
+    board = sanitize_board(board)
+    if platform not in PLATFORMS:
+        raise SystemExit(f"unsupported platform: {platform!r}")
+    out_root = out.resolve()
+    run_dir = (out_root / f"run-{index:02d}-{platform}-{board}").resolve()
+    if run_dir != out_root and out_root not in run_dir.parents:
+        raise SystemExit(f"run directory {run_dir} escapes output root {out_root}")
+    return run_dir
+
+
+def ensure_under_output(out: Path, run_dir: Path) -> Path:
+    """Re-check before rmtree/mkdir: the resolved run dir must stay under ``out``."""
+    out_root = out.resolve()
+    resolved = run_dir.resolve()
+    if resolved != out_root and out_root not in resolved.parents:
+        raise SystemExit(f"run directory {resolved} escapes output root {out_root}")
+    return resolved
+
+
+def clear_reports_from(out: Path, start: int) -> None:
+    """Drop reports at/after ``start`` so a reused --out cannot mix a new/partial batch with stale runs."""
+    import json
+
+    for path in out.glob("run-*-report.json"):
+        try:
+            index = int(json.loads(path.read_text(encoding="utf-8")).get("index") or 0)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            index = 0
+        if index >= start:
+            path.unlink()
+
+
 # The hosts the app itself may GET per platform, and the DOM evidence that the form rendered.
 PLATFORMS: dict[str, dict[str, Any]] = {
     "greenhouse": {"api_hosts": ["boards-api.greenhouse.io"], "required_dom_keys": ["first_name", "email"],
