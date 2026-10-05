@@ -87,6 +87,9 @@ jobs:
       - name: Gate 1 negative proofs (POST, HEAD, auto-submit, iframe submit, process leak)
         run: python -m pytest -m gate1 -q
 
+      - name: Gate 2 runner rehearsal (loopback fixtures only; --live never runs in CI)
+        run: python scripts/gate2.py --rehearse
+
       - name: Upload Gate 1 report and traces
         if: always()
         uses: actions/upload-artifact@v7
@@ -97,5 +100,6 @@ jobs:
             v2/gate-artifacts/run-*/run.json
             v2/gate-artifacts/run-*/child.log
             v2/gate-artifacts/run-*/traces/*.zip
+            v2/gate-artifacts/gate2/gate2-report.json
           if-no-files-found: error
           retention-days: 30
