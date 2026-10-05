@@ -304,6 +304,10 @@ def _form_unavailable(db: Session, application: Application, job: Job, exc: Form
     }
 
 
+def _planned(plan: FillPlan | None) -> dict[str, object]:
+    return {} if plan is None else {item.control.key: item.value for item in plan.items if item.status == "fill"}
+
+
 def _record_blockers(application: Application, form: _LoadedForm, blockers: list[str], plan: FillPlan | None) -> None:
     """Keep a structured copy of why the dry-run stopped (shown in the job detail)."""
     blocked = [] if plan is None else [{
@@ -314,14 +318,41 @@ def _record_blockers(application: Application, form: _LoadedForm, blockers: list
         "reason": item.reason,
     } for item in plan.items if item.status == "review"]
     application.validation_json = json.dumps(
-        {"ok": False, "form": form.summary, "blockers": blockers, "blocked_fields": blocked}, default=str
+        {"ok": False, "form": form.summary, "blockers": blockers, "blocked_fields": blocked, "planned": _planned(plan)},
+        default=str,
     )
 
 
-def _stop_for_review(db: Session, application: Application, job: Job, plan: FillPlan, form: _LoadedForm) -> dict[str, object] | None:
+def _record_review_evidence(db: Session, application: Application, job: Job, plan: FillPlan | None, form: _LoadedForm,
+                            blockers: list[str], platform: str) -> None:
+    """Ledger row for a dry-run that loaded the real form but stopped for review.
+
+    Most real forms stop here (employer-specific questions), so this is where
+    the browser evidence (trace hash, request counts) is bound into the ledger
+    for them. ``kind="dry_run_review"`` is never counted as a completed dry-run
+    and, like every non-submission row, can never be sufficient.
+    """
+    browser = browser_ledger_entry(form.summary)
+    review = [] if plan is None else [item.control.key for item in plan.items if item.status == "review"]
+    planned = _planned(plan)
+    note = (f"dry-run stopped for review against {form.summary['source']} form ({len(planned)} planned, "
+            f"{len(review)} need review: {', '.join(blockers)}); submit button was not clicked")
+    if browser and browser.get("trace_sha256"):
+        note += f"; browser trace sha256={browser['trace_sha256']}"
+    payload: dict[str, object] = {"planned": planned, "needs_review": review, "blockers": blockers,
+                                  "form_source": form.summary["source"]}
+    if browser:
+        payload["browser"] = browser
+    record_evidence(db, application, kind="dry_run_review", confirmation_text=note, final_url=job.url, payload=payload,
+                    adapter_name=platform, update_application=False)
+
+
+def _stop_for_review(db: Session, application: Application, job: Job, plan: FillPlan, form: _LoadedForm,
+                     platform: str) -> dict[str, object] | None:
     """Open a review task and return the result if the form cannot be completed automatically."""
     if form.handoff:
         _record_blockers(application, form, [form.handoff], None)
+        _record_review_evidence(db, application, job, None, form, [form.handoff], platform)
         open_task(
             db,
             reason_code=form.handoff,
@@ -336,6 +367,7 @@ def _stop_for_review(db: Session, application: Application, job: Job, plan: Fill
         return None
     reason = plan.blockers[0] if plan.blockers else "ambiguous_question"
     _record_blockers(application, form, list(plan.blockers) or [reason], plan)
+    _record_review_evidence(db, application, job, plan, form, list(plan.blockers) or [reason], platform)
     open_task(
         db,
         reason_code=reason,
@@ -363,6 +395,7 @@ def browser_ledger_entry(form_summary: dict[str, object]) -> dict[str, object] |
     if not isinstance(evidence, dict):
         return None
     trace = evidence.get("trace") if isinstance(evidence.get("trace"), dict) else {}
+    screenshot = evidence.get("screenshot") if isinstance(evidence.get("screenshot"), dict) else {}
     return {
         "launcher": evidence.get("launcher"),
         "browser_version": evidence.get("browser_version"),
@@ -373,6 +406,7 @@ def browser_ledger_entry(form_summary: dict[str, object]) -> dict[str, object] |
         "trace_sha256": trace.get("sha256"),
         "trace_bytes": trace.get("bytes"),
         "trace_zip_ok": trace.get("zip_ok"),
+        "screenshot_sha256": screenshot.get("sha256"),
     }
 
 
@@ -477,7 +511,7 @@ def execute_apply(
     transition(db, job, PipelineStage.applying, f"dry-run apply started on {platform} ({form.summary['source']})")
     application.stage = PipelineStage.applying.value
 
-    review = _stop_for_review(db, application, job, plan, form)
+    review = _stop_for_review(db, application, job, plan, form, platform)
     if review is not None:
         return review
 
