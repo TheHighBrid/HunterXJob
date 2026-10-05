@@ -30,6 +30,7 @@ from app.greenhouse_form import (
     FormFetchError,
     RealForm,
     classify_question,
+    shared_answer_key,
     demographic_key,
     is_sensitive_field,
     looks_like,
@@ -208,11 +209,9 @@ def _canonical(path: str, raw_type: str, title: str, *, voluntary: bool, job_loc
         return _file_key(title)
     if raw_type == "Location" and "resid" in title.lower():
         return "location"
-    if looks_like(title, LEGAL_PATTERNS):
-        return None
     if raw_type == "LongText" and title.strip().lower() == "cover letter":
         return "cover_letter_text"
-    return classify_question(title, job_location)
+    return shared_answer_key(title, job_location)
 
 
 def _options(raw_type: str, data: dict[str, Any]) -> tuple[list[str], dict[str, str]]:

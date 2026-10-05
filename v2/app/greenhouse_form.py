@@ -271,11 +271,47 @@ _KEY_RULES: tuple[tuple[tuple[re.Pattern[str], ...], str, int | None], ...] = (
     ((re.compile(r"salary|compensation expectation|pay expectation|desired (?:pay|compensation)"),), "salary_expectation", None),
     ((re.compile(r"current (?:company|employer)"),), "current_company", 60),
     ((re.compile(r"current (?:job )?title|current role"),), "current_title", 60),
+    # Availability / start date (not education or employment history start).
+    ((re.compile(
+        r"earliest (?:start|availability)|available to start|when (?:can|could) you start|"
+        r"start date|date you (?:can |could )?start|available start|notice period"
+    ),), "start_date", None),
+    # Current work status (not employment agreements / prior-employer history).
+    ((re.compile(
+        r"employment status|currently employ(?:ed|ment)|are you (?:currently )?(?:employed|working)\b|"
+        r"\bwork status\b|full[- ]time or part[- ]time"
+    ),), "employment_status", 100),
+    ((re.compile(
+        r"background check|criminal (?:background|record) check|"
+        r"consent (?:to|for) (?:a )?(?:background|criminal)|"
+        r"(?:background|criminal).{0,40}consent"
+    ),), "background_check_consent", None),
+    ((re.compile(
+        r"education(?:al)? (?:level|attainment)|highest (?:level of )?education|"
+        r"highest degree|degree (?:level|obtained)|level of education"
+    ),), "education_level", None),
     ((re.compile(r"relocat"),), "willing_to_relocate", None),
+    # Ottawa / NCR commute willingness (both patterns required).
+    ((re.compile(r"commute|travel to|willing to (?:travel|drive)|distance to|hybrid|on[- ]?site"),
+      re.compile(r"ottawa|gatineau|national capital|\bncr\b")), "ottawa_commute", None),
     ((re.compile(r"how did you hear|hear(?:d)? about"),), "referral_source", None),
     ((re.compile(r"country"), re.compile(r"resid|located|\blive\b|based")), "country_of_residence", None),
     ((re.compile(r"time ?zone"),), "time_zone", None),
 )
+
+# Spoken / bilingual language questions. Programming-language prompts must not match.
+_LANGUAGE_RE = re.compile(
+    r"bilingual(?:ism)?|"
+    r"(?:canadian )?french.{0,60}english|english.{0,60}(?:canadian )?french|"
+    r"level of language skill|spoken languages?|language proficiency|"
+    r"fluen(?:t|cy) in (?:french|english|fran[cç]ais)|"
+    r"english and french|french and english"
+)
+_PROGRAMMING_LANG_RE = re.compile(
+    r"scripting language|programming language|python|javascript|typescript|"
+    r"\bjava\b|c\+\+|\bruby\b|golang|\bsql\b|llm ecosystem"
+)
+_CITIZENSHIP_RE = re.compile(r"\bcitizen(?:ship)?\b")
 
 
 def _rule_key(text: str) -> str | None:
@@ -302,9 +338,25 @@ def classify_question(label: str, job_location: str = "") -> str | None:
         return _country_scoped("sponsorship", text, job_location)
     if _WORK_AUTH_RE.search(text):
         return _country_scoped("work_authorization", text, job_location)
+    if _CITIZENSHIP_RE.search(text):
+        return _country_scoped("citizenship", text, job_location)
     if _PRIOR_EMPLOYMENT_RE.search(text):
         return None
+    if _LANGUAGE_RE.search(text) and not _PROGRAMMING_LANG_RE.search(text):
+        return "language_proficiency"
     return _rule_key(text)
+
+
+def shared_answer_key(label: str, job_location: str = "") -> str | None:
+    """Canonical vault key for a form question, respecting legal fail-closed rules.
+
+    Most legal declarations stay per-question. Background-check consent may
+    share an explicit policy answer from the vault.
+    """
+    classified = classify_question(label, job_location)
+    if _looks_like(label, LEGAL_PATTERNS):
+        return classified if classified == "background_check_consent" else None
+    return classified
 
 
 _DEMOGRAPHIC_KEYS: tuple[tuple[re.Pattern[str], str], ...] = (
@@ -333,7 +385,9 @@ def _looks_like(text: str, patterns: Iterable[str]) -> bool:
 def _is_sensitive_key(key: str | None) -> bool:
     if not key:
         return False
-    return key in SENSITIVE_KEYS or key.startswith(("work_authorization", "sponsorship"))
+    return key in SENSITIVE_KEYS or key.startswith(
+        ("work_authorization", "sponsorship", "citizenship", "background_check")
+    )
 
 
 _TYPE_MAP = {
@@ -371,10 +425,7 @@ def _canonical_key(name: str, label: str, section: str, job_location: str) -> st
         return name or _demographic_key(label)
     if name in _STANDARD_FIELDS or section == "location":
         return name
-    if _looks_like(label, LEGAL_PATTERNS):
-        # Legal declarations are answered per question, never from a shared key.
-        return None
-    return classify_question(label, job_location)
+    return shared_answer_key(label, job_location)
 
 
 def _is_sensitive_field(label: str, canonical: str | None, voluntary: bool) -> bool:
