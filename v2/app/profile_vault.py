@@ -74,6 +74,25 @@ def _full_name(contact: dict[str, Any]) -> str:
     return " ".join(str(contact.get(part) or "").strip() for part in ("first_name", "last_name")).strip()
 
 
+def _language_label(data: dict[str, Any]) -> str:
+    name = str(data.get("name") or "").strip()
+    proficiency = str(data.get("proficiency") or "").strip()
+    return f"{name} ({proficiency})" if name and proficiency else name
+
+
+def _language_proficiency(profile: VerifiedProfile) -> str | None:
+    """Pipe-joined language labels for multiselect / text language questions.
+
+    Does not invent a yes/no bilingual answer: forms that only offer Yes/No
+    still need an explicit stored ``language_proficiency`` (or matching option
+    labels). English + French on the verified profile is enough to populate
+    the detailed proficiency string classifiers already recognize.
+    """
+    labels = [_language_label(fact.data) for fact in profile.of("language")]
+    labels = [label for label in labels if label]
+    return "|".join(labels) if labels else None
+
+
 def profile_answers(profile: VerifiedProfile) -> dict[str, Any]:
     answers: dict[str, Any] = dict(profile.contact)
     # Lever and Ashby ask for a single "Full name" field.
@@ -94,6 +113,9 @@ def profile_answers(profile: VerifiedProfile) -> dict[str, Any]:
     for index, fact in enumerate(chronological(profile.of("education"))[:10]):
         answers.update(_history("education", index, fact.data,
                                 {"school": "institution", "degree": "degree", "discipline": "field_of_study"}))
+    language = _language_proficiency(profile)
+    if language:
+        answers["language_proficiency"] = language
     return {key: value for key, value in answers.items() if value not in (None, "")}
 
 
