@@ -189,6 +189,47 @@ row with the planned values, the fields that need review, and the trace and
 screenshot hashes. That row is never sufficient and never counts as a
 completed dry-run.
 
+### Real-profile dry-run batch (after Gates 1 and 2)
+
+`v2/scripts/dryrun_batch.py` is a thin wrapper around the Gate 2 code path for
+the owner's real profile across Greenhouse, Lever and Ashby. The safety rules
+are the same: dry-run only, live submission locked, zero submits, zero uploads,
+no typing, Playwright-launched Chromium (never CDP), and a bot check fails
+closed and is recorded. It never runs in CI: `--live` refuses when `CI` is set.
+`--out` inside the repository is refused, because the output contains the
+owner's identity. CI only runs `--rehearse` (loopback fixtures and the made-up
+example profile, `tests/test_dryrun_batch_rehearsal.py` under `-m gate1`).
+
+```bash
+cd v2
+python scripts/dryrun_batch.py --live --targets T.json --profile P.yaml --answers A.yaml \
+    --guardrails G.yaml --out /private/dir --pause 30          # sequential, >= 20 s apart
+python scripts/dryrun_batch.py --recheck --out /private/dir --guardrails G.yaml   # no network
+python scripts/dryrun_batch.py --rehearse --out /tmp/batch --pause 0              # what CI runs
+```
+
+- The parent confirms each posting is open with one GET to the platform's
+  public board API, with one retry on a transport error or 5xx.
+- Each run is a fresh process with a throwaway database. That process:
+  - imports the profile document;
+  - stores the owner's form-answer defaults;
+  - generates the résumé and cover letter (LLM off);
+  - approves the résumé and rejects the cover letter in that throwaway
+    database (nothing is ever uploaded in a dry-run);
+  - calls the apply route.
+- Lever and Ashby use the same read-only browser. Ashby's page reads its form
+  through allowlisted GraphQL *queries*. The router re-issues those as GET, so
+  only GET leaves the browser, and the report counts them. Every other non-GET
+  is aborted, as on Greenhouse.
+- Extra checks on top of the Gate 2 checks:
+  - live submission is locked;
+  - the page inspector has no input APIs;
+  - every planned answer comes from a verified profile fact, an owner answer,
+    or approved material, and no "never auto-answer" topic is answered;
+  - the generated materials contain none of the owner's claims to avoid.
+- A run is retried once only for a transient network error. A crashed run stops
+  the batch.
+
 ## Human intervention rule
 
 The owner is never the debugging harness.

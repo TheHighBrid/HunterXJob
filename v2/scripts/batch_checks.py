@@ -132,6 +132,15 @@ def open_check_url(target: dict[str, Any]) -> str:
     raise ValueError(f"unsupported platform {platform!r}")
 
 
+def trace_marker(platform: str, board: str, job_id: str) -> str:
+    """The form page path the browser trace's network log must mention."""
+    if platform == "lever":
+        return f"/{board}/{job_id}/apply"
+    if platform == "ashby":
+        return f"/{board}/{job_id}/application"
+    return "/embed/job_app"
+
+
 def is_transient(text: str) -> bool:
     return any(pattern in (text or "") for pattern in TRANSIENT_PATTERNS)
 
@@ -200,8 +209,24 @@ def check_planned_answers(data: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
     return not problems, {"planned": len(planned), "unbacked": problems}
 
 
-def claims_hits(text: str, guardrails: list[dict[str, str]]) -> list[str]:
-    return [item["claim"] for item in guardrails if re.search(item["pattern"], text or "", re.IGNORECASE)]
+def claims_hits(text: str, guardrails: list[dict[str, str]], ignore: tuple[str, ...] = ()) -> list[str]:
+    """Claims-to-avoid found in generated text. ``ignore`` removes the posting's own title and
+    company first: "the Manager, Fraud Operations position at X" names the job, it is not a claim."""
+    scrubbed = text or ""
+    for phrase in sorted((item for item in ignore if item), key=len, reverse=True):
+        scrubbed = re.sub(re.escape(phrase), " ", scrubbed, flags=re.IGNORECASE)
+    return [item["claim"] for item in guardrails if re.search(item["pattern"], scrubbed, re.IGNORECASE)]
+
+
+def material_texts(database: Path) -> dict[str, str]:
+    """Latest generated text per material kind, read straight from a run's (throwaway) database."""
+    import sqlite3
+
+    if not database.is_file():
+        return {}
+    with sqlite3.connect(f"file:{database}?mode=ro", uri=True) as connection:
+        rows = connection.execute("SELECT kind, text FROM application_materials ORDER BY version").fetchall()
+    return dict(rows)
 
 
 def check_materials_claims(data: dict[str, Any]) -> tuple[bool, dict[str, Any]]:

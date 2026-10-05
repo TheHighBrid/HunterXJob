@@ -262,7 +262,8 @@ def _artifact(path_text: str | None, kind: str, run_dir: Path) -> str | None:
 def check_trace(ctx: RunContext) -> tuple[bool, dict[str, Any]]:
     reported = ctx.evidence.get("trace") or {}
     path = _artifact(reported.get("path"), "zip", Path(ctx.data.get("run_dir") or "."))
-    trace = inspect_trace_zip(Path(path or "/nonexistent"))
+    marker = ctx.data.get("trace_marker")  # the form page's path (dryrun_batch.py); Greenhouse embed by default
+    trace = inspect_trace_zip(Path(path or "/nonexistent"), marker) if marker else inspect_trace_zip(Path(path or "/nonexistent"))
     ok = bool(trace.get("ok") and reported.get("zip_ok") and reported.get("sha256") == trace.get("sha256"))
     ctx.data["trace_sha256"] = trace.get("sha256")
     return ok, {**trace, "app_reported_sha256": reported.get("sha256")}

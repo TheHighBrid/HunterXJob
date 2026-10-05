@@ -55,11 +55,13 @@ from batch_checks import (
     batch_outcome,
     claims_hits,
     is_transient,
+    material_texts,
     open_check_url,
     parse_open_posting,
     run_extra_checks,
     run_row,
     summarize,
+    trace_marker,
 )
 from gate1 import SPAWN, _cdp_in_app_code, _drive_api, _ledger, _start_fixtures, _wait_for_cleanup, child_env, supervise
 from gate1_checks import API_KEY, BOARD, JOB_ID, V2_ROOT, live_descendants, still_running
@@ -197,7 +199,7 @@ def _allowed_answers(db: Any, application: Any, answers: list[dict[str, Any]]) -
     return allowed
 
 
-def _materials(db: Any, application_id: str, guardrails: list[dict[str, str]]) -> list[dict[str, Any]]:
+def _materials(db: Any, application_id: str, guardrails: list[dict[str, str]], ignore: tuple[str, ...]) -> list[dict[str, Any]]:
     from app.material_store import materials_for
     from app.profile import verified_profile
     from app.truth_guard import check_cover_letter, check_resume
@@ -209,7 +211,7 @@ def _materials(db: Any, application_id: str, guardrails: list[dict[str, str]]) -
         guard = check_resume(document, profile) if row.kind == "resume" else check_cover_letter(document, profile)
         rows.append({"kind": row.kind, "status": row.status, "version": row.version, "content_sha256": row.content_sha256,
                      "pdf_path": row.pdf_path, "pdf_sha256": row.pdf_sha256, "decision_note": row.decision_note,
-                     "claims_hits": claims_hits(row.text, guardrails), "truth_guard": guard})
+                     "claims_hits": claims_hits(row.text, guardrails, ignore), "truth_guard": guard})
     return rows
 
 
@@ -266,6 +268,7 @@ def run_once(run_dir: Path, mode: str, posting: dict[str, Any], inputs: dict[str
     plan_trace: list[dict[str, Any]] = []
     data: dict[str, Any] = {"http_log": http_log, "plan_trace": plan_trace, "job_id": posting["id"],
                             "run_dir": str(run_dir), "api_host": platform["api_hosts"][0], **platform,
+                            "trace_marker": trace_marker(posting["platform"], posting["board"], posting["id"]),
                             "cdp_in_app_code": _cdp_in_app_code(), "guardrails_loaded": len(inputs["guardrails"]),
                             "stdin_closed": sys.stdin is None or sys.stdin.closed or not sys.stdin.isatty()}
     settings = get_settings()
@@ -289,7 +292,8 @@ def run_once(run_dir: Path, mode: str, posting: dict[str, Any], inputs: dict[str
         data["leftover_sampled"] = still_running(sampler.processes)
         data["ledger"] = _ledger(application_id)
         with SessionLocal() as db:
-            data["materials"] = _materials(db, application_id, inputs["guardrails"])
+            data["materials"] = _materials(db, application_id, inputs["guardrails"],
+                                           (posting.get("title") or "", posting.get("company") or ""))
     finally:
         fixture_origin.disable()
         if fixtures is not None:
@@ -440,7 +444,7 @@ def run_batch(targets: list[dict[str, Any]], inputs: dict[str, Any], out: Path, 
     return reports, stopped
 
 
-def recheck(out: Path) -> list[dict[str, Any]]:
+def recheck(out: Path, guardrails: list[dict[str, str]] | None = None) -> list[dict[str, Any]]:
     """Re-evaluate finished runs from their saved observations (no network, no browser).
 
     For fixing a *check* without loading any employer page again. The after-exit process checks
@@ -456,6 +460,13 @@ def recheck(out: Path) -> list[dict[str, Any]]:
             reports.append(previous)
             continue
         data = json.loads(observations.read_text(encoding="utf-8"))
+        posting = previous["posting"]
+        data.setdefault("trace_marker", trace_marker(posting["platform"], posting["board"], posting["id"]))
+        if guardrails:  # re-scan the generated text with the current scan rules
+            texts = material_texts(run_dir / "data" / "gate1.db")
+            for row in data.get("materials") or []:
+                row["claims_hits"] = claims_hits(texts.get(row["kind"], ""), guardrails,
+                                                 (posting.get("title") or "", posting.get("company") or ""))
         os.environ["DATABASE_PATH"] = str(run_dir / "data" / "gate1.db")
         result = evaluate(data)
         result["checks"].update(run_extra_checks(data))
@@ -495,7 +506,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.recheck:
         previous = json.loads((out / "summary.json").read_text(encoding="utf-8"))
         meta = {key: previous.get(key) for key in ("mode", "targets", "start", "stopped", "profile_sha256", "pause_s")}
-        summary = write_summary(out, recheck(out), {**meta, "rechecked_at": datetime.now(UTC).isoformat()})
+        guardrails = (yaml.safe_load(args.guardrails.read_text(encoding="utf-8")) or {}).get("claims_to_avoid") \
+            if args.guardrails else None
+        summary = write_summary(out, recheck(out, guardrails), {**meta, "rechecked_at": datetime.now(UTC).isoformat()})
         print(json.dumps(summary["aggregate"], indent=2))
         return 0
     if args.live:
