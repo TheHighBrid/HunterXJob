@@ -27,7 +27,7 @@ from app.pipeline import approve_application, execute_apply
 from app.profile import Fact, import_profile_document, set_verified, verified_profile
 from app.render import render_docx_bytes, render_pdf_bytes
 from app.resume_import import extract_text
-from app.truth_guard import check_cover_letter, check_resume
+from app.truth_guard import COMMON_WORDS, check_cover_letter, check_resume, corpus_for
 
 JOB = JobContext(
     title="Bilingual Fraud Analyst", company="Maplebank", location="Ottawa",
@@ -226,6 +226,19 @@ def test_template_wording_is_not_flagged_when_a_real_posting_uses_the_same_words
     assert check_cover_letter(letter, profile, job_description=job.text) == []
     letter["paragraphs"][1]["text"] += " I am an expert in Actimize."
     assert check_cover_letter(letter, profile, job_description=job.text)
+
+
+def test_present_is_an_allowed_common_word_like_current(founder_profile):
+    # Regression: "Founder at ... (present)" was flagged when the posting itself used "present".
+    assert {"present", "current", "currently"} <= COMMON_WORDS
+    assert "present" not in corpus_for(founder_profile.facts, job_text="Present findings to leaders.").forbidden_terms
+    job = JobContext(title="Bilingual Fraud Analyst", company="Maplebank",
+                     description=JOB.description + " Present findings to leadership at present.")
+    letter = build_cover_letter(founder_profile, job, build_resume(founder_profile, NON_FINANCE_JOB))
+    assert "\u2013 present)" in cover_letter_text(letter)
+    assert check_cover_letter(letter, founder_profile, job_description=job.text) == []
+    letter["paragraphs"][1]["text"] += " I was promoted to President."
+    assert any("president" in v.lower() for v in check_cover_letter(letter, founder_profile, job_description=job.text))
 
 
 def test_cover_letter_names_the_job_but_claims_only_verified_facts(profile):

@@ -78,7 +78,7 @@ was we well were what when where whether which while who whom whose why will wit
 yet you your yours dear sincerely regards thank thanks hello hi hiring team role position job opportunity
 company organization apply applying application interest interested excited pleased look looking forward
 consideration candidate experience experienced background skills skill strengths strong ability able
-work worked working works career years year months month day days time today currently current recent
+work worked working works career years year months month day days time today currently current present recent
 recently previously prior including include includes included across new key core relevant directly
 closely daily weekly monthly quarterly annual annually team's teams across customers customer clients
 client users user stakeholders partners business operations process processes support supported
