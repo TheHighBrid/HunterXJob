@@ -130,6 +130,10 @@ Gate 2 starts only after Gate 1 is green in CI.
 Nothing else enters scope until Gates 1 and 2 pass. That includes the 30-run
 certification, Lever/Ashby, phone hosting, and any other hosting.
 
+Status: passed on one real public Greenhouse posting (PR #33). Gate 2 covers
+that one Greenhouse posting only. It does not cover Lever, Ashby, or more than
+one employer.
+
 ### How Gate 2 is run
 
 `v2/scripts/gate2.py` runs it, on plain Linux, by hand. It never runs in CI:
@@ -190,6 +194,10 @@ screenshot hashes. That row is never sufficient and never counts as a
 completed dry-run.
 
 ### Real-profile dry-run batch (after Gates 1 and 2)
+
+The batch tooling for Greenhouse, Lever and Ashby shipped in PR #34. It reuses
+the Gate 2 code path, but it is not part of Gate 2 and certifies nothing. It
+does not change any gate criterion above.
 
 `v2/scripts/dryrun_batch.py` is a thin wrapper around the Gate 2 code path for
 the owner's real profile across Greenhouse, Lever and Ashby. The safety rules
@@ -262,7 +270,8 @@ Do not add infrastructure to work around an unproven assumption.
 - A new queue architecture
 - New mobile features
 - New Android/PRoot work
-- Lever/Ashby fixes
+- Lever/Ashby fixes, other than the read-only check fixes the dry-run batch
+  needed (shipped in PR #34)
 - Scheduler/autopilot expansion
 - Expanded certification infrastructure
 
