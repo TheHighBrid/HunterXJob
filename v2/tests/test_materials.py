@@ -6,17 +6,25 @@ import json
 import zipfile
 
 import pytest
-from profile_helpers import load_example_profile, memory_db
+from profile_helpers import example_document, load_example_profile, memory_db
 from sqlalchemy import select
 
 from app.config import Settings
 from app.material_llm import llm_client, reword_cover_letter, reword_resume
 from app.material_store import MaterialsError, manifest, materials_ready, vault_records
 from app.material_workflow import approve_material, generate_for_application, reject_material
-from app.materials import JobContext, build_cover_letter, build_resume, cover_letter_text, resume_text
+from app.materials import (
+    JobContext,
+    build_cover_letter,
+    build_resume,
+    cover_letter_text,
+    is_finance_employment,
+    is_finance_target,
+    resume_text,
+)
 from app.models import Application, ApplicationMaterial, Job, PipelineStage, ProfileFact, ReviewTask, SubmissionEvidence
 from app.pipeline import approve_application, execute_apply
-from app.profile import set_verified, verified_profile
+from app.profile import Fact, import_profile_document, set_verified, verified_profile
 from app.render import render_docx_bytes, render_pdf_bytes
 from app.resume_import import extract_text
 from app.truth_guard import check_cover_letter, check_resume
@@ -71,6 +79,97 @@ def test_unverified_facts_are_never_selected():
 def test_irrelevant_projects_are_left_out(profile):
     unrelated = JobContext("Barista", "Cafe", description="espresso latte art")
     assert _resume(profile)["projects"] and not build_resume(profile, unrelated)["projects"]
+
+
+# ------------------------------------------------- finance-first experience order
+
+# A made-up current, non-finance role, more recent than every finance role.
+FOUNDER = {
+    "id": "harbourlane", "employer": "Harbour Lane Studio", "title": "Founder", "start": "2024-01", "current": True,
+    "achievements": ["Founded Harbour Lane Studio, a print shop, and run it as a self-employed business."],
+}
+NON_FINANCE_JOB = JobContext(
+    title="Brand Marketing Coordinator", company="Cedar Goods",
+    description="Plan product launches, present campaign results and run the print shop calendar.",
+)
+
+
+@pytest.fixture
+def founder_profile():
+    db = memory_db()
+    document = example_document()
+    document["employment"].insert(0, copy.deepcopy(FOUNDER))
+    import_profile_document(db, document, origin="profile.example.yaml")
+    return verified_profile(db)
+
+
+def _employers(doc):
+    return [entry["employer"] for entry in doc["experience"]]
+
+
+def test_finance_target_puts_finance_roles_above_a_current_non_finance_role(founder_profile):
+    doc = build_resume(founder_profile, JOB)
+    assert doc["experience_order"] == "finance_first"
+    assert _employers(doc) == [
+        "Northwind Credit Union", "Lakeshore Payments Inc.", "Riverbend Savings Bank", "Harbour Lane Studio"]
+    founder = doc["experience"][-1]
+    assert founder["title"] == "Founder" and founder["dates"] == "Jan 2024 \u2013 Present" and founder["bullets"]  # kept, just lower
+    assert check_resume(doc, founder_profile) == []
+    letter = build_cover_letter(founder_profile, JOB, doc)
+    experience = [p["text"] for p in letter["paragraphs"] if p["text"].startswith("As ")]
+    assert experience[0].startswith("As Senior Fraud Analyst at Northwind Credit Union")
+    assert not any("Harbour Lane" in text for text in experience)
+    assert check_cover_letter(letter, founder_profile, job_description=JOB.text) == []
+
+
+def test_non_finance_target_keeps_reverse_chronological_order(founder_profile):
+    doc = build_resume(founder_profile, NON_FINANCE_JOB)
+    assert doc["experience_order"] == "chronological"
+    assert _employers(doc) == [
+        "Harbour Lane Studio", "Northwind Credit Union", "Lakeshore Payments Inc.", "Riverbend Savings Bank"]
+    letter = build_cover_letter(founder_profile, NON_FINANCE_JOB, doc)
+    assert letter["paragraphs"][1]["text"].startswith("As Founder at Harbour Lane Studio (Jan 2024 \u2013 present), ")
+
+
+@pytest.mark.parametrize("title, company, description, expected", [
+    ("Fraud Strategy Analyst", "Acme", "", True),
+    ("Collections Agent", "Acme", "", True),
+    ("Credit Adjudicator", "Acme", "", True),
+    ("Compliance Officer", "Acme", "", True),
+    ("KYC Analyst", "Acme", "", True),
+    ("AML Investigator, Financial Crimes", "Acme", "", True),
+    ("Disputes Specialist", "Acme", "", True),
+    ("Personal Banking Associate", "Acme", "", True),
+    ("Client Service Representative", "Maple Bank", "", True),
+    ("Customer Support Specialist", "Acme", "Help members of our credit union with accounts.", True),
+    ("Member Services Advisor", "Acme", "A fintech serving newcomers.", True),
+    ("Client Care Associate", "Acme", "Explain loans, mortgages and bank transfers to clients.", True),
+    ("CX Coordinator", "Acme Payment Systems", "Help merchants with payments and credit card terminals.", True),
+    ("Account Protection Specialist", "Acme", "", True),
+    ("Customer Support Specialist", "Acme", "Help shoppers track orders and returns.", False),
+    ("Support Specialist, Premium", "Acme Stays", "Guide hosts through payment issues and payouts to their bank account.", False),
+    ("Software Engineer", "Maple Bank", "Build banking APIs.", False),
+    ("Brand Marketing Coordinator", "Cedar Goods", "", False),
+])
+def test_finance_target_detection(title, company, description, expected):
+    assert is_finance_target(JobContext(title=title, company=company, description=description)) is expected
+
+
+@pytest.mark.parametrize("employer, title, expected", [
+    ("Scotiabank", "Officer", True),
+    ("BMO", "Officer", True),
+    ("RBC", "Officer", True),
+    ("TD", "Officer", True),
+    ("Canada Trust", "Officer", True),
+    ("Northwind Credit Union", "Analyst", True),
+    ("Lakeshore Payments Inc.", "Analyst", True),
+    ("Cedar Goods", "Fraud Analyst", True),  # finance-domain title at a non-bank
+    ("Harbour Lane Studio", "Founder", False),
+    ("Tdot Coffee", "Barista", False),
+])
+def test_finance_employment_detection(employer, title, expected):
+    fact = Fact(key="employment:x", category="employment", data={"employer": employer, "title": title})
+    assert is_finance_employment(fact) is expected
 
 
 # -------------------------------------------------------------- truthfulness guard

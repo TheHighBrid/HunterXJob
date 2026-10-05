@@ -3,6 +3,10 @@
 Selection: only *verified* facts are used. Facts are ordered (never edited)
 by relevance to the job: skills named in the posting first, then
 achievements that mention those skills or share keywords with the posting.
+Experience is reverse-chronological, except that for finance-domain targets
+(banking, fraud, collections, credit, compliance, KYC/AML, client support at a
+financial institution) finance roles lead and other roles follow, each group
+still reverse-chronological. Nothing is dropped, only reordered.
 Employer names, titles, dates, degrees and metrics are copied verbatim from
 the facts. Every generated line records the fact it came from, so the
 truthfulness guard (``app.truth_guard``) can check it.
@@ -93,9 +97,83 @@ def _bullets(profile: VerifiedProfile, parent: Fact, job: JobContext, matched: l
     return [{"text": fact.data["text"], "fact": fact.key, "score": score} for score, fact in ranked]
 
 
+# ------------------------------------------------------- finance-first ordering
+
+# Title terms that make the target a finance-domain role on their own. A
+# trailing "*" matches any suffix ("collection*" -> collections, collector).
+_FINANCE_ROLE_TERMS = (
+    "fraud*", "collection*", "collector*", "credit*", "compliance", "kyc", "aml", "know your customer",
+    "anti-money", "money laundering", "financial crime*", "sanction*", "transaction monitoring", "dispute*",
+    "account protection",
+    "chargeback*", "underwrit*", "loan*", "lending", "mortgage*", "bank*", "teller*", "risk",
+)
+# Client-facing titles that count as finance-domain only in a financial context.
+_CLIENT_SUPPORT_TERMS = (
+    "client*", "customer*", "member*", "support", "service*", "care", "cx", "contact cent*", "call cent*",
+    "onboarding",
+)
+# The posting's context is financial with one strong term anywhere, a weak term
+# in the title or company name, or several weak terms in the description (an
+# incidental "bank account" or "payment" in a non-finance posting is not enough).
+_FINANCE_CONTEXT_STRONG = (
+    "banking", "financial institution*", "financial service*", "fintech", "credit union*", "wealth management",
+)
+_FINANCE_CONTEXT_WEAK = ("bank*", "payment*", "credit card*", "lending", "lender*", "loan*", "mortgage*")
+_WEAK_CONTEXT_HITS = 3
+# Employers that are financial institutions (name terms or well-known names).
+_FINANCE_EMPLOYER_TERMS = (
+    "*bank*", "banque", "credit union", "caisse*", "trust", "financ*", "payments", "lending",
+    "bmo", "rbc", "td", "cibc", "hsbc", "desjardins", "tangerine", "simplii", "atb", "laurentian",
+    "american express", "amex", "capital one", "visa", "mastercard", "interac",
+)
+
+
+def _terms_re(terms: tuple[str, ...]) -> re.Pattern[str]:
+    parts = []
+    for term in terms:
+        lead = r"" if term.startswith("*") else r"(?<![a-z0-9])"
+        core = re.escape(term.strip("*"))
+        tail = r"[a-z0-9-]*" if term.endswith("*") else r"(?![a-z0-9])"
+        parts.append(lead + core + tail)
+    return re.compile("|".join(parts), re.IGNORECASE)
+
+
+_FINANCE_ROLE_RE = _terms_re(_FINANCE_ROLE_TERMS)
+_CLIENT_SUPPORT_RE = _terms_re(_CLIENT_SUPPORT_TERMS)
+_FINANCE_CONTEXT_STRONG_RE = _terms_re(_FINANCE_CONTEXT_STRONG)
+_FINANCE_CONTEXT_WEAK_RE = _terms_re(_FINANCE_CONTEXT_WEAK)
+_FINANCE_EMPLOYER_RE = _terms_re(_FINANCE_EMPLOYER_TERMS)
+
+
+def is_finance_target(job: JobContext) -> bool:
+    """True for banking/fraud/collections/credit/compliance/KYC/AML roles and client support in finance."""
+    if _FINANCE_ROLE_RE.search(job.title or ""):
+        return True
+    if not _CLIENT_SUPPORT_RE.search(job.title or ""):
+        return False
+    heading = f"{job.title}\n{job.company}"
+    if _FINANCE_CONTEXT_STRONG_RE.search(f"{heading}\n{job.description}") or _FINANCE_CONTEXT_WEAK_RE.search(heading):
+        return True
+    return len(_FINANCE_CONTEXT_WEAK_RE.findall(job.description or "")) >= _WEAK_CONTEXT_HITS
+
+
+def is_finance_employment(fact: Fact) -> bool:
+    """A role at a financial institution, or a finance-domain title anywhere (e.g. a fraud analyst at a fintech)."""
+    return bool(_FINANCE_EMPLOYER_RE.search(fact.data.get("employer", ""))
+                or _FINANCE_ROLE_RE.search(fact.data.get("title", "")))
+
+
+def ordered_employment(profile: VerifiedProfile, job: JobContext) -> list[Fact]:
+    """Reverse-chronological; for finance targets, finance roles first (stable, so each group stays chronological)."""
+    facts = chronological(profile.of("employment"))
+    if not is_finance_target(job):
+        return facts
+    return sorted(facts, key=lambda fact: 0 if is_finance_employment(fact) else 1)
+
+
 def _experience(profile: VerifiedProfile, job: JobContext, matched: list[Fact]) -> list[dict[str, Any]]:
     out = []
-    for fact in chronological(profile.of("employment")):
+    for fact in ordered_employment(profile, job):
         data = fact.data
         out.append({
             "fact": fact.key, "title": data["title"], "employer": data["employer"], "location": data.get("location", ""),
@@ -167,6 +245,7 @@ def build_resume(profile: VerifiedProfile, job: JobContext) -> dict[str, Any]:
         "languages": [{"text": _language_text(fact.data), "fact": fact.key} for fact in profile.of("language")],
         "job": {"title": job.title, "company": job.company, "description": job.description[:4000]},
         "matched_skills": [fact.data["name"] for fact in matched],
+        "experience_order": "finance_first" if is_finance_target(job) else "chronological",
     }
 
 
