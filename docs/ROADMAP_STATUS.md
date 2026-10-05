@@ -44,7 +44,7 @@ certification setup and the resumable certification flow from PRs #21 to #25
 | Lever / Ashby | `dry_run` | Read-only real-form dry-runs (Lever public apply page; Ashby public GraphQL queries re-issued as GET). Covered by the real-profile batch |
 | Email / generic | `dry_run` | Same safety gates |
 | Truthful materials | Ready | Verified profile, guarded résumé and cover letter, approval workflow. For finance-domain postings, roles at financial institutions lead the experience list (PR #35); other postings stay reverse-chronological |
-| Answer matching on real forms | In progress | Better classifiers for common screening questions (start date, employment status, background-check consent, languages, education, Canadian citizenship, Ottawa commute) are in review in PR #36 |
+| Answer matching on real forms | Landed (PR #36) | Classifiers for common screening questions (start date, employment status, background-check consent, languages, education, Canadian citizenship, Ottawa commute) on Greenhouse, Lever and Ashby forms. Their effect on real-form coverage is not measured yet |
 | SmartRecruiters / Workday / iCIMS / Taleo | `detect_only` | Platform detection only |
 | Government portals | Unsupported | Flag exists, adapter not implemented |
 | Continuous run (v0.3) | Ready, off by default | Discover → score → prepare → dry-run on an interval inside the API process. Kill switch, pause flag, quiet hours, per-cycle and daily caps; no overlap; every cycle in the `scheduler_cycles` ledger; `GET /api/scheduler/status` |
@@ -78,7 +78,7 @@ certification setup and the resumable certification flow from PRs #21 to #25
 
 ## Next, after the recovery gates (each needs the owner to open it)
 
-1. Raise the share of fields planned automatically on real forms (about 56% in the first batch); answer matching is in review in PR #36. Re-run the batch offline with `--recheck` after it lands.
+1. Raise the share of fields planned automatically on real forms (about 56% in the first batch); the answer-matching classifiers landed in PR #36. Re-run the batch offline with `--recheck` to measure the change.
 2. Supervised real submissions with owner approval.
 3. Session continuity after a manual CAPTCHA or MFA.
 4. Inbox-derived confirmation matching.
