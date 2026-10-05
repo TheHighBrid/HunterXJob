@@ -6,7 +6,7 @@ import pytest
 from profile_helpers import example_document, load_example_profile, memory_db
 from sqlalchemy import select
 
-from app.answer_vault import FieldRequest, ResolutionStatus
+from app.answer_vault import AnswerSource, FieldRequest, ResolutionStatus
 from app.form_engine import ControlType, FormControl, plan_fill
 from app.greenhouse_browser import DomField, dom_control
 from app.materials import JobContext, build_resume
@@ -182,6 +182,42 @@ def test_verified_profile_fills_contact_history_and_country_scoped_authorization
     # An explicit stored answer wins over the profile.
     upsert_answer(db, key="first_name", value="Ave")
     assert load_vault(db).resolve(FieldRequest(key="first_name")).value == "Ave"
+
+
+def test_verified_profile_loads_language_proficiency_for_classifiers():
+    db = memory_db()
+    load_example_profile(db)
+    answers = profile_answers(verified_profile(db))
+    assert answers["language_proficiency"] == "English (Native)|French (Professional working)"
+    vault = load_vault(db)
+    resolved = vault.resolve(FieldRequest(key="language_proficiency"))
+    assert resolved.status is ResolutionStatus.RESOLVED
+    assert resolved.value == "English (Native)|French (Professional working)"
+
+
+def test_availability_date_policy_falls_back_to_start_date():
+    db = memory_db()
+    upsert_answer(db, key="availability_date", value="Two weeks", source="policy")
+    vault = load_vault(db, profile=False)
+    assert vault.resolve(FieldRequest(key="availability_date")).value == "Two weeks"
+    assert vault.resolve(FieldRequest(key="start_date")).value == "Two weeks"
+    # Explicit start_date wins over the availability fallback.
+    upsert_answer(db, key="start_date", value="2026-11-01", source="user")
+    vault = load_vault(db, profile=False)
+    assert vault.resolve(FieldRequest(key="start_date")).value == "2026-11-01"
+
+
+def test_background_check_consent_loads_only_from_explicit_policy():
+    db = memory_db()
+    load_example_profile(db)
+    vault = load_vault(db)
+    assert vault.resolve(FieldRequest(key="background_check_consent", sensitive=True)).status is ResolutionStatus.MISSING
+    upsert_answer(db, key="background_check_consent", value="Yes", source="policy", sensitive=True)
+    vault = load_vault(db)
+    resolved = vault.resolve(FieldRequest(key="background_check_consent", sensitive=True))
+    assert resolved.status is ResolutionStatus.RESOLVED
+    assert resolved.value == "Yes"
+    assert resolved.source is AnswerSource.POLICY
 
 
 def test_unverified_profile_facts_never_reach_forms():
