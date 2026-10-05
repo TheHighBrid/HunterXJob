@@ -99,7 +99,7 @@ def fetch_posting(board: str, job_id: str, *, client: Any = None) -> dict[str, A
 
 # --------------------------------------------------------------------------- one run (child process)
 
-def _instrument_http(log: list[dict[str, Any]], data: dict[str, Any]) -> None:
+def _instrument_http(log: list[dict[str, Any]], data: dict[str, Any], query_limit: int = 200) -> None:
     """Record every HTTP request the app (and this runner) sends; requests to the local API are tagged."""
     import httpx
 
@@ -108,7 +108,7 @@ def _instrument_http(log: list[dict[str, Any]], data: dict[str, Any]) -> None:
     def send(self: Any, request: Any, **kwargs: Any) -> Any:
         url = request.url
         local = f"{url.scheme}://{url.host}:{url.port}" == data.get("api_base")
-        entry = {"method": request.method, "host": url.host, "path": url.path, "query": url.query.decode()[:200],
+        entry = {"method": request.method, "host": url.host, "path": url.path, "query": url.query.decode()[:query_limit],
                  "local_api": local, "at": time.time()}
         try:
             response = original(self, request, **kwargs)
