@@ -29,11 +29,10 @@ from app.form_engine import LEGAL_PATTERNS, ControlType, FormControl
 from app.greenhouse_form import (
     FormFetchError,
     RealForm,
-    classify_question,
-    shared_answer_key,
     demographic_key,
     is_sensitive_field,
     looks_like,
+    shared_answer_key,
 )
 
 ASHBY_JOBS_HOST = "jobs.ashbyhq.com"
