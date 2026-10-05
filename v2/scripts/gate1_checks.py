@@ -170,8 +170,12 @@ def compare_fields(expected: list[dict[str, Any]], extracted: list[dict[str, Any
     return problems
 
 
-def inspect_trace_zip(path: Path) -> dict[str, Any]:
-    """Re-verify a trace zip independently of the app: readable, CRC-clean, has trace + network logs."""
+def inspect_trace_zip(path: Path, marker: str = EMBED_PATH) -> dict[str, Any]:
+    """Re-verify a trace zip independently of the app: readable, CRC-clean, has trace + network logs.
+
+    ``marker`` is a path the network log must mention: the form page that was loaded
+    (Greenhouse's embed page by default).
+    """
     result: dict[str, Any] = {"path": str(path), "exists": path.is_file()}
     if not result["exists"]:
         return {**result, "ok": False}
@@ -185,7 +189,7 @@ def inspect_trace_zip(path: Path) -> dict[str, Any]:
             result.update(entries=len(names), crc_ok=bad is None,
                           has_trace=any(name.endswith(".trace") for name in names),
                           has_network=any(name.endswith(".network") for name in names),
-                          network_mentions_embed=EMBED_PATH.encode() in network)
+                          network_mentions_embed=marker.encode() in network, network_marker=marker)
     except zipfile.BadZipFile as exc:
         return {**result, "ok": False, "error": str(exc)}
     result["ok"] = all(result[key] for key in ("crc_ok", "has_trace", "has_network", "network_mentions_embed"))

@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import sys
 from collections import Counter
+from collections.abc import Collection
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -93,23 +94,32 @@ def request_counts(evidence: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def evaluate_read_only(evidence: dict[str, Any], http_log: list[dict[str, Any]], api_host: str) -> list[str]:
+def evaluate_read_only(evidence: dict[str, Any], http_log: list[dict[str, Any]], api_host: str | Collection[str],
+                       *, allow_rewrites: bool = False) -> list[str]:
     """Why the session cannot count as zero-submit / zero-non-GET-sent on a real page.
 
     A real page may *attempt* a write (an analytics beacon, say). The router aborts it
     before it leaves the browser; that is recorded and allowed. A non-GET that was not
     aborted, a rewrite, a submit attempt, or a second main-frame navigation is not.
+
+    ``api_host`` is the host (or hosts) the app itself may GET. ``allow_rewrites`` is only
+    for Ashby, whose page reads its form through allowlisted GraphQL queries that the
+    router re-issues as GET (so they still leave the browser as GET).
     """
+    hosts = {api_host} if isinstance(api_host, str) else set(api_host)
     if not evidence:
         return ["the API result carries no browser evidence (browser verification did not complete)"]
     problems = []
+    contained = {"aborted", "rewritten_to_get"} if allow_rewrites else {"aborted"}
     for item in evidence.get("requests") or []:
-        if item.get("method") != "GET" and item.get("action") != "aborted":
+        if item.get("method") != "GET" and item.get("action") not in contained:
             problems.append(f"non-GET request was not aborted: {item.get('method')} {item.get('url')}")
     attempts, aborted = int(evidence.get("non_get_attempts") or 0), int(evidence.get("aborted") or 0)
-    if attempts != aborted:
-        problems.append(f"{attempts} non-GET attempt(s) but only {aborted} aborted")
-    if evidence.get("rewritten_to_get"):
+    rewritten = int(evidence.get("rewritten_to_get") or 0) if allow_rewrites else 0
+    if attempts != aborted + rewritten:
+        problems.append(f"{attempts} non-GET attempt(s) but only {aborted} aborted"
+                        + (f" and {rewritten} rewritten to GET" if allow_rewrites else ""))
+    if evidence.get("rewritten_to_get") and not allow_rewrites:
         problems.append(f"{evidence['rewritten_to_get']} request(s) were rewritten (no rewrite is allowed for Greenhouse)")
     if evidence.get("submit_events"):
         problems.append(f"page attempted {len(evidence['submit_events'])} form submission(s)")
@@ -132,7 +142,7 @@ def evaluate_read_only(evidence: dict[str, Any], http_log: list[dict[str, Any]],
             continue
         if entry.get("method") != "GET":
             problems.append(f"app sent {entry.get('method')} to {entry.get('host')}")
-        if entry.get("host") != api_host:
+        if entry.get("host") not in hosts:
             problems.append(f"app HTTP request left the boards API host: {entry.get('host')}")
     return problems
 
@@ -177,6 +187,13 @@ class RunContext:
         self.evidence = self.metadata.get("browser_evidence") or {}
         self.browsers = [item for item in data.get("sampled_processes") or [] if is_browser(item)]
         self.api_host = data.get("api_host") or GREENHOUSE_API_HOST
+        # Other platforms (scripts/dryrun_batch.py): the app's own hosts, DOM keys that prove the
+        # form rendered, and whether allowlisted read-only GraphQL rewrites are expected (Ashby).
+        self.api_hosts = list(data.get("api_hosts") or [self.api_host])
+        self.allow_rewrites = bool(data.get("allow_rewrites"))
+        self.required_dom_keys = list(data.get("required_dom_keys") or
+                                      ([] if data.get("required_dom_key_substrings") else ["first_name", "email"]))
+        self.required_dom_key_substrings = list(data.get("required_dom_key_substrings") or [])
 
 
 def challenge_detected(ctx: RunContext) -> str | None:
@@ -201,8 +218,12 @@ def check_api(ctx: RunContext) -> tuple[bool, dict[str, Any]]:
 
 
 def check_posting_live(ctx: RunContext) -> tuple[bool, dict[str, Any]]:
-    probes = [entry for entry in ctx.data.get("http_log") or [] if not entry.get("local_api")
-              and entry.get("path", "").endswith(f"/jobs/{ctx.data.get('job_id')}") and not entry.get("query")]
+    job_id = str(ctx.data.get("job_id"))
+    app_http = [entry for entry in ctx.data.get("http_log") or [] if not entry.get("local_api")]
+    if ctx.data.get("probe_id_in_query"):  # Ashby: the posting id travels in the GraphQL variables
+        probes = [entry for entry in app_http if job_id in entry.get("query", "")]
+    else:
+        probes = [entry for entry in app_http if entry.get("path", "").endswith(f"/{job_id}") and not entry.get("query")]
     ok = bool(probes) and probes[0].get("status") == 200
     return ok, {"liveness_probe": probes[:1]}
 
@@ -224,7 +245,8 @@ def check_form_rendered(ctx: RunContext) -> tuple[bool, dict[str, Any]]:
     keys = {item.get("key") for item in fields}
     challenge = challenge_detected(ctx)
     ok = (ctx.metadata.get("dom_verified") is True and ctx.evidence.get("main_document_status") == 200
-          and {"first_name", "email"} <= keys and challenge is None)
+          and set(ctx.required_dom_keys) <= keys and challenge is None
+          and all(any(part in str(key or "").lower() for key in keys) for part in ctx.required_dom_key_substrings))
     return ok, {"dom_verified": ctx.metadata.get("dom_verified"), "dom_url": ctx.metadata.get("dom_url"),
                 "main_document_status": ctx.evidence.get("main_document_status"), "dom_fields": len(fields),
                 "challenge": challenge, "submit_boundary": ctx.metadata.get("submit_boundary")}
@@ -240,7 +262,8 @@ def _artifact(path_text: str | None, kind: str, run_dir: Path) -> str | None:
 def check_trace(ctx: RunContext) -> tuple[bool, dict[str, Any]]:
     reported = ctx.evidence.get("trace") or {}
     path = _artifact(reported.get("path"), "zip", Path(ctx.data.get("run_dir") or "."))
-    trace = inspect_trace_zip(Path(path or "/nonexistent"))
+    marker = ctx.data.get("trace_marker")  # the form page's path (dryrun_batch.py); Greenhouse embed by default
+    trace = inspect_trace_zip(Path(path or "/nonexistent"), marker) if marker else inspect_trace_zip(Path(path or "/nonexistent"))
     ok = bool(trace.get("ok") and reported.get("zip_ok") and reported.get("sha256") == trace.get("sha256"))
     ctx.data["trace_sha256"] = trace.get("sha256")
     return ok, {**trace, "app_reported_sha256": reported.get("sha256")}
@@ -277,19 +300,24 @@ def check_ledger(ctx: RunContext) -> tuple[bool, dict[str, Any]]:
     from app.evidence import payload_hash
 
     rows = ctx.ledger.get("evidence") or []
-    row = rows[0] if len(rows) == 1 else {}
+    # Exactly one dry-run row. Other rows may only be the (never sufficient) material decisions
+    # recorded when materials were generated and approved before the run (dryrun_batch.py).
+    runs = [item for item in rows if item.get("kind") in {"dry_run", "dry_run_review"}]
+    others = [item for item in rows if item not in runs]
+    row = runs[0] if len(runs) == 1 else {}
     kind = row.get("kind")
     recomputed = payload_hash(expected_ledger_payload(ctx, kind)) if kind in {"dry_run", "dry_run_review"} else None
     ok = (kind in {"dry_run", "dry_run_review"} and row.get("sufficient") is False
           and row.get("payload_hash") == recomputed
           and f"sha256={ctx.data.get('trace_sha256')}" in (row.get("confirmation_text") or "")
-          and not any(item.get("kind") == "submission" for item in rows))
+          and all(str(item.get("kind")).startswith("materials_") and item.get("sufficient") is False for item in others))
     return ok, {"rows": rows, "recomputed_payload_hash": recomputed,
                 "application_stage": ctx.ledger.get("application_stage"), "events": ctx.ledger.get("events")}
 
 
 def check_read_only(ctx: RunContext) -> tuple[bool, dict[str, Any]]:
-    problems = evaluate_read_only(ctx.evidence, ctx.data.get("http_log") or [], ctx.api_host)
+    problems = evaluate_read_only(ctx.evidence, ctx.data.get("http_log") or [], ctx.api_hosts,
+                                  allow_rewrites=ctx.allow_rewrites)
     app_http = [entry for entry in ctx.data.get("http_log") or [] if not entry.get("local_api")]
     return not problems, {"problems": problems, "browser": request_counts(ctx.evidence),
                           "browser_requests": ctx.evidence.get("requests"),
