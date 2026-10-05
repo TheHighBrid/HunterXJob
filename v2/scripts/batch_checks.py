@@ -8,6 +8,7 @@ the claims-to-avoid scan over generated materials, and the batch summary.
 """
 from __future__ import annotations
 
+import hashlib
 import html
 import re
 from collections import Counter
@@ -32,6 +33,8 @@ PLATFORMS: dict[str, dict[str, Any]] = {
 # Extra checks every batch run must pass on top of the Gate 2 checks (all are safety checks).
 EXTRA_SAFETY_CHECKS = ("live_submission_locked", "inspector_has_no_input_apis",
                        "planned_answers_backed_by_verified_facts", "materials_free_of_claims_to_avoid")
+# Added by the parent after the child exits; must count toward safety_ok / exit status.
+PARENT_SAFETY_CHECKS = ("browser_gone_after_child_exit", "no_process_outlived_the_run")
 DECLINE_REASON = "explicit decline-to-self-identify policy"
 VOLUNTARY_SECTIONS = {"eeoc", "demographic"}
 _DECLINE_RE = re.compile(r"decline|don.?t wish|do not wish|prefer not|not to (?:say|disclose|answer|self)|choose not|wish not",
@@ -50,7 +53,8 @@ FORBIDDEN_TOPICS: dict[str, re.Pattern[str]] = {
     "employment_status": re.compile(r"currently employed|current employment status|are you employed", re.IGNORECASE),
     "reason_for_leaving": re.compile(r"reason for leaving|why did you leave|raison de (?:votre )?départ", re.IGNORECASE),
     "education": re.compile(r"degree|education|diploma|school|university|college|gpa|diplôme|études", re.IGNORECASE),
-    "us_work": re.compile(r"\bU\.?S\.?A?\b|united states|états-unis", re.IGNORECASE),
+    # (?-i:...) keeps "US"/"U.S."/"USA" case-sensitive so the pronoun "us" never matches.
+    "us_work": re.compile(r"(?-i:\bU\.?S\.?A?\b)|(?i:\bunited states\b|\bétats-unis\b)"),
 }
 # Review buckets: what the owner would need to supply to make forms complete.
 REVIEW_BUCKETS: tuple[tuple[str, re.Pattern[str]], ...] = (
@@ -156,11 +160,21 @@ def check_live_submission_locked(data: dict[str, Any]) -> tuple[bool, dict[str, 
     return ok, {**settings, "submitted": result.get("submitted"), "ledger_kinds": [row.get("kind") for row in rows]}
 
 
+def inspector_source_evidence(source: str | None = None) -> dict[str, Any]:
+    """Scan (or re-use) the inspector source that produced a run; never re-read the live file on recheck."""
+    if source is None:
+        source = (V2_ROOT / "app" / "greenhouse_browser.py").read_text(encoding="utf-8")
+    found = [api for api in _INPUT_APIS if api in source]
+    return {"file": "app/greenhouse_browser.py",
+            "sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
+            "input_apis_found": found}
+
+
 def check_inspector_has_no_input_apis(data: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
     """The page inspector never clicks, types, selects, or attaches files (static check of the code that ran)."""
-    source = (V2_ROOT / "app" / "greenhouse_browser.py").read_text(encoding="utf-8")
-    found = [api for api in _INPUT_APIS if api in source]
-    return not found, {"file": "app/greenhouse_browser.py", "input_apis_found": found}
+    evidence = data.get("inspector_source") or inspector_source_evidence()
+    found = list(evidence.get("input_apis_found") or [])
+    return not found, evidence
 
 
 def planned_answer_problems(plan_trace: list[dict[str, Any]], allowed: dict[str, list[Any]],
@@ -197,7 +211,7 @@ def _topic_allowed(topic: str, key: str) -> bool:
     # those keys only ever carry the approved file/text or the verified profile URL.
     if key in {"resume", "resume_text", "cover_letter", "cover_letter_text", "linkedin", "linkedin_url"}:
         return True
-    return topic == "us_work" and key.endswith("_US")
+    return topic == "us_work" and key.endswith("_us")
 
 
 def check_planned_answers(data: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
@@ -256,15 +270,15 @@ def run_extra_checks(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def batch_outcome(checks: dict[str, Any], challenge: str | None) -> str:
-    """Gate 2's rule, with the batch's extra checks counted as safety checks."""
-    safety = (*SAFETY_CHECKS, *EXTRA_SAFETY_CHECKS)
+    """Gate 2's rule, with the batch's extra and parent-side process checks counted as safety checks."""
+    safety = (*SAFETY_CHECKS, *EXTRA_SAFETY_CHECKS, *PARENT_SAFETY_CHECKS)
     if challenge:
         return OUTCOME_BLOCKED if all(checks[name]["ok"] for name in safety if name in checks) else "fail"
     return OUTCOME_OK if checks and all(item["ok"] for item in checks.values()) else "fail"
 
 
 def safety_ok(checks: dict[str, Any]) -> bool:
-    names = [*SAFETY_CHECKS, *EXTRA_SAFETY_CHECKS]
+    names = [*SAFETY_CHECKS, *EXTRA_SAFETY_CHECKS, *PARENT_SAFETY_CHECKS]
     return bool(checks) and all(checks.get(name, {}).get("ok") for name in names)
 
 

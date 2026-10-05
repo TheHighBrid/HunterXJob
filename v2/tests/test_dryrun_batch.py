@@ -159,10 +159,14 @@ def test_open_check_is_one_get_with_one_retry_on_transient_errors_only():
     client, calls = _client(httpx.Response(503), httpx.Response(200, json={"jobs": [{"id": ASHBY_ID, "title": "A"}]}))
     assert batch.fetch_open_posting(AS, client=client, sleep=lambda _s: None)["open"] and len(calls) == 2
     client, calls = _client(httpx.ConnectError("down"), httpx.ConnectError("down"), httpx.Response(200))
-    assert not batch.fetch_open_posting(GH, client=client, sleep=lambda _s: None)["open"] and len(calls) == 2
+    down = batch.fetch_open_posting(GH, client=client, sleep=lambda _s: None)
+    assert not down["open"] and down["probe_error"] and len(calls) == 2
+    client, calls = _client(httpx.Response(503), httpx.Response(503))
+    unavailable = batch.fetch_open_posting(GH, client=client, sleep=lambda _s: None)
+    assert not unavailable["open"] and unavailable["probe_error"] and "503" in unavailable["reason"]
     client, calls = _client(httpx.Response(404), httpx.Response(200))
     closed = batch.fetch_open_posting(GH, client=client, sleep=lambda _s: None)
-    assert not closed["open"] and "404" in closed["reason"] and len(calls) == 1
+    assert not closed["open"] and not closed.get("probe_error") and "404" in closed["reason"] and len(calls) == 1
     assert all(call.method == "GET" for call in calls)
 
 
@@ -179,10 +183,13 @@ def _fill(key, value, resolved_key, label="", section="application", resolved_va
 
 
 def test_backed_answers_pass():
+    allowed = {**ALLOWED, "work_authorization_us": ["Yes"]}
     trace = [_fill("first_name", "Avery", "first_name"), _fill("q1", "Yes", "work_authorization_ca",
                                                                 label="Are you legally authorized to work in Canada?"),
+             _fill("q_us", "Yes", "work_authorization_us",
+                   label="Are you authorized to work in the United States?"),
              _fill("resume", "/private/resume.pdf", "resume"), {"key": "q2", "status": "review", "label": "Salary?"}]
-    assert checks.planned_answer_problems(trace, ALLOWED, decline_policy=False) == []
+    assert checks.planned_answer_problems(trace, allowed, decline_policy=False) == []
 
 
 @pytest.mark.parametrize("item, fragment", [
@@ -244,12 +251,17 @@ def test_live_submission_lock_check():
 
 
 def test_the_page_inspector_has_no_input_apis():
-    assert checks.check_inspector_has_no_input_apis({})[0]
+    ok, detail = checks.check_inspector_has_no_input_apis({})
+    assert ok and detail["sha256"] and detail["input_apis_found"] == []
+    # Recheck must reuse captured evidence, not re-read the live greenhouse_browser.py.
+    poisoned = {"inspector_source": {"file": "app/greenhouse_browser.py", "sha256": "abc",
+                                     "input_apis_found": [".fill("]}}
+    assert not checks.check_inspector_has_no_input_apis(poisoned)[0]
 
 
 def _checks(ok=True, **override):
-    names = [*gate2_checks.SAFETY_CHECKS, *checks.EXTRA_SAFETY_CHECKS, "posting_confirmed_open",
-             "real_form_rendered_without_challenge"]
+    names = [*gate2_checks.SAFETY_CHECKS, *checks.EXTRA_SAFETY_CHECKS, *checks.PARENT_SAFETY_CHECKS,
+             "posting_confirmed_open", "real_form_rendered_without_challenge"]
     result = {name: {"ok": ok} for name in names}
     result.update({name: {"ok": value} for name, value in override.items()})
     return result
@@ -262,6 +274,8 @@ def test_batch_outcome_and_safety():
     assert checks.safety_ok(blocked)
     unsafe = _checks(planned_answers_backed_by_verified_facts=False)
     assert checks.batch_outcome(unsafe, "anti_bot_challenge") == "fail" and not checks.safety_ok(unsafe)
+    leaked = _checks(browser_gone_after_child_exit=False)
+    assert checks.batch_outcome(leaked, None) == "fail" and not checks.safety_ok(leaked)
     assert checks.batch_outcome({}, None) == "fail" and not checks.safety_ok({})
 
 
@@ -296,14 +310,14 @@ def _result(outcome="pass", reason=None, detail=None, crashed=False):
 def _run(tmp_path, results, targets=None, fetch=None):
     calls, sleeps = [], []
 
-    def runner(run_dir, mode, posting, inputs, timeout):
+    def runner(run_dir, mode, posting, inputs, timeout, out=None):
         calls.append(run_dir.name)
         return results.pop(0)
 
     targets = targets or [GH, LV, AS]
     fetch = fetch or (lambda target: {**target, "open": True, "title": "T", "url": "u", "location": ""})
-    reports, stopped = batch.run_batch(targets, {}, tmp_path, mode="live", pause=30, timeout=1, fetch=fetch,
-                                       runner=runner, sleep=sleeps.append)
+    deps = batch.BatchDeps(fetch=fetch, runner=runner, sleep=sleeps.append)
+    reports, stopped = batch.run_batch(targets, {}, tmp_path, mode="live", pause=30, timeout=1, deps=deps)
     return reports, stopped, calls, sleeps
 
 
@@ -417,3 +431,105 @@ def test_material_texts_reads_the_run_database_read_only(tmp_path):
                                [("resume", "old", 1), ("resume", "new", 2), ("cover_letter", "letter", 1)])
     assert checks.material_texts(database) == {"resume": "new", "cover_letter": "letter"}
     assert checks.material_texts(tmp_path / "missing.db") == {}
+
+# --------------------------------------------------------------------------- review fixes
+
+def test_us_work_matcher_ignores_the_pronoun_us():
+    assert checks.FORBIDDEN_TOPICS["us_work"].search("Are you authorized to work in the US?")
+    assert checks.FORBIDDEN_TOPICS["us_work"].search("U.S. work authorization")
+    assert checks.FORBIDDEN_TOPICS["us_work"].search("United States eligibility")
+    assert not checks.FORBIDDEN_TOPICS["us_work"].search("Tell us your first name")
+    assert not checks.FORBIDDEN_TOPICS["us_work"].search("What brings us together")
+    item = _fill("first_name", "Avery", "first_name", label="Tell us your first name")
+    assert checks.planned_answer_problems([item], ALLOWED, decline_policy=False) == []
+
+
+def test_canonical_us_answer_keys_use_lowercase_suffix():
+    allowed = {**ALLOWED, "work_authorization_us": ["Yes"], "sponsorship_us": ["No"]}
+    us = _fill("q", "Yes", "work_authorization_us", label="Authorized to work in the United States?")
+    assert checks.planned_answer_problems([us], allowed, decline_policy=False) == []
+    assert checks._topic_allowed("us_work", "work_authorization_us")
+    assert checks._topic_allowed("us_work", "sponsorship_us")
+    assert not checks._topic_allowed("us_work", "work_authorization_US")  # vault never keeps this form
+
+
+def test_run_directory_stays_under_output_root(tmp_path):
+    safe = batch.run_directory(tmp_path, 1, "greenhouse", "acme")
+    assert safe == (tmp_path / "run-01-greenhouse-acme").resolve()
+    assert safe.is_relative_to(tmp_path.resolve())
+    with pytest.raises(SystemExit, match="unsafe board"):
+        batch.run_directory(tmp_path, 1, "greenhouse", "../other")
+    with pytest.raises(SystemExit, match="unsafe board"):
+        batch.sanitize_board("acme/../../etc")
+    with pytest.raises(SystemExit, match="unsafe board"):
+        batch.sanitize_board("acme/jobs")
+    # run_child refuses to delete outside out even if handed a crafted path
+    outside = tmp_path.parent / f"hx-outside-{tmp_path.name}"
+    outside.mkdir()
+    marker = outside / "keep.txt"
+    marker.write_text("safe", encoding="utf-8")
+    try:
+        with pytest.raises(SystemExit, match="escapes output root"):
+            batch.run_child(tmp_path / ".." / outside.name, "rehearse", GH, {}, 1, out=tmp_path)
+        assert marker.read_text(encoding="utf-8") == "safe"
+    finally:
+        marker.unlink(missing_ok=True)
+        outside.rmdir()
+
+
+def test_empty_target_selection_fails(tmp_path, monkeypatch):
+    monkeypatch.delenv("CI", raising=False)
+    targets = tmp_path / "targets.json"
+    targets.write_text("[]", encoding="utf-8")
+    profile = tmp_path / "p.yaml"
+    profile.write_text("verified: true\nidentity:\n  full_name: A\n", encoding="utf-8")
+    answers = tmp_path / "a.yaml"
+    answers.write_text("answers:\n  - key: voluntary_self_identification\n    value: decline\n", encoding="utf-8")
+    guard = tmp_path / "g.yaml"
+    guard.write_text("claims_to_avoid:\n  - claim: x\n    pattern: y\n", encoding="utf-8")
+    out = tmp_path / "out"
+    with pytest.raises(SystemExit, match="no targets selected"):
+        batch.main(["--live", "--targets", str(targets), "--profile", str(profile), "--answers", str(answers),
+                    "--guardrails", str(guard), "--out", str(out), "--pause", "20"])
+    targets.write_text(json.dumps([GH]), encoding="utf-8")
+    with pytest.raises(SystemExit, match="no targets selected"):
+        batch.main(["--live", "--targets", str(targets), "--profile", str(profile), "--answers", str(answers),
+                    "--guardrails", str(guard), "--out", str(out), "--pause", "20", "--start", "9"])
+
+
+def test_stale_reports_are_excluded_from_a_new_batch(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    stale = {"index": 27, "outcome": "pass", "posting": {"company": "Old"}, "checks": _checks(),
+             "field_mapping": {"planned_count": 1, "needs_review_count": 0, "needs_review": []}}
+    (out / "run-27-report.json").write_text(json.dumps(stale), encoding="utf-8")
+    batch.clear_reports_from(out, start=1)
+    assert list(out.glob("run-*-report.json")) == []
+    (out / "run-01-report.json").write_text(json.dumps({**stale, "index": 1}), encoding="utf-8")
+    (out / "run-02-report.json").write_text(json.dumps({**stale, "index": 2}), encoding="utf-8")
+    batch.clear_reports_from(out, start=2)
+    assert [p.name for p in sorted(out.glob("run-*-report.json"))] == ["run-01-report.json"]
+
+
+def test_board_api_outage_is_not_skipped_closed(tmp_path):
+    def fetch(target):
+        if target is LV:
+            return {**target, "open": False, "probe_error": True, "reason": "board API unavailable (HTTP 503)"}
+        return {**target, "open": True, "title": "T", "url": "u", "location": ""}
+
+    reports, stopped, calls, _ = _run(tmp_path, [_result()], fetch=fetch)
+    assert len(calls) == 1 and reports[1]["outcome"] == "probe_error"
+    assert "board API unavailable" in stopped
+
+
+def test_profile_is_snapshotted_at_load(tmp_path):
+    profile = tmp_path / "p.yaml"
+    profile.write_text("verified: true\nfull_name: Avery\n", encoding="utf-8")
+    answers = tmp_path / "a.yaml"
+    answers.write_text("answers:\n  - key: voluntary_self_identification\n    value: decline\n", encoding="utf-8")
+    guard = tmp_path / "g.yaml"
+    guard.write_text("claims_to_avoid:\n  - claim: x\n    pattern: y\n", encoding="utf-8")
+    inputs = batch.load_inputs(profile, answers, guard)
+    profile.write_text("verified: true\nfull_name: CHANGED\n", encoding="utf-8")
+    assert "Avery" in inputs["profile_text"] and "CHANGED" not in inputs["profile_text"]
+    assert inputs["profile_sha256"] == __import__("hashlib").sha256(inputs["profile_text"].encode()).hexdigest()

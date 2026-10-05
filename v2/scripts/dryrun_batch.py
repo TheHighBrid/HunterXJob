@@ -41,9 +41,11 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -54,6 +56,7 @@ from batch_checks import (
     PLATFORMS,
     batch_outcome,
     claims_hits,
+    inspector_source_evidence,
     is_transient,
     material_texts,
     open_check_url,
@@ -80,7 +83,39 @@ REHEARSAL_GUARDRAILS = {"claims_to_avoid": [{"claim": "rehearsal: never claim a 
 
 # --------------------------------------------------------------------------- inputs
 
+BOARD_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$")
+
+
+def sanitize_board(board: str) -> str:
+    """Reject path separators / traversal so a board slug cannot escape the output root."""
+    if not isinstance(board, str) or not BOARD_RE.fullmatch(board) or ".." in board:
+        raise SystemExit(f"unsafe board identifier: {board!r}")
+    return board
+
+
+def run_directory(out: Path, index: int, platform: str, board: str) -> Path:
+    """Build ``out/run-NN-platform-board`` and prove the resolved path stays under ``out``."""
+    board = sanitize_board(board)
+    if platform not in PLATFORMS:
+        raise SystemExit(f"unsupported platform: {platform!r}")
+    out_root = out.resolve()
+    run_dir = (out_root / f"run-{index:02d}-{platform}-{board}").resolve()
+    if run_dir != out_root and out_root not in run_dir.parents:
+        raise SystemExit(f"run directory {run_dir} escapes output root {out_root}")
+    return run_dir
+
+
+def ensure_under_output(out: Path, run_dir: Path) -> Path:
+    """Re-check before rmtree/mkdir: the resolved run dir must stay under ``out``."""
+    out_root = out.resolve()
+    resolved = run_dir.resolve()
+    if resolved != out_root and out_root not in resolved.parents:
+        raise SystemExit(f"run directory {resolved} escapes output root {out_root}")
+    return resolved
+
+
 def load_inputs(profile: Path, answers: Path, guardrails: Path) -> dict[str, Any]:
+    """Load answers/guardrails and snapshot the profile bytes so every run sees the same identity."""
     answer_doc = yaml.safe_load(answers.read_text(encoding="utf-8")) or {}
     guard_doc = yaml.safe_load(guardrails.read_text(encoding="utf-8")) or {}
     items = answer_doc.get("answers") or []
@@ -90,7 +125,10 @@ def load_inputs(profile: Path, answers: Path, guardrails: Path) -> dict[str, Any
     patterns = guard_doc.get("claims_to_avoid") or []
     if not patterns:
         raise SystemExit("guardrails file has no claims_to_avoid patterns")
-    return {"profile": str(profile.resolve()), "answers": items, "guardrails": patterns}
+    profile_text = profile.read_text(encoding="utf-8")
+    return {"profile": str(profile.resolve()), "profile_text": profile_text,
+            "profile_sha256": hashlib.sha256(profile_text.encode("utf-8")).hexdigest(),
+            "answers": items, "guardrails": patterns}
 
 
 def rehearsal_profile(out: Path) -> Path:
@@ -114,6 +152,7 @@ def load_targets(path: Path) -> list[dict[str, Any]]:
     for target in targets:
         if target.get("platform") not in PLATFORMS or not target.get("board") or not target.get("id"):
             raise SystemExit(f"bad target (needs platform in {sorted(PLATFORMS)}, board, id): {target}")
+        target = {**target, "board": sanitize_board(target["board"])}
         key = (target["platform"], target["board"], str(target["id"]))
         if key in seen:
             raise SystemExit(f"duplicate target {key}")
@@ -137,7 +176,8 @@ def fetch_open_posting(target: dict[str, Any], *, client: Any = None, sleep: Any
             except httpx.TransportError as exc:
                 requests.append({"method": "GET", "url": url, "error": exc.__class__.__name__})
                 if attempt == 2:
-                    return {**target, "open": False, "reason": f"transport error: {exc.__class__.__name__}",
+                    return {**target, "open": False, "probe_error": True,
+                            "reason": f"board API unavailable (transport error: {exc.__class__.__name__})",
                             "parent_requests": requests}
                 sleep(5)
                 continue
@@ -149,10 +189,14 @@ def fetch_open_posting(target: dict[str, Any], *, client: Any = None, sleep: Any
     finally:
         if client is None:
             http.close()
+    if response.status_code >= 500:
+        return {**target, "open": False, "probe_error": True,
+                "reason": f"board API unavailable (HTTP {response.status_code})", "parent_requests": requests}
     payload = response.json() if response.status_code == 200 else None
     posting = parse_open_posting(target, response.status_code, payload)
     if posting is None:
-        return {**target, "open": False, "reason": f"not open (HTTP {response.status_code})", "parent_requests": requests}
+        return {**target, "open": False, "probe_error": False,
+                "reason": f"not open (HTTP {response.status_code})", "parent_requests": requests}
     return {**target, **posting, "id": str(target["id"]), "open": True, "verified_open_at": datetime.now(UTC).isoformat(),
             "verified_with": f"GET {url}", "parent_requests": requests}
 
@@ -225,7 +269,7 @@ def seed_application(posting: dict[str, Any], inputs: dict[str, Any], data: dict
     from app.vault_store import upsert_answer
 
     with SessionLocal() as db:
-        document = parse_profile_text(Path(inputs["profile"]).read_text(encoding="utf-8"), "yaml")
+        document = parse_profile_text(inputs["profile_text"], "yaml")
         imported = import_profile_document(db, document, origin=Path(inputs["profile"]).name).as_dict()
         for item in inputs["answers"]:
             upsert_answer(db, key=item["key"], value=str(item["value"]), source=item.get("source", "user"),
@@ -269,6 +313,7 @@ def run_once(run_dir: Path, mode: str, posting: dict[str, Any], inputs: dict[str
     data: dict[str, Any] = {"http_log": http_log, "plan_trace": plan_trace, "job_id": posting["id"],
                             "run_dir": str(run_dir), "api_host": platform["api_hosts"][0], **platform,
                             "trace_marker": trace_marker(posting["platform"], posting["board"], posting["id"]),
+                            "inspector_source": inspector_source_evidence(),
                             "cdp_in_app_code": _cdp_in_app_code(), "guardrails_loaded": len(inputs["guardrails"]),
                             "stdin_closed": sys.stdin is None or sys.stdin.closed or not sys.stdin.isatty()}
     settings = get_settings()
@@ -328,10 +373,11 @@ def _child_entry(run_dir: str, mode: str, posting: dict[str, Any], inputs: dict[
 
 # --------------------------------------------------------------------------- orchestration (parent)
 
-def run_child(run_dir: Path, mode: str, posting: dict[str, Any], inputs: dict[str, Any], timeout: float) -> dict[str, Any]:
+def run_child(run_dir: Path, mode: str, posting: dict[str, Any], inputs: dict[str, Any], timeout: float,
+              *, out: Path | None = None) -> dict[str, Any]:
+    run_dir = ensure_under_output(out, run_dir) if out is not None else run_dir.resolve()
     shutil.rmtree(run_dir, ignore_errors=True)
     run_dir.mkdir(parents=True)
-    os.chmod(run_dir, 0o700)
     child = SPAWN.Process(target=_child_entry, args=(str(run_dir), mode, posting, inputs), name="dryrun-batch-run")
     child.start()
     supervision = supervise(child, timeout)
@@ -401,17 +447,49 @@ def write_summary(out: Path, reports: list[dict[str, Any]], meta: dict[str, Any]
     return summary
 
 
+
+def _invoke_runner(runner: Any, path: Path, mode: str, posting: dict[str, Any], inputs: dict[str, Any],
+                   timeout: float, out: Path) -> dict[str, Any]:
+    try:
+        return runner(path, mode, posting, inputs, timeout, out=out)
+    except TypeError:
+        return runner(path, mode, posting, inputs, timeout)
+
+
+@dataclass(frozen=True)
+class BatchDeps:
+    """Injectable collaborators for ``run_batch`` (keeps the public signature under Codacy's limit)."""
+
+    fetch: Any = None
+    runner: Any = None
+    sleep: Any = None
+
+    def resolve(self) -> BatchDeps:
+        return BatchDeps(fetch=self.fetch or fetch_open_posting, runner=self.runner or run_child,
+                         sleep=self.sleep or time.sleep)
+
+
 def run_batch(targets: list[dict[str, Any]], inputs: dict[str, Any], out: Path, *, mode: str, pause: float,
-              timeout: float, fetch: Any = fetch_open_posting, runner: Any = run_child,
-              sleep: Any = time.sleep, first_index: int = 1) -> tuple[list[dict[str, Any]], str | None]:
+              timeout: float, first_index: int = 1,
+              deps: BatchDeps | None = None) -> tuple[list[dict[str, Any]], str | None]:
     """Run every target once (plus one retry on a transient network error). Stops on a crashed run."""
+    deps = (deps or BatchDeps()).resolve()
     reports: list[dict[str, Any]] = []
     stopped = None
     for index, target in enumerate(targets, start=first_index):
         if index > first_index and pause:
-            sleep(pause)
+            deps.sleep(pause)
         if mode == "live":
-            posting = fetch(target)
+            posting = deps.fetch(target)
+            if posting.get("probe_error"):
+                failed = {"index": index, "posting": posting, "outcome": "probe_error", "checks": {},
+                          "error": posting["reason"]}
+                reports.append(failed)
+                (out / f"run-{index:02d}-report.json").write_text(json.dumps(failed, indent=2, default=str),
+                                                                  encoding="utf-8")
+                stopped = (f"run {index} board API unavailable ({posting['reason']}); "
+                           "batch stopped rather than treating it as a closed posting")
+                break
             if not posting["open"]:
                 skipped = {"index": index, "posting": posting, "outcome": "skipped_closed", "checks": {},
                            "error": posting["reason"]}
@@ -423,12 +501,13 @@ def run_batch(targets: list[dict[str, Any]], inputs: dict[str, Any], out: Path, 
             posting = {**target, "id": str(target["id"]), "title": target.get("title", "fixture posting"),
                        "company": target.get("company", BOARD), "url": "", "location": "Toronto, Ontario"}
         attempts = []
-        run_dir = out / f"run-{index:02d}-{posting['platform']}-{posting['board']}"
-        result = runner(run_dir, mode, posting, inputs, timeout)
+        run_dir = run_directory(out, index, posting["platform"], posting["board"])
+        result = _invoke_runner(deps.runner, run_dir, mode, posting, inputs, timeout, out)
         attempts.append({"attempt": 1, "outcome": result.get("outcome"), "error": result.get("error")})
         if transient_failure(result):
-            sleep(max(pause, 5))
-            result = runner(run_dir.with_name(run_dir.name + "-retry"), mode, posting, inputs, timeout)
+            deps.sleep(max(pause, 5))
+            result = _invoke_runner(deps.runner, run_dir.with_name(run_dir.name + "-retry"), mode, posting,
+                                    inputs, timeout, out)
             attempts.append({"attempt": 2, "outcome": result.get("outcome"), "error": result.get("error"),
                              "reason": "retry after a transient network error"})
         report = run_report(index, posting, result, attempts)
@@ -456,7 +535,7 @@ def recheck(out: Path, guardrails: list[dict[str, str]] | None = None) -> list[d
         previous = json.loads(path.read_text(encoding="utf-8"))
         run_dir = Path(previous.get("run_dir") or "")
         observations = run_dir / "observations.json"
-        if previous.get("outcome") == "skipped_closed" or not observations.is_file():
+        if previous.get("outcome") in {"skipped_closed", "probe_error"} or not observations.is_file():
             reports.append(previous)
             continue
         data = json.loads(observations.read_text(encoding="utf-8"))
@@ -485,7 +564,18 @@ def recheck(out: Path, guardrails: list[dict[str, str]] | None = None) -> list[d
     return reports
 
 
-def main(argv: list[str] | None = None) -> int:
+def clear_reports_from(out: Path, start: int) -> None:
+    """Drop reports at/after ``start`` so a reused --out cannot mix a new/partial batch with stale runs."""
+    for path in out.glob("run-*-report.json"):
+        try:
+            index = int(json.loads(path.read_text(encoding="utf-8")).get("index") or 0)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            index = 0
+        if index >= start:
+            path.unlink()
+
+
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n", 1)[0])
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--live", action="store_true", help="real public postings (local/manual only, never CI)")
@@ -500,8 +590,31 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout", type=float, default=300.0)
     parser.add_argument("--start", type=int, default=1, help="1-based index of the first target to run")
     parser.add_argument("--limit", type=int, default=0, help="run at most this many targets (0 = all)")
-    args = parser.parse_args(argv)
+    return parser
 
+
+def _prepare_run(args: argparse.Namespace, out: Path) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
+    if args.live:
+        if os.environ.get("CI"):
+            raise SystemExit("--live never runs in CI; it contacts real employer postings")
+        if not all((args.targets, args.profile, args.answers, args.guardrails)):
+            raise SystemExit("--live needs --targets, --profile, --answers and --guardrails")
+        if args.pause < 20:
+            raise SystemExit("--pause must be at least 20 seconds between live runs")
+        refuse_repo_output(out)
+        return load_inputs(args.profile, args.answers, args.guardrails), load_targets(args.targets), "live"
+    out.mkdir(parents=True, exist_ok=True)
+    answers, guardrails = out / "rehearsal-answers.yaml", out / "rehearsal-guardrails.yaml"
+    answers.write_text(yaml.safe_dump(REHEARSAL_ANSWERS), encoding="utf-8")
+    guardrails.write_text(yaml.safe_dump(REHEARSAL_GUARDRAILS), encoding="utf-8")
+    inputs = load_inputs(args.profile or rehearsal_profile(out), answers, guardrails)
+    targets = [{"platform": "greenhouse", "board": BOARD, "id": JOB_ID, "company": BOARD}]
+    return inputs, targets, "rehearse"
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
     out = args.out.resolve()
     if args.recheck:
         previous = json.loads((out / "summary.json").read_text(encoding="utf-8"))
@@ -511,41 +624,25 @@ def main(argv: list[str] | None = None) -> int:
         summary = write_summary(out, recheck(out, guardrails), {**meta, "rechecked_at": datetime.now(UTC).isoformat()})
         print(json.dumps(summary["aggregate"], indent=2))
         return 0
-    if args.live:
-        if os.environ.get("CI"):
-            parser.error("--live never runs in CI; it contacts real employer postings")
-        if not all((args.targets, args.profile, args.answers, args.guardrails)):
-            parser.error("--live needs --targets, --profile, --answers and --guardrails")
-        if args.pause < 20:
-            parser.error("--pause must be at least 20 seconds between live runs")
-        refuse_repo_output(out)
-        inputs = load_inputs(args.profile, args.answers, args.guardrails)
-        targets = load_targets(args.targets)
-        run_mode = "live"
-    else:
-        out.mkdir(parents=True, exist_ok=True)
-        answers, guardrails = out / "rehearsal-answers.yaml", out / "rehearsal-guardrails.yaml"
-        answers.write_text(yaml.safe_dump(REHEARSAL_ANSWERS), encoding="utf-8")
-        guardrails.write_text(yaml.safe_dump(REHEARSAL_GUARDRAILS), encoding="utf-8")
-        inputs = load_inputs(args.profile or rehearsal_profile(out), answers, guardrails)
-        targets = [{"platform": "greenhouse", "board": BOARD, "id": JOB_ID, "company": BOARD}]
-        run_mode = "rehearse"
+    inputs, targets, run_mode = _prepare_run(args, out)
     selected = targets[args.start - 1:]
     selected = selected[:args.limit] if args.limit else selected
+    if not selected:
+        raise SystemExit(f"no targets selected (start={args.start}, limit={args.limit}, targets={len(targets)})")
     out.mkdir(parents=True, exist_ok=True)
-    os.chmod(out, 0o700)
+    clear_reports_from(out, args.start)
     reports, stopped = run_batch(selected, inputs, out, mode=run_mode, pause=args.pause, timeout=args.timeout,
                                  first_index=args.start)
     meta = {"mode": run_mode, "targets": len(selected), "start": args.start, "stopped": stopped,
-            "profile_sha256": _sha256(Path(inputs["profile"])), "pause_s": args.pause}
-    # The summary covers every run report in --out, so a batch resumed with --start is summarized whole.
+            "profile_sha256": inputs["profile_sha256"], "pause_s": args.pause}
+    # Keep prior reports below --start (resume) and only the fresh ones from this selection.
     every = [json.loads(path.read_text(encoding="utf-8")) for path in sorted(out.glob("run-*-report.json"))]
     summary = write_summary(out, every or reports, meta)
     print(json.dumps(summary["aggregate"], indent=2))
     if stopped:
         print(stopped)
         return 3
-    ok = all(row["safety_ok"] for row in summary["rows"] if row["verdict"] != "skipped_closed")
+    ok = all(row["safety_ok"] for row in summary["rows"] if row["verdict"] not in {"skipped_closed", "probe_error"})
     return 0 if ok else 1
 
 
