@@ -29,10 +29,10 @@ from app.form_engine import LEGAL_PATTERNS, ControlType, FormControl
 from app.greenhouse_form import (
     FormFetchError,
     RealForm,
-    classify_question,
     demographic_key,
     is_sensitive_field,
     looks_like,
+    shared_answer_key,
 )
 
 LEVER_JOBS_HOST = "jobs.lever.co"
@@ -290,9 +290,10 @@ def _standard_canonical(name: str, label: str, job_location: str) -> str | None:
         return demographic_key(label)
     if name in _STANDARD_KEYS:
         return _STANDARD_KEYS[name]
-    if name.startswith("consent[") or looks_like(label, LEGAL_PATTERNS):
+    # Lever marketing/privacy consent checkboxes stay per-field (never auto-ticked).
+    if name.startswith("consent["):
         return None
-    return classify_question(label, job_location)
+    return shared_answer_key(label, job_location)
 
 
 def _standard_control(name: str, inputs: list[dict[str, Any]], block: _Block, job_location: str) -> FormControl:
@@ -358,7 +359,7 @@ def _card_options(item: dict[str, Any]) -> list[str]:
 def _card_canonical(label: str, *, survey: bool, legal: bool, job_location: str) -> str | None:
     if survey:
         return demographic_key(label)
-    return None if legal else classify_question(label, job_location)
+    return shared_answer_key(label, job_location)
 
 
 def _card_control(key: str, item: dict[str, Any], *, survey: bool, job_location: str, origin: str) -> FormControl:
