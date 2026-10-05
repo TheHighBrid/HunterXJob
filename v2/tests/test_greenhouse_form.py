@@ -146,6 +146,7 @@ def test_extracts_multiselect_country_scoped_auth_and_salary():
     controls = _by_key(_form("d2l_7696196.json", D2L))
     language = controls["question_64283526"]  # API name is "question_64283526[]"
     assert language.control_type is ControlType.MULTISELECT and len(language.options) == 6
+    assert language.vault_keys[-1] == "language_proficiency"
     auth = controls["question_64283527"]
     assert auth.vault_keys[-1] == "work_authorization_ca" and auth.sensitive
     assert controls["question_64283530"].vault_keys[-1] == "salary_expectation"
@@ -160,6 +161,40 @@ def test_classify_question_never_shares_ambiguous_country_answers():
     assert classify_question("Are you authorized to work in Canada or the United States?") is None
     assert classify_question("Do you require sponsorship to work in this role?", job_location="Remote") is None
     assert classify_question("Have you previously worked for Example?") is None
+
+
+def test_classify_question_covers_common_autofill_patterns():
+    from app.greenhouse_form import shared_answer_key
+
+    assert classify_question("What is your earliest available start date?") == "start_date"
+    assert classify_question("When can you start?") == "start_date"
+    assert classify_question("What is your employment status?") == "employment_status"
+    assert classify_question("Are you currently employed?") == "employment_status"
+    assert classify_question("Do you consent to a background check?") == "background_check_consent"
+    assert classify_question(
+        "Bilingualism in English and Canadian French is required. Please indicate your level of language skill."
+    ) == "language_proficiency"
+    assert classify_question("What is your highest level of education?") == "education_level"
+    assert classify_question("Are you a Canadian citizen?") == "citizenship_ca"
+    assert classify_question("Are you a U.S. citizen?") == "citizenship_us"
+    assert classify_question("Are you a citizen?") is None
+    assert classify_question(
+        "Are you willing to commute to our Ottawa office?"
+    ) == "ottawa_commute"
+    assert classify_question(
+        "Are you willing to travel to Gatineau for hybrid on-site days?"
+    ) == "ottawa_commute"
+    # Programming-language prompts must not look like spoken-language answers.
+    assert classify_question(
+        "Do you have strong proficiency in at least one modern scripting language (Python, JavaScript/TypeScript, or similar)?"
+    ) is None
+    # Employment agreements stay per-question (legal), not employment_status.
+    assert classify_question(
+        "Are you subject to any employment agreements and/or post-employment restrictions with your current employer?"
+    ) is None
+    # Background-check consent may share a policy key even though it is legal.
+    assert shared_answer_key("Do you consent to a background check?") == "background_check_consent"
+    assert shared_answer_key("Have you read and agree to the below Disclaimer and Consent?") is None
 
 
 def test_unknown_field_type_is_unsupported_and_blocks():
@@ -188,7 +223,7 @@ def test_maps_vault_answers_onto_real_form_and_normalizes_option_case():
         AnswerRecord("salary_expectation", "70K+", AnswerSource.USER),
         AnswerRecord("referral_source", "Other", AnswerSource.USER),
         AnswerRecord("time_zone", "GMT-5 :Eastern Standard Time (EST)", AnswerSource.USER),
-        AnswerRecord("question_64283526", "C1: Full professional proficiency|C2: Bilingual/Native speaker", AnswerSource.USER),
+        AnswerRecord("language_proficiency", "C1: Full professional proficiency|C2: Bilingual/Native speaker", AnswerSource.USER),
     ])
     plan = plan_fill(form.controls, vault)
     filled = {item.control.key: item.value for item in plan.items if item.status == "fill"}
