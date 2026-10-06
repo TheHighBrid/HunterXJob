@@ -1,0 +1,66 @@
+{
+  "forms": [
+    {
+      "name": "greenhouse/asana_8165477.json",
+      "platform": "greenhouse",
+      "controls": 25,
+      "fill": 10,
+      "review": 9,
+      "skip": 6,
+      "planned_pct": 40.0
+    },
+    {
+      "name": "greenhouse/d2l_7696196.json",
+      "platform": "greenhouse",
+      "controls": 23,
+      "fill": 10,
+      "review": 6,
+      "skip": 7,
+      "planned_pct": 43.5
+    },
+    {
+      "name": "greenhouse/gitlab_8556658002.json",
+      "platform": "greenhouse",
+      "controls": 22,
+      "fill": 10,
+      "review": 7,
+      "skip": 5,
+      "planned_pct": 45.5
+    },
+    {
+      "name": "ats/lever_apply.html",
+      "platform": "lever",
+      "controls": 23,
+      "fill": 13,
+      "review": 4,
+      "skip": 6,
+      "planned_pct": 56.5
+    },
+    {
+      "name": "ats/ashby_form_advisor.json",
+      "platform": "ashby",
+      "controls": 25,
+      "fill": 10,
+      "review": 8,
+      "skip": 7,
+      "planned_pct": 40.0
+    },
+    {
+      "name": "ats/ashby_form_engineer.json",
+      "platform": "ashby",
+      "controls": 14,
+      "fill": 5,
+      "review": 7,
+      "skip": 2,
+      "planned_pct": 35.7
+    }
+  ],
+  "totals": {
+    "forms": 6,
+    "controls": 132,
+    "fill": 58,
+    "review": 41,
+    "skip": 33,
+    "planned_pct": 43.9
+  }
+}
