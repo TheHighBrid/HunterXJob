@@ -6,7 +6,9 @@ from enum import Enum
 from html.parser import HTMLParser
 from typing import Any
 
+from app import prior_employment
 from app.answer_vault import AnswerVault, FieldRequest, ResolutionStatus
+from app.option_derivation import derive_option
 
 
 class ControlType(str, Enum):
@@ -77,6 +79,8 @@ class FormControl:
     vault_keys: list[str] = field(default_factory=list)
     # Option label -> platform value id, when the platform exposes one.
     option_values: dict[str, str] = field(default_factory=dict)
+    # Posting employer for "worked here before?" questions (see prior_employment).
+    employer: str = ""
 
 
 @dataclass(slots=True)
@@ -232,7 +236,8 @@ def _match_option(control: FormControl, value: Any) -> Any | None:
 
     Matching is exact after case/whitespace normalization only. No fuzzy or
     semantic matching: an answer that is not literally one of the offered
-    options goes to review instead of being guessed.
+    options goes to review unless a narrow deterministic rule in
+    ``app.option_derivation`` applies.
     """
     lookup = {_normalize_option(option): option for option in control.options}
     if control.control_type is ControlType.MULTISELECT:
@@ -273,10 +278,20 @@ def plan_fill(controls: list[FormControl], vault: AnswerVault) -> FillPlan:
             continue
         sensitive = control.sensitive or control.legal
         resolved = _resolve_control(control, vault, sensitive)
+        # An explicit stored answer for this exact question always wins; the
+        # history rule only covers prior-employment questions left unanswered.
+        prior = None if sensitive or resolved.status is ResolutionStatus.RESOLVED else prior_employment.decide(control, vault)
+        if prior is not None:
+            if prior.status != "fill":
+                blockers.append("ambiguous_question")
+            items.append(FillPlanItem(control, prior.status, value=prior.value, reason=prior.reason))
+            continue
         if resolved.status is ResolutionStatus.RESOLVED:
             value = resolved.value
             if control.options:
                 matched = _match_option(control, value)
+                if matched is None:
+                    matched = derive_option(control, value, resolved.key)
                 if matched is None:
                     blockers.append("ambiguous_question")
                     items.append(FillPlanItem(control, "review", value=value, reason="resolved value is not a listed option"))
