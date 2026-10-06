@@ -44,7 +44,7 @@ certification setup and the resumable certification flow from PRs #21 to #25
 | Lever / Ashby | `dry_run` | Read-only real-form dry-runs (Lever public apply page; Ashby public GraphQL queries re-issued as GET). Covered by the real-profile batch |
 | Email / generic | `dry_run` | Same safety gates |
 | Truthful materials | Ready | Verified profile, guarded résumé and cover letter, approval workflow. For finance-domain postings, roles at financial institutions lead the experience list (PR #35); other postings stay reverse-chronological |
-| Answer matching on real forms | Landed (PR #36) | Classifiers for common screening questions (start date, employment status, background-check consent, languages, education, Canadian citizenship, Ottawa commute) on Greenhouse, Lever and Ashby forms. Their effect on real-form coverage is not measured yet |
+| Answer matching on real forms | Landed (PRs #36 and #40) | Classifiers for common screening questions (start date, employment status, background-check consent, languages, education, Canadian citizenship, Ottawa commute) on Greenhouse, Lever and Ashby forms. The vault fills `language_proficiency` from the verified profile and `start_date` from a stored availability date; background-check consent needs an explicit answer. Their effect on real-form coverage is not measured yet |
 | SmartRecruiters / Workday / iCIMS / Taleo | `detect_only` | Platform detection only |
 | Government portals | Unsupported | Flag exists, adapter not implemented |
 | Continuous run (v0.3) | Ready, off by default | Discover → score → prepare → dry-run on an interval inside the API process. Kill switch, pause flag, quiet hours, per-cycle and daily caps; no overlap; every cycle in the `scheduler_cycles` ledger; `GET /api/scheduler/status` |

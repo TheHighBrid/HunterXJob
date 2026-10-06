@@ -171,7 +171,10 @@ drafts, approvals, integrity and staleness checks, evidence entries) →
 `material_workflow.py` (stage moves and the `materials_review` task).
 `profile_vault.py` turns verified facts into answer-vault records (contact,
 current role, per-country work authorization, employment/education history
-rows); explicit vault answers override them.
+rows, spoken-language proficiency); explicit vault answers override them.
+`vault_store.py` also lets a stored `availability_date` (or a similar key) fill
+`start_date` when that key is unset. `background_check_consent` is never
+derived from the profile.
 
 Operator routes in `app/main.py` (discovery, scoring, materials, manual
 dry-run, résumé facts, answers, adapters, events) are unchanged and need the same key.
