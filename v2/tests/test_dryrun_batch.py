@@ -259,6 +259,90 @@ def test_check_planned_answers_uses_seed_keys_for_older_observations():
     assert not ok and any("topic: start_date" in problem["problem"] for problem in details["unbacked"])
 
 
+HISTORY = {"employment_0_company": ["Northwind Credit Union"], "employment_1_company": ["Lakeshore Payments Inc."]}
+D2L_NO = "No, I have not worked for D2L in any capacity"
+
+
+def _prior(value=D2L_NO, employer="d2l", rerun=None, label="Have you previously worked for D2L in any capacity?"):
+    item = _fill("q_prior", value, "q_prior", label=label, resolved_value=None,
+                 reason=f"prior employment: {employer!r} not in 2 verified employers")
+    item["derivation"] = {"rule": "prior_employment", "employer": employer, "options": [D2L_NO, "Yes, as an employee"],
+                          "rerun_value": value if rerun is None else rerun}
+    return item
+
+
+def test_prior_employment_no_passes_when_the_employer_is_not_in_verified_history():
+    assert checks.planned_answer_problems([_prior()], {**ALLOWED, **HISTORY}, decline_policy=False) == []
+
+
+@pytest.mark.parametrize("item, allowed, fragment", [
+    (_prior(employer="northwind credit union", label="Have you previously worked for Northwind Credit Union?"),
+     HISTORY, "matches or resembles"),
+    # Lookalike: "Northwind" is not literally in the history but must still not get a No.
+    (_prior(employer="northwind", label="Have you previously worked for Northwind?"), HISTORY, "matches or resembles"),
+    (_prior(employer="lakeshore payments", label="Have you worked at Lakeshore Payments before?"), HISTORY,
+     "matches or resembles"),
+    (_prior(), {}, "no verified employment history"),
+    (_prior(rerun="Yes, as an employee"), HISTORY, "differs from the rule's re-run"),
+    (_prior(value="Yes, as an employee"), HISTORY, "is not a No"),
+    (_prior(label="Have you previously worked for the Government of Canada?"), HISTORY, "does not name"),
+])
+def test_prior_employment_no_is_verified_independently(item, allowed, fragment):
+    problems = checks.planned_answer_problems([item], {**ALLOWED, **allowed}, decline_policy=False)
+    assert problems and any(fragment in problem["problem"] for problem in problems)
+
+
+LANGS = "English (Native)|French (Professional working)"
+CEFR_OPTIONS = ["A2: Elementary", "B1: Limited working", "B2: Professional working proficiency", "C1: Full professional"]
+
+
+def _derived(value, resolved_value, key, label, options, rerun=None):
+    item = _fill("q_opt", value, key, label=label, resolved_value=resolved_value)
+    item["derivation"] = {"rule": "option", "options": options, "rerun_value": value if rerun is None else rerun}
+    return item
+
+
+BILINGUAL = "Bilingualism in English and Canadian French is required. Please indicate your level."
+
+
+@pytest.mark.parametrize("item, allowed", [
+    (_derived(["B2: Professional working proficiency"], LANGS, "language_proficiency", BILINGUAL, CEFR_OPTIONS),
+     {"language_proficiency": [LANGS]}),
+    (_derived(["B1: Limited working"], LANGS, "language_proficiency", BILINGUAL, CEFR_OPTIONS),
+     {"language_proficiency": [LANGS]}),
+    (_derived("Yes, I am", "Yes", "work_authorization_ca", "Are you legally authorized to work in Canada?",
+              ["Yes, I am", "No, I am not"]), {}),
+])
+def test_derived_options_pass_when_backed_by_the_stored_answer(item, allowed):
+    assert checks.planned_answer_problems([item], {**ALLOWED, **allowed}, decline_policy=False) == []
+
+
+@pytest.mark.parametrize("item, allowed, fragment", [
+    # C1 is above the stored French level (professional working = B2).
+    (_derived(["C1: Full professional"], LANGS, "language_proficiency", BILINGUAL, CEFR_OPTIONS),
+     {"language_proficiency": [LANGS]}, "above the stored level"),
+    (_derived("Yes", "English (Native)|French (Intermediate)", "language_proficiency", BILINGUAL, ["Yes", "No"]),
+     {"language_proficiency": ["English (Native)|French (Intermediate)"]}, "above the stored level"),
+    (_derived(["B2: Professional working proficiency"], "English (Native)", "language_proficiency", BILINGUAL,
+              CEFR_OPTIONS), {"language_proficiency": ["English (Native)"]}, "no stored level"),
+    (_derived(["B2: Professional working proficiency"], LANGS, "language_proficiency", BILINGUAL, CEFR_OPTIONS,
+              rerun=["B1: Limited working"]), {"language_proficiency": [LANGS]}, "re-run"),
+    (_derived("No, I am not", "Yes", "work_authorization_ca", "Are you legally authorized to work in Canada?",
+              ["Yes, I am", "No, I am not"]), {}, "yes/no"),
+    (_derived("Maybe", "Yes", "work_authorization_ca", "Authorized in Canada?", ["Yes, I am", "No"]), {}, "listed option"),
+])
+def test_derived_options_are_verified_independently(item, allowed, fragment):
+    problems = checks.planned_answer_problems([item], {**ALLOWED, **allowed}, decline_policy=False)
+    assert problems and any(fragment in problem["problem"] for problem in problems)
+
+
+def test_older_traces_without_a_derivation_still_flag_a_changed_value():
+    item = _fill("q_opt", ["B2: Professional working proficiency"], "language_proficiency", label=BILINGUAL,
+                 resolved_value=LANGS)
+    problems = checks.planned_answer_problems([item], {**ALLOWED, "language_proficiency": [LANGS]}, decline_policy=False)
+    assert any("differs from the resolved answer" in problem["problem"] for problem in problems)
+
+
 def test_decline_option_needs_the_policy_and_a_voluntary_section():
     item = _fill("gender", "I don't wish to answer", None, section="eeoc", reason=checks.DECLINE_REASON)
     assert checks.planned_answer_problems([item], ALLOWED, decline_policy=True) == []
