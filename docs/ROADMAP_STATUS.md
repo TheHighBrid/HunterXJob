@@ -45,6 +45,7 @@ certification setup and the resumable certification flow from PRs #21 to #25
 | Email / generic | `dry_run` | Same safety gates |
 | Truthful materials | Ready | Verified profile, guarded résumé and cover letter, approval workflow. For finance-domain postings, roles at financial institutions lead the experience list (PR #35); other postings stay reverse-chronological |
 | Answer matching on real forms | Landed (PRs #36 and #40) | Classifiers for common screening questions (start date, employment status, background-check consent, languages, education, Canadian citizenship, Ottawa commute) on Greenhouse, Lever and Ashby forms. The vault fills `language_proficiency` from the verified profile and `start_date` from a stored availability date; background-check consent needs an explicit answer. Their effect on real-form coverage is not measured yet |
+| Real-form re-run (same 10 postings) | Measured 2026-10-06 on main `18f8ad9` | Real batch: 56.5% on a 10-posting re-run, 48.6% for the same 10 on Oct 4 (+7.9 points). The % is planned ÷ (planned + review). Zero submissions and zero answers without a verified fact or owner answer behind them. 7 runs improved and 3 were unchanged (Coinbase, Samsara, Wealthsimple). New fills: how-did-you-hear, start date, salary, background check, relocation, language, current company and US work authorization. The 4 check failures (Brex, OpenAI, Neo, Jobber) came from `batch_checks.py` still treating salary, start date and relocation as never-answer topics; the check now passes those only when the value exactly matches the owner's stored answer. Not comparable with the earlier 56% (different denominator, 28 runs). Known defects still open: start dates planned into date pickers (OpenAI, Neo), Brex's referral-name field filled as how-did-you-hear, and PolicyMe's French-fluency question getting the joined language list |
 | Answer-matching coverage on test forms | Measured offline (PR #42) | `v2/scripts/fixture_answer_coverage.py` plans the 6 sanitized fixture forms in the repo (3 Greenhouse, 1 Lever, 2 Ashby) with the made-up example profile plus example policy answers. 132 controls: 58 filled, 41 sent to review, 33 skipped, so 43.9% planned. Saved in `v2/reports/fixture_answer_coverage.json`. This uses test forms and example answers, so it is not comparable with the 56% from the real-profile batch |
 | SmartRecruiters / Workday / iCIMS / Taleo | `detect_only` | Platform detection only |
 | Government portals | Unsupported | Flag exists, adapter not implemented |
@@ -79,7 +80,10 @@ certification setup and the resumable certification flow from PRs #21 to #25
 
 ## Next, after the recovery gates (each needs the owner to open it)
 
-1. Raise the share of fields planned automatically on real forms. The real-profile batch planned about 56% before the classifiers in PRs #36 and #40, and that has not been re-measured on real forms. The offline fixture report (43.9% on test forms, PR #42) is a regression baseline, not a real-form number. Re-run the batch offline with `--recheck` to measure the real-form change.
+1. Raise the share of fields planned automatically on real forms.
+   - Real batch: 56.5% on a 10-posting re-run, 48.6% for the same 10 on Oct 4.
+   - Test fixtures (offline regression baseline, not a real-form number): 43.9% planned on 6 forms (PR #42).
+   - Next: fix the three defects above, then re-run the same 10 postings to compare.
 2. Supervised real submissions with owner approval.
 3. Session continuity after a manual CAPTCHA or MFA.
 4. Inbox-derived confirmation matching.
