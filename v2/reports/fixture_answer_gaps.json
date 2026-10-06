@@ -1,0 +1,723 @@
+{
+  "totals": {
+    "review": 41,
+    "skip": 33
+  },
+  "by_category": [
+    {
+      "name": "documents",
+      "total": 16,
+      "review": 7,
+      "skip": 9,
+      "required": 7
+    },
+    {
+      "name": "profile_names_links",
+      "total": 14,
+      "review": 1,
+      "skip": 13,
+      "required": 1
+    },
+    {
+      "name": "role_screening",
+      "total": 11,
+      "review": 8,
+      "skip": 3,
+      "required": 8
+    },
+    {
+      "name": "free_text_essay",
+      "total": 9,
+      "review": 5,
+      "skip": 4,
+      "required": 5
+    },
+    {
+      "name": "legal_consent",
+      "total": 8,
+      "review": 7,
+      "skip": 1,
+      "required": 7
+    },
+    {
+      "name": "sensitive_self_id",
+      "total": 5,
+      "review": 4,
+      "skip": 1,
+      "required": 1
+    },
+    {
+      "name": "option_mismatch",
+      "total": 4,
+      "review": 4,
+      "skip": 0,
+      "required": 4
+    },
+    {
+      "name": "prior_employment",
+      "total": 4,
+      "review": 4,
+      "skip": 0,
+      "required": 4
+    },
+    {
+      "name": "referral",
+      "total": 2,
+      "review": 0,
+      "skip": 2,
+      "required": 0
+    },
+    {
+      "name": "work_authorization",
+      "total": 1,
+      "review": 1,
+      "skip": 0,
+      "required": 1
+    }
+  ],
+  "by_control_type": [
+    {
+      "name": "select",
+      "total": 21,
+      "review": 19,
+      "skip": 2,
+      "required": 18
+    },
+    {
+      "name": "text",
+      "total": 19,
+      "review": 3,
+      "skip": 16,
+      "required": 2
+    },
+    {
+      "name": "textarea",
+      "total": 16,
+      "review": 6,
+      "skip": 10,
+      "required": 6
+    },
+    {
+      "name": "file",
+      "total": 9,
+      "review": 6,
+      "skip": 3,
+      "required": 6
+    },
+    {
+      "name": "multiselect",
+      "total": 4,
+      "review": 4,
+      "skip": 0,
+      "required": 3
+    },
+    {
+      "name": "radio",
+      "total": 3,
+      "review": 2,
+      "skip": 1,
+      "required": 2
+    },
+    {
+      "name": "checkbox",
+      "total": 2,
+      "review": 1,
+      "skip": 1,
+      "required": 1
+    }
+  ],
+  "controls": [
+    {
+      "form": "greenhouse/asana_8165477.json",
+      "status": "skip",
+      "category": "profile_names_links",
+      "type": "text",
+      "required": false,
+      "label": "Preferred First Name"
+    },
+    {
+      "form": "greenhouse/asana_8165477.json",
+      "status": "review",
+      "category": "documents",
+      "type": "file",
+      "required": true,
+      "label": "Resume/CV"
+    },
+    {
+      "form": "greenhouse/asana_8165477.json",
+      "status": "skip",
+      "category": "documents",
+      "type": "textarea",
+      "required": false,
+      "label": "Resume/CV"
+    },
+    {
+      "form": "greenhouse/asana_8165477.json",
+      "status": "skip",
+      "category": "documents",
+      "type": "file",
+      "required": false,
+      "label": "Cover Letter"
+    },
+    {
+      "form": "greenhouse/asana_8165477.json",
+      "status": "skip",
+      "category": "documents",
+      "type": "textarea",
+      "required": false,
+      "label": "Cover Letter"
+    },
+    {
+      "form": "greenhouse/asana_8165477.json",
+      "status": "skip",
+      "category": "profile_names_links",
+      "type": "text",
+      "required": false,
+      "label": "[Optional] Preferred Full Name (The name that you would like to be referred to a"
+    },
+    {
+      "form": "greenhouse/asana_8165477.json",
+      "status": "skip",
+      "category": "profile_names_links",
+      "type": "text",
+      "required": false,
+      "label": "Personal Website"
+    },
+    {
+      "form": "greenhouse/asana_8165477.json",
+      "status": "review",
+      "category": "sensitive_self_id",
+      "type": "select",
+      "required": false,
+      "label": "[Optional] Pronouns - how should we refer to you in the third person?"
+    },
+    {
+      "form": "greenhouse/asana_8165477.json",
+      "status": "review",
+      "category": "sensitive_self_id",
+      "type": "text",
+      "required": false,
+      "label": "[Optional, if \"other\" is selected above] My pronouns are"
+    },
+    {
+      "form": "greenhouse/asana_8165477.json",
+      "status": "review",
+      "category": "prior_employment",
+      "type": "select",
+      "required": true,
+      "label": "Have you been employed, or otherwise engaged, by an Asana entity in the past? (P"
+    },
+    {
+      "form": "greenhouse/asana_8165477.json",
+      "status": "review",
+      "category": "sensitive_self_id",
+      "type": "select",
+      "required": true,
+      "label": "Asana is seeking the below information for the exclusive and limited purpose of "
+    },
+    {
+      "form": "greenhouse/asana_8165477.json",
+      "status": "review",
+      "category": "legal_consent",
+      "type": "select",
+      "required": true,
+      "label": "Do you currently work for or have you ever worked for a U.S. government entity, "
+    },
+    {
+      "form": "greenhouse/asana_8165477.json",
+      "status": "review",
+      "category": "legal_consent",
+      "type": "text",
+      "required": true,
+      "label": "If you answered \u201cYes,\u201d please list the U.S. government entity you worked for. If"
+    },
+    {
+      "form": "greenhouse/asana_8165477.json",
+      "status": "review",
+      "category": "legal_consent",
+      "type": "select",
+      "required": true,
+      "label": "By agreeing here: (1) I certify that the information I provided to Asana in conn"
+    },
+    {
+      "form": "greenhouse/asana_8165477.json",
+      "status": "review",
+      "category": "legal_consent",
+      "type": "checkbox",
+      "required": true,
+      "label": "Consent to processing of voluntary demographic data"
+    },
+    {
+      "form": "greenhouse/d2l_7696196.json",
+      "status": "skip",
+      "category": "profile_names_links",
+      "type": "text",
+      "required": false,
+      "label": "Preferred First Name"
+    },
+    {
+      "form": "greenhouse/d2l_7696196.json",
+      "status": "review",
+      "category": "documents",
+      "type": "file",
+      "required": true,
+      "label": "Resume/CV"
+    },
+    {
+      "form": "greenhouse/d2l_7696196.json",
+      "status": "skip",
+      "category": "documents",
+      "type": "textarea",
+      "required": false,
+      "label": "Resume/CV"
+    },
+    {
+      "form": "greenhouse/d2l_7696196.json",
+      "status": "skip",
+      "category": "documents",
+      "type": "file",
+      "required": false,
+      "label": "Cover Letter"
+    },
+    {
+      "form": "greenhouse/d2l_7696196.json",
+      "status": "skip",
+      "category": "documents",
+      "type": "textarea",
+      "required": false,
+      "label": "Cover Letter"
+    },
+    {
+      "form": "greenhouse/d2l_7696196.json",
+      "status": "review",
+      "category": "option_mismatch",
+      "type": "multiselect",
+      "required": true,
+      "label": "Bilingualism in English and Canadian French is required. Please indicate your le"
+    },
+    {
+      "form": "greenhouse/d2l_7696196.json",
+      "status": "review",
+      "category": "role_screening",
+      "type": "select",
+      "required": true,
+      "label": "Are you available to work evenings and weekends?"
+    },
+    {
+      "form": "greenhouse/d2l_7696196.json",
+      "status": "review",
+      "category": "free_text_essay",
+      "type": "textarea",
+      "required": true,
+      "label": "Please rate your level of experience and knowledge in SQL on a scale of 1 to 5, "
+    },
+    {
+      "form": "greenhouse/d2l_7696196.json",
+      "status": "skip",
+      "category": "free_text_essay",
+      "type": "textarea",
+      "required": false,
+      "label": "What is the main factor that influenced your decision to apply to D2L? (Please d"
+    },
+    {
+      "form": "greenhouse/d2l_7696196.json",
+      "status": "skip",
+      "category": "free_text_essay",
+      "type": "textarea",
+      "required": false,
+      "label": "What would your co-workers say is the best thing about having you as a colleague"
+    },
+    {
+      "form": "greenhouse/d2l_7696196.json",
+      "status": "skip",
+      "category": "referral",
+      "type": "text",
+      "required": false,
+      "label": "If someone from D2L referred you to this role, please help us thank them by list"
+    },
+    {
+      "form": "greenhouse/d2l_7696196.json",
+      "status": "review",
+      "category": "prior_employment",
+      "type": "select",
+      "required": true,
+      "label": "Have you previously worked for D2L in any capacity? If yes, please select the mo"
+    },
+    {
+      "form": "greenhouse/d2l_7696196.json",
+      "status": "review",
+      "category": "legal_consent",
+      "type": "select",
+      "required": true,
+      "label": "Have you read and agree to the below Disclaimer and Consent?"
+    },
+    {
+      "form": "greenhouse/gitlab_8556658002.json",
+      "status": "review",
+      "category": "documents",
+      "type": "file",
+      "required": true,
+      "label": "Resume/CV"
+    },
+    {
+      "form": "greenhouse/gitlab_8556658002.json",
+      "status": "skip",
+      "category": "documents",
+      "type": "textarea",
+      "required": false,
+      "label": "Resume/CV"
+    },
+    {
+      "form": "greenhouse/gitlab_8556658002.json",
+      "status": "skip",
+      "category": "documents",
+      "type": "file",
+      "required": false,
+      "label": "Cover Letter"
+    },
+    {
+      "form": "greenhouse/gitlab_8556658002.json",
+      "status": "skip",
+      "category": "documents",
+      "type": "textarea",
+      "required": false,
+      "label": "Cover Letter"
+    },
+    {
+      "form": "greenhouse/gitlab_8556658002.json",
+      "status": "skip",
+      "category": "profile_names_links",
+      "type": "text",
+      "required": false,
+      "label": "What's the name you'd prefer us to use throughout the interview process?"
+    },
+    {
+      "form": "greenhouse/gitlab_8556658002.json",
+      "status": "review",
+      "category": "role_screening",
+      "type": "select",
+      "required": true,
+      "label": "Are you currently located in Bangalore?"
+    },
+    {
+      "form": "greenhouse/gitlab_8556658002.json",
+      "status": "review",
+      "category": "role_screening",
+      "type": "select",
+      "required": true,
+      "label": "Do you have strong proficiency in at least one modern scripting language (Python"
+    },
+    {
+      "form": "greenhouse/gitlab_8556658002.json",
+      "status": "review",
+      "category": "role_screening",
+      "type": "select",
+      "required": true,
+      "label": "Do you have practical fluency across the LLM ecosystem? hands-on experience with"
+    },
+    {
+      "form": "greenhouse/gitlab_8556658002.json",
+      "status": "review",
+      "category": "legal_consent",
+      "type": "select",
+      "required": true,
+      "label": "Are you subject to any employment agreements and/or post-employment restrictions"
+    },
+    {
+      "form": "greenhouse/gitlab_8556658002.json",
+      "status": "skip",
+      "category": "sensitive_self_id",
+      "type": "text",
+      "required": false,
+      "label": "It is important to us to create an accessible and inclusive interview experience"
+    },
+    {
+      "form": "greenhouse/gitlab_8556658002.json",
+      "status": "review",
+      "category": "work_authorization",
+      "type": "select",
+      "required": true,
+      "label": "Will you now or in the future require sponsorship for a visa to remain in your c"
+    },
+    {
+      "form": "greenhouse/gitlab_8556658002.json",
+      "status": "review",
+      "category": "prior_employment",
+      "type": "select",
+      "required": true,
+      "label": "Have you previously worked at or consulted for GitLab?"
+    },
+    {
+      "form": "ats/lever_apply.html",
+      "status": "skip",
+      "category": "role_screening",
+      "type": "select",
+      "required": false,
+      "label": "Are you interested in working out of any of the following office locations? Our "
+    },
+    {
+      "form": "ats/lever_apply.html",
+      "status": "review",
+      "category": "documents",
+      "type": "file",
+      "required": true,
+      "label": "Resume/CV"
+    },
+    {
+      "form": "ats/lever_apply.html",
+      "status": "review",
+      "category": "sensitive_self_id",
+      "type": "multiselect",
+      "required": false,
+      "label": "Pronouns"
+    },
+    {
+      "form": "ats/lever_apply.html",
+      "status": "skip",
+      "category": "profile_names_links",
+      "type": "text",
+      "required": false,
+      "label": "GitHub URL"
+    },
+    {
+      "form": "ats/lever_apply.html",
+      "status": "skip",
+      "category": "profile_names_links",
+      "type": "text",
+      "required": false,
+      "label": "Portfolio URL"
+    },
+    {
+      "form": "ats/lever_apply.html",
+      "status": "skip",
+      "category": "profile_names_links",
+      "type": "text",
+      "required": false,
+      "label": "Other website"
+    },
+    {
+      "form": "ats/lever_apply.html",
+      "status": "skip",
+      "category": "legal_consent",
+      "type": "checkbox",
+      "required": false,
+      "label": "consent[marketing]"
+    },
+    {
+      "form": "ats/lever_apply.html",
+      "status": "review",
+      "category": "prior_employment",
+      "type": "multiselect",
+      "required": true,
+      "label": "Have you ever been previously employed by Northwind?"
+    },
+    {
+      "form": "ats/lever_apply.html",
+      "status": "review",
+      "category": "option_mismatch",
+      "type": "radio",
+      "required": true,
+      "label": "This role requires you to be based in either London or Stockholm. Are you open t"
+    },
+    {
+      "form": "ats/lever_apply.html",
+      "status": "skip",
+      "category": "role_screening",
+      "type": "radio",
+      "required": false,
+      "label": "How many years of full-time, professional android engineering experience do you "
+    },
+    {
+      "form": "ats/ashby_form_advisor.json",
+      "status": "review",
+      "category": "documents",
+      "type": "file",
+      "required": true,
+      "label": "Resume"
+    },
+    {
+      "form": "ats/ashby_form_advisor.json",
+      "status": "skip",
+      "category": "free_text_essay",
+      "type": "textarea",
+      "required": false,
+      "label": "Additional information"
+    },
+    {
+      "form": "ats/ashby_form_advisor.json",
+      "status": "skip",
+      "category": "profile_names_links",
+      "type": "text",
+      "required": false,
+      "label": "Twitter"
+    },
+    {
+      "form": "ats/ashby_form_advisor.json",
+      "status": "skip",
+      "category": "profile_names_links",
+      "type": "text",
+      "required": false,
+      "label": "GitHub"
+    },
+    {
+      "form": "ats/ashby_form_advisor.json",
+      "status": "skip",
+      "category": "profile_names_links",
+      "type": "text",
+      "required": false,
+      "label": "Portfolio"
+    },
+    {
+      "form": "ats/ashby_form_advisor.json",
+      "status": "skip",
+      "category": "profile_names_links",
+      "type": "text",
+      "required": false,
+      "label": "Other"
+    },
+    {
+      "form": "ats/ashby_form_advisor.json",
+      "status": "review",
+      "category": "role_screening",
+      "type": "select",
+      "required": true,
+      "label": "Do you hold a CIM or CFA designation or expect to receive this within the next 8"
+    },
+    {
+      "form": "ats/ashby_form_advisor.json",
+      "status": "review",
+      "category": "role_screening",
+      "type": "multiselect",
+      "required": true,
+      "label": "Do you hold a Pl.Fin and a CFP designation?"
+    },
+    {
+      "form": "ats/ashby_form_advisor.json",
+      "status": "skip",
+      "category": "free_text_essay",
+      "type": "textarea",
+      "required": false,
+      "label": "If you have any additional designations, please share them below."
+    },
+    {
+      "form": "ats/ashby_form_advisor.json",
+      "status": "review",
+      "category": "role_screening",
+      "type": "select",
+      "required": true,
+      "label": "Which of the following best describes your current registration status?"
+    },
+    {
+      "form": "ats/ashby_form_advisor.json",
+      "status": "review",
+      "category": "role_screening",
+      "type": "select",
+      "required": true,
+      "label": "Do you have 5+ years of experience in wealth management or financial advisory ro"
+    },
+    {
+      "form": "ats/ashby_form_advisor.json",
+      "status": "review",
+      "category": "free_text_essay",
+      "type": "textarea",
+      "required": true,
+      "label": "What does delivering exceptional client service mean to you?"
+    },
+    {
+      "form": "ats/ashby_form_advisor.json",
+      "status": "review",
+      "category": "option_mismatch",
+      "type": "select",
+      "required": true,
+      "label": "Are you fluent to a professional level in BOTH French AND English?"
+    },
+    {
+      "form": "ats/ashby_form_advisor.json",
+      "status": "review",
+      "category": "legal_consent",
+      "type": "select",
+      "required": true,
+      "label": "Interview Recording Consent"
+    },
+    {
+      "form": "ats/ashby_form_advisor.json",
+      "status": "skip",
+      "category": "role_screening",
+      "type": "select",
+      "required": false,
+      "label": "Please verify your CIRO registration status"
+    },
+    {
+      "form": "ats/ashby_form_engineer.json",
+      "status": "review",
+      "category": "documents",
+      "type": "file",
+      "required": true,
+      "label": "Resume"
+    },
+    {
+      "form": "ats/ashby_form_engineer.json",
+      "status": "review",
+      "category": "documents",
+      "type": "textarea",
+      "required": true,
+      "label": "Cover letter"
+    },
+    {
+      "form": "ats/ashby_form_engineer.json",
+      "status": "review",
+      "category": "profile_names_links",
+      "type": "text",
+      "required": true,
+      "label": "Github"
+    },
+    {
+      "form": "ats/ashby_form_engineer.json",
+      "status": "skip",
+      "category": "profile_names_links",
+      "type": "text",
+      "required": false,
+      "label": "X"
+    },
+    {
+      "form": "ats/ashby_form_engineer.json",
+      "status": "review",
+      "category": "option_mismatch",
+      "type": "radio",
+      "required": true,
+      "label": "Are you based in a EU or equivalent timezone?"
+    },
+    {
+      "form": "ats/ashby_form_engineer.json",
+      "status": "review",
+      "category": "free_text_essay",
+      "type": "textarea",
+      "required": true,
+      "label": "What would you want to work on? Tell us about the features you would want to imp"
+    },
+    {
+      "form": "ats/ashby_form_engineer.json",
+      "status": "review",
+      "category": "free_text_essay",
+      "type": "textarea",
+      "required": true,
+      "label": "Tell us of a time you had to put your PM hat on to solve a complex product probl"
+    },
+    {
+      "form": "ats/ashby_form_engineer.json",
+      "status": "review",
+      "category": "free_text_essay",
+      "type": "textarea",
+      "required": true,
+      "label": "What are you extremely good at? What could you teach the team?"
+    },
+    {
+      "form": "ats/ashby_form_engineer.json",
+      "status": "skip",
+      "category": "referral",
+      "type": "text",
+      "required": false,
+      "label": "Has someone at Northwind referred you for this role? If so, please include their"
+    }
+  ]
+}

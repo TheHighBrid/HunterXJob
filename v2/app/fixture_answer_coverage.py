@@ -99,31 +99,39 @@ def _summarize(name: str, platform: str, controls, vault) -> FormSummary:
     )
 
 
-def collect() -> list[FormSummary]:
-    vault = _seed_vault(_db())
-    greenhouse = [
+def fixture_forms() -> list[tuple[str, str, list]]:
+    """(name, platform, controls) for every sanitized fixture form, parsed offline."""
+    forms: list[tuple[str, str, list]] = []
+    for rel, ref in (
         ("greenhouse/asana_8165477.json", GreenhouseJobRef("asana", "8165477")),
         ("greenhouse/d2l_7696196.json", GreenhouseJobRef("d2l", "7696196")),
         ("greenhouse/gitlab_8556658002.json", GreenhouseJobRef("gitlab", "8556658002")),
-    ]
-    rows: list[FormSummary] = []
-    for rel, ref in greenhouse:
+    ):
         payload = json.loads((FIXTURES / rel).read_text(encoding="utf-8"))
-        form = parse_greenhouse_payload(payload, ref)
-        rows.append(_summarize(rel, "greenhouse", form.controls, vault))
+        forms.append((rel, "greenhouse", parse_greenhouse_payload(payload, ref).controls))
 
     lever_html = (FIXTURES / "ats" / "lever_apply.html").read_text(encoding="utf-8")
     lever = parse_lever_apply_page(lever_html, LeverJobRef("northwind", "ed663b5f-1b13-5fb7-853b-e4cdf805c6dd"), job_location="London")
-    rows.append(_summarize("ats/lever_apply.html", "lever", lever.controls, vault))
+    forms.append(("ats/lever_apply.html", "lever", lever.controls))
 
-    for name, ref, location in (
-        ("ashby_form_advisor.json", AshbyJobRef("northwind", "9b99caed-e385-574f-94f7-4be75f67782d"), "Toronto, Ontario"),
-        ("ashby_form_engineer.json", AshbyJobRef("northwind", "831c138d-1ab7-5afa-b938-dd5da8882214"), "Toronto, Ontario"),
+    for name, ref in (
+        ("ashby_form_advisor.json", AshbyJobRef("northwind", "9b99caed-e385-574f-94f7-4be75f67782d")),
+        ("ashby_form_engineer.json", AshbyJobRef("northwind", "831c138d-1ab7-5afa-b938-dd5da8882214")),
     ):
         payload = json.loads((FIXTURES / "ats" / name).read_text(encoding="utf-8"))
-        form = parse_ashby_payload(payload["data"], ref, job_location=location)
-        rows.append(_summarize(f"ats/{name}", "ashby", form.controls, vault))
-    return rows
+        form = parse_ashby_payload(payload["data"], ref, job_location="Toronto, Ontario")
+        forms.append((f"ats/{name}", "ashby", form.controls))
+    return forms
+
+
+def seeded_vault():
+    """Vault from the example profile plus the explicit policy answers above."""
+    return _seed_vault(_db())
+
+
+def collect() -> list[FormSummary]:
+    vault = seeded_vault()
+    return [_summarize(name, platform, controls, vault) for name, platform, controls in fixture_forms()]
 
 
 def totals(rows: list[FormSummary]) -> dict[str, int | float]:
