@@ -45,6 +45,7 @@ certification setup and the resumable certification flow from PRs #21 to #25
 | Email / generic | `dry_run` | Same safety gates |
 | Truthful materials | Ready | Verified profile, guarded résumé and cover letter, approval workflow. For finance-domain postings, roles at financial institutions lead the experience list (PR #35); other postings stay reverse-chronological |
 | Answer matching on real forms | Landed (PRs #36 and #40) | Classifiers for common screening questions (start date, employment status, background-check consent, languages, education, Canadian citizenship, Ottawa commute) on Greenhouse, Lever and Ashby forms. The vault fills `language_proficiency` from the verified profile and `start_date` from a stored availability date; background-check consent needs an explicit answer. Their effect on real-form coverage is not measured yet |
+| Answer-matching coverage on test forms | Measured offline (PR #42) | `v2/scripts/fixture_answer_coverage.py` plans the 6 sanitized fixture forms in the repo (3 Greenhouse, 1 Lever, 2 Ashby) with the made-up example profile plus example policy answers. 132 controls: 58 filled, 41 sent to review, 33 skipped, so 43.9% planned. Saved in `v2/reports/fixture_answer_coverage.json`. This uses test forms and example answers, so it is not comparable with the 56% from the real-profile batch |
 | SmartRecruiters / Workday / iCIMS / Taleo | `detect_only` | Platform detection only |
 | Government portals | Unsupported | Flag exists, adapter not implemented |
 | Continuous run (v0.3) | Ready, off by default | Discover → score → prepare → dry-run on an interval inside the API process. Kill switch, pause flag, quiet hours, per-cycle and daily caps; no overlap; every cycle in the `scheduler_cycles` ledger; `GET /api/scheduler/status` |
@@ -78,7 +79,7 @@ certification setup and the resumable certification flow from PRs #21 to #25
 
 ## Next, after the recovery gates (each needs the owner to open it)
 
-1. Raise the share of fields planned automatically on real forms (about 56% in the first batch); the answer-matching classifiers landed in PR #36. Re-run the batch offline with `--recheck` to measure the change.
+1. Raise the share of fields planned automatically on real forms. The real-profile batch planned about 56% before the classifiers in PRs #36 and #40, and that has not been re-measured on real forms. The offline fixture report (43.9% on test forms, PR #42) is a regression baseline, not a real-form number. Re-run the batch offline with `--recheck` to measure the real-form change.
 2. Supervised real submissions with owner approval.
 3. Session continuity after a manual CAPTCHA or MFA.
 4. Inbox-derived confirmation matching.
