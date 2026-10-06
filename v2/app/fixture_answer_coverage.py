@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Offline answer-matching coverage across sanitized ATS fixtures.
 
 Measures how many form controls ``plan_fill`` marks fill / review / skip when
@@ -148,15 +147,14 @@ def report() -> dict:
     return {"forms": [asdict(row) | {"planned_pct": row.planned_pct} for row in rows], "totals": totals(rows)}
 
 
-def main() -> int:
+def main(out: Path | None = None) -> int:
     data = report()
     print(json.dumps(data, indent=2))
-    out = ROOT / "reports" / "fixture_answer_coverage.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-    print(f"wrote {out}", file=sys.stderr)
+    target = out or ROOT / "reports" / "fixture_answer_coverage.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    print(f"wrote {target}", file=sys.stderr)
     return 0
-
 
 
 if __name__ == "__main__":
