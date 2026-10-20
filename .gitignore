@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets / local config
+.env
+*.env.local
+*my_profile.yaml
+*candidate_profile.yaml
+
+# Databases
+*.sqlite3
+*.db
+backend/data/*.db
+
+# v2 local runtime state (created by ./hunterx doctor/start)
+v2/data/
+v2/logs/
+v2/run/
+# Gate 1 reports and Playwright traces (uploaded as CI artifacts, never committed)
+v2/gate-artifacts/
+
+# Node / Expo
+node_modules/
+.expo/
+.expo-shared/
+dist/
+web-build/
+
+# Android build artifacts (keep the final signed/debug APK we ship separately)
+mobile/android/.gradle/
+mobile/android/app/build/
+mobile/android/build/
+mobile/android/local.properties
+*.hprof
+
+# OS
+.DS_Store

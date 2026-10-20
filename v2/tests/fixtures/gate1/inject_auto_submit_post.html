@@ -1,0 +1,9 @@
+<script>
+  window.addEventListener('load', () => {
+    const form = document.getElementById('application');
+    form.noValidate = true;
+    form.method = 'post';
+    form.action = '/embed/job_app/submit';
+    form.requestSubmit();
+  });
+</script>

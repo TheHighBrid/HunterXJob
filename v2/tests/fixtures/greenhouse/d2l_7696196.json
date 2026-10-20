@@ -1,0 +1,526 @@
+{
+ "id": 7696196,
+ "title": "Bilingual Product Support Analyst (Canadian French)",
+ "absolute_url": "https://www.d2l.com/careers/jobs/?job_id=7696196&gh_jid=7696196",
+ "location": {
+  "name": "Kitchener Ontario,  Toronto, Ontario, Ontario (Remote)"
+ },
+ "company_name": "D2L",
+ "updated_at": "2026-07-21T16:04:41-04:00",
+ "application_deadline": null,
+ "questions": [
+  {
+   "description": null,
+   "label": "First Name",
+   "required": true,
+   "fields": [
+    {
+     "name": "first_name",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Last Name",
+   "required": true,
+   "fields": [
+    {
+     "name": "last_name",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Preferred First Name",
+   "required": false,
+   "fields": [
+    {
+     "name": "preferred_name",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Email",
+   "required": true,
+   "fields": [
+    {
+     "name": "email",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Phone",
+   "required": true,
+   "fields": [
+    {
+     "name": "phone",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Resume/CV",
+   "required": true,
+   "fields": [
+    {
+     "name": "resume",
+     "type": "input_file",
+     "values": []
+    },
+    {
+     "name": "resume_text",
+     "type": "textarea",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Cover Letter",
+   "required": false,
+   "fields": [
+    {
+     "name": "cover_letter",
+     "type": "input_file",
+     "values": []
+    },
+    {
+     "name": "cover_letter_text",
+     "type": "textarea",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": "<p><strong>Please note bilingualism is required for this role. If you do not meet this requirement, you are not eligible for this role.&nbsp;</strong></p>\n<p><strong>If you are unsure of your level, please reference this guide:&nbsp;</strong></p>\n<p><strong><!--StartFragment--><a href=\"https://www.coe.int/en/web/common-european-framework-reference-languages/table-1-cefr-3.3-common-reference-levels-global-scale\" target=\"_blank\" rel=\"noopener\">Common Reference Levels for Languages</a><!--EndFragment--></strong></p>",
+   "label": "Bilingualism in English and Canadian French is required. Please indicate your level of language skill.",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_64283526[]",
+     "type": "multi_value_multi_select",
+     "values": [
+      {
+       "label": "A1: No proficiency",
+       "value": 645172503
+      },
+      {
+       "label": "A2: Elementary proficiency",
+       "value": 645172504
+      },
+      {
+       "label": "B1: Limited working proficiency",
+       "value": 645172505
+      },
+      {
+       "label": "B2: Professional working proficiency",
+       "value": 645172506
+      },
+      {
+       "label": "C1: Full professional proficiency",
+       "value": 645172507
+      },
+      {
+       "label": "C2: Bilingual/Native speaker",
+       "value": 645172508
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Are you legally eligible to work in Canada where this position is located?",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_64283527",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "Yes",
+       "value": 1
+      },
+      {
+       "label": "No",
+       "value": 0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Are you willing to relocate to the location for which this role is posted?",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_64283528",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "Yes",
+       "value": 645172509
+      },
+      {
+       "label": "No",
+       "value": 645172510
+      },
+      {
+       "label": "I am already living near this location",
+       "value": 645172511
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": "<p>Please note this role requires participation in a shift rotation based on Eastern Standard Time which includes evenings and weekends.&nbsp;</p>",
+   "label": "Are you available to work evenings and weekends?",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_64283529",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "Yes",
+       "value": 1
+      },
+      {
+       "label": "No",
+       "value": 0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Please indicate your desired salary range",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_64283530",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "40-50K",
+       "value": 645172512
+      },
+      {
+       "label": "50-60K",
+       "value": 645172513
+      },
+      {
+       "label": "60-70K",
+       "value": 645172514
+      },
+      {
+       "label": "70K+",
+       "value": 645172515
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Please rate your level of experience and knowledge in SQL on a scale of 1 to 5, with 1 being basic knowledge and 5 being advanced expertise. Additionally, please briefly describe your experience using SQL in a professional or academic setting.",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_64283531",
+     "type": "textarea",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "What is the main factor that influenced your decision to apply to D2L? (Please don't use ChatGPT, we want to know why YOU applied)",
+   "required": false,
+   "fields": [
+    {
+     "name": "question_64283532",
+     "type": "textarea",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "What would your co-workers say is the best thing about having you as a colleague?",
+   "required": false,
+   "fields": [
+    {
+     "name": "question_64283533",
+     "type": "textarea",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "LinkedIn Profile",
+   "required": false,
+   "fields": [
+    {
+     "name": "question_64283534",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Which of the sources below best describe how you heard about D2L?",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_64283535",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "Job Board (Indeed, Eluta, Waterloo Tech Jobs etc)",
+       "value": 645172516
+      },
+      {
+       "label": "On Campus Events (Information Sessions, Career Fairs etc)",
+       "value": 645172517
+      },
+      {
+       "label": "Media (Articles, Top Employers Lists etc)",
+       "value": 645172518
+      },
+      {
+       "label": "Social Media (LinkedIn, Twitter, Facebook, Glassdoor etc)",
+       "value": 645172519
+      },
+      {
+       "label": "Non-employee referral (Word of Mouth, Community Events etc)",
+       "value": 645172520
+      },
+      {
+       "label": "Employee Referrral",
+       "value": 645172521
+      },
+      {
+       "label": "Other",
+       "value": 645172522
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": "<p>Leave field blank if not applicable</p>",
+   "label": "If someone from D2L referred you to this role, please help us thank them by listing their name here!",
+   "required": false,
+   "fields": [
+    {
+     "name": "question_64283537",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": "<p style=\"text-align: left;\"><em><br>This question is asked for administrative and record‑keeping purposes. Your response does not automatically qualify or disqualify you from consideration.</em><br><em>All applications are evaluated based on overall qualifications and alignment with the role.</em><!--EndFragment--></p>",
+   "label": "Have you previously worked for D2L in any capacity?\n\nIf yes, please select the most recent type that applies.",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_65529047",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "No, I have not worked for D2L in any capacity",
+       "value": 726836889
+      },
+      {
+       "label": "I currently work for D2L (please apply through our internal job board in Greenhouse)",
+       "value": 726836890
+      },
+      {
+       "label": "Yes, I was a full‑time employee",
+       "value": 726836891
+      },
+      {
+       "label": "Yes, I was a part‑time employee",
+       "value": 726836892
+      },
+      {
+       "label": "Yes, I was a co‑op or intern",
+       "value": 726836893
+      },
+      {
+       "label": "Yes, I worked through an Employer of Record (EoR) arrangement",
+       "value": 726836894
+      },
+      {
+       "label": "Yes, I was an independent contractor or consultant",
+       "value": 726836895
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Please select your time zone",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_64283539",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "GMT+0 :Greenwich Mean Time (GMT)",
+       "value": 645172524
+      },
+      {
+       "label": "GMT+1 :Central European Time (CET)",
+       "value": 645172525
+      },
+      {
+       "label": "GMT+2 :Eastern European Time (EET)",
+       "value": 645172526
+      },
+      {
+       "label": "GMT+3 :Moscow Time (MSK)",
+       "value": 645172527
+      },
+      {
+       "label": "GMT+4 :Armenia Time (AMT)",
+       "value": 645172528
+      },
+      {
+       "label": "GMT+5 :Pakistan Standard Time (PKT)",
+       "value": 645172529
+      },
+      {
+       "label": "GMT+6 :Omsk Time (OMSK)",
+       "value": 645172530
+      },
+      {
+       "label": "GMT+7 :Kranoyask Time (KRAT)",
+       "value": 645172531
+      },
+      {
+       "label": "GMT+8 :China Standard Time (CST)",
+       "value": 645172532
+      },
+      {
+       "label": "GMT+9 :Japan Standard Time (JST)",
+       "value": 645172533
+      },
+      {
+       "label": "GMT+10 :Eastern Australia Standard Time (AEST)",
+       "value": 645172534
+      },
+      {
+       "label": "GMT+11 :Sakhalin Time (SAKT)",
+       "value": 645172535
+      },
+      {
+       "label": "GMT+12 :New Zealand Standard Time (NZST)",
+       "value": 645172536
+      },
+      {
+       "label": "GMT-1 :West Africa Time (WAT)",
+       "value": 645172537
+      },
+      {
+       "label": "GMT-2 :Azores Time (AT)",
+       "value": 645172538
+      },
+      {
+       "label": "GMT-3 :Argentina Time (ART)",
+       "value": 645172539
+      },
+      {
+       "label": "GMT-4 :Atlantic Standard Time (AST)",
+       "value": 645172540
+      },
+      {
+       "label": "GMT-5 :Eastern Standard Time (EST)",
+       "value": 645172541
+      },
+      {
+       "label": "GMT-6 :Central Standard Time (CST)",
+       "value": 645172542
+      },
+      {
+       "label": "GMT-7 :Mountain Standard Time (MST)",
+       "value": 645172543
+      },
+      {
+       "label": "GMT-8 :Pacific Standard Time (PST)",
+       "value": 645172544
+      },
+      {
+       "label": "GMT-9 :Alaska Standard Time (AKST)",
+       "value": 645172545
+      },
+      {
+       "label": "GMT-10 :Hawaii Standard Time (HST)",
+       "value": 645172546
+      },
+      {
+       "label": "GMT-11 :Nome Time (NT)",
+       "value": 645172547
+      },
+      {
+       "label": "GMT-12 :International Date Line West (IDLW)",
+       "value": 645172548
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Have you read and agree to the below Disclaimer and Consent?",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_64283538",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "Yes",
+       "value": 645172523
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "location_questions": [],
+ "compliance": null,
+ "demographic_questions": null,
+ "data_compliance": [
+  {
+   "type": "gdpr",
+   "requires_consent": false,
+   "requires_processing_consent": false,
+   "requires_retention_consent": false,
+   "retention_period": null,
+   "demographic_data_consent_applies": false
+  }
+ ],
+ "content": "[job description removed from fixture]"
+}

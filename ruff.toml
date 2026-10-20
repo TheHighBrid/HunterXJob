@@ -1,0 +1,35 @@
+# Ruff configuration for the Python components (backend/ and v2/).
+# Both components use a top-level package called `app`, so `src` lists both
+# roots and `app` is first-party everywhere. Codacy reads this file when
+# "Use configuration file" is enabled for Ruff on the Code patterns page.
+target-version = "py311"
+line-length = 120
+src = ["backend", "v2"]
+extend-exclude = ["mobile", "**/.venv", "**/node_modules"]
+
+[lint]
+select = ["E", "W", "F", "I", "B", "UP", "S", "BLE", "SIM", "DTZ", "FURB", "RUF", "C4"]
+# Long lines are a formatting concern, not a correctness one.
+# UP042 (StrEnum) changes str() output of existing enums, so it is not auto-applied.
+ignore = ["E501", "UP042"]
+
+[lint.per-file-ignores]
+# pytest relies on bare `assert`; only test code is exempt from S101.
+"**/tests/**" = ["S101"]
+
+[lint.isort]
+known-first-party = ["app"]
+
+[lint.flake8-bugbear]
+# FastAPI's dependency-injection markers are evaluated once at import time by
+# design and are safe as argument defaults (B008 targets mutable/costly calls).
+extend-immutable-calls = [
+  "fastapi.Body",
+  "fastapi.Depends",
+  "fastapi.File",
+  "fastapi.Form",
+  "fastapi.Header",
+  "fastapi.Path",
+  "fastapi.Query",
+  "fastapi.Security",
+]

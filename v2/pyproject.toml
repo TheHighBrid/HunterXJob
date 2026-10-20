@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hunterxjob-v2"
+dynamic = ["version"]
+description = "Android-first local autonomous job hunting system"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi==0.119.1",
+  "uvicorn==0.30.6",
+  "sqlalchemy==2.0.52",
+  "pydantic==2.12.5",
+  "pydantic-settings==2.14.2",
+  "httpx==0.27.2",
+  "python-dotenv==1.0.1",
+  "jinja2==3.1.4",
+  "python-multipart==0.0.9",
+  "tzdata==2026.4",
+  "pyyaml==6.0.3",
+  "pypdf==6.19.0",
+  "reportlab==5.0.1"
+]
+
+[project.optional-dependencies]
+browser = ["playwright==1.47.0"]
+test = ["pytest==8.3.3", "psutil==7.2.2"]
+
+[tool.setuptools.dynamic]
+version = { attr = "app.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app", "app.*"]
+exclude = ["data*", "logs*", "run*", "tests*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+# Gate 1 browser proofs need Playwright Chromium; the gate1 CI job runs them with `-m gate1`.
+addopts = "-m 'not gate1'"
+markers = ["gate1: Gate 1 end-to-end proofs with a real Playwright-owned Chromium (docs/RECOVERY_CONTRACT.md)"]

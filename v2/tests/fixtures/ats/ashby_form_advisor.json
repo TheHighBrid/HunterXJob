@@ -1,0 +1,482 @@
+{
+ "data": {
+  "jobPosting": {
+   "id": "9b99caed-e385-574f-94f7-4be75f67782d",
+   "title": "(Bilingual) Senior Advisor / Lead Advisor, Wealth Management Service (Quebec Clients)",
+   "isListed": true,
+   "surveyForms": [
+    {
+     "id": "5d180205-5d75-5d1f-8b48-548208c77c6e",
+     "sections": [
+      {
+       "title": "U.S. Equal Employment Opportunity Information",
+       "fieldEntries": [
+        {
+         "id": "6c7e4e0f-da55-51d0-9b83-746823a4956b",
+         "isRequired": false,
+         "descriptionHtml": null,
+         "field": {
+          "id": "34cc11bb-cd3a-5edf-974b-e6fae9aa8ec1",
+          "path": "_systemfield_eeoc_gender",
+          "title": "Gender",
+          "type": "ValueSelect",
+          "isDeactivated": false,
+          "selectableValues": [
+           {
+            "label": "Female",
+            "value": "Female"
+           },
+           {
+            "label": "Male",
+            "value": "Male"
+           },
+           {
+            "label": "Decline to self-identify",
+            "value": "Decline to self-identify"
+           }
+          ]
+         }
+        },
+        {
+         "id": "5a7f704b-b160-5fa4-b1a9-0a831a78821d",
+         "isRequired": false,
+         "descriptionHtml": null,
+         "field": {
+          "id": "0545ffeb-ef85-56c4-87ba-20862038b802",
+          "path": "_systemfield_eeoc_veteran_status",
+          "title": "Veteran Status",
+          "type": "ValueSelect",
+          "isDeactivated": false,
+          "selectableValues": [
+           {
+            "label": "I am not a protected veteran",
+            "value": "not"
+           },
+           {
+            "label": "I don't wish to answer",
+            "value": "decline"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "applicationForm": {
+    "id": "0a04e126-ba58-5016-995d-3aecd1345aac",
+    "sections": [
+     {
+      "title": null,
+      "fieldEntries": [
+       {
+        "id": "f325e3ef-e513-5c22-bb94-a7bfafeea12c",
+        "field": {
+         "id": "833cea54-723c-5264-a49b-58ad9291993d",
+         "path": "_systemfield_name",
+         "title": "Name",
+         "type": "String",
+         "isNullable": false,
+         "isDeactivated": false
+        },
+        "isRequired": true,
+        "descriptionHtml": null
+       },
+       {
+        "id": "32a9ea40-6ee5-5c1b-9049-04c0d148f2fc",
+        "field": {
+         "id": "0ab65a9c-5a34-5521-98fc-77f0e0d0a230",
+         "path": "_systemfield_email",
+         "title": "Email",
+         "type": "Email",
+         "isNullable": false,
+         "isDeactivated": false
+        },
+        "isRequired": true,
+        "descriptionHtml": null
+       },
+       {
+        "id": "dba7c4ba-342e-5cef-92cf-1146d20fd9a8",
+        "field": {
+         "id": "0ff1e201-728d-5e61-818e-1b5901ae9777",
+         "path": "currentCompany",
+         "title": "Current company",
+         "type": "String",
+         "isNullable": false,
+         "isDeactivated": false
+        },
+        "isRequired": false,
+        "descriptionHtml": null
+       },
+       {
+        "id": "3a432015-c370-5eba-abf3-bb7f4640fc3d",
+        "field": {
+         "id": "27b1f3c5-b38f-52a3-be83-f1c4edc9871e",
+         "path": "currentLocation",
+         "title": "Current location",
+         "type": "String",
+         "isNullable": false,
+         "isDeactivated": false
+        },
+        "isRequired": false,
+        "descriptionHtml": null
+       },
+       {
+        "id": "62c717f8-962e-5c2f-b50c-0e176ba66c35",
+        "field": {
+         "id": "9da4df82-1047-5931-a122-d222d54b38ee",
+         "path": "phone",
+         "title": "Phone",
+         "type": "Phone",
+         "isNullable": false,
+         "isDeactivated": false
+        },
+        "isRequired": false,
+        "descriptionHtml": null
+       },
+       {
+        "id": "93a03db3-a877-5f13-8550-43666947ed0c",
+        "field": {
+         "id": "bcde6d62-8b6f-575f-9ccf-94fb6aca26dc",
+         "path": "_systemfield_resume",
+         "title": "Resume",
+         "type": "File",
+         "isNullable": false,
+         "isDeactivated": false
+        },
+        "isRequired": true,
+        "descriptionHtml": null
+       },
+       {
+        "id": "b9af60d7-d16b-5a60-bc7c-6140942ae6b3",
+        "field": {
+         "id": "6348da93-5978-54e2-ac3d-15e4dbcc6e88",
+         "path": "additionalInformation",
+         "title": "Additional information",
+         "type": "LongText",
+         "isNullable": false,
+         "isDeactivated": false
+        },
+        "isRequired": false,
+        "descriptionHtml": null
+       },
+       {
+        "id": "59760bc4-5c41-5004-bcf8-1c95db254444",
+        "field": {
+         "id": "61605efc-8d60-5022-9461-f46722b254d9",
+         "path": "LinkedIn",
+         "title": "LinkedIn",
+         "type": "String",
+         "isNullable": false,
+         "isDeactivated": false
+        },
+        "isRequired": false,
+        "descriptionHtml": null
+       },
+       {
+        "id": "4c32c711-6818-5ad9-94c0-b6898aa92ab0",
+        "field": {
+         "id": "5f825f8c-378a-5de3-8d4d-c3205023a942",
+         "path": "Twitter",
+         "title": "Twitter",
+         "type": "String",
+         "isNullable": false,
+         "isDeactivated": false
+        },
+        "isRequired": false,
+        "descriptionHtml": null
+       },
+       {
+        "id": "761fb6e2-e41a-51a6-bee1-ec3961f7651d",
+        "field": {
+         "id": "6417069e-1489-5bf6-b74f-408e966ec402",
+         "path": "GitHub",
+         "title": "GitHub",
+         "type": "String",
+         "isNullable": false,
+         "isDeactivated": false
+        },
+        "isRequired": false,
+        "descriptionHtml": null
+       },
+       {
+        "id": "70ad7ed9-bbfd-53bb-8211-77ab05d42ca0",
+        "field": {
+         "id": "bb2fca8a-ade7-5bdc-8364-2d6ec6794bc6",
+         "path": "Portfolio",
+         "title": "Portfolio",
+         "type": "String",
+         "isNullable": false,
+         "isDeactivated": false
+        },
+        "isRequired": false,
+        "descriptionHtml": null
+       },
+       {
+        "id": "24182827-3c01-5be0-a3bd-8569f42ceb11",
+        "field": {
+         "id": "bb6b9b18-fc75-5ae9-ba13-c34d1f997744",
+         "path": "Other",
+         "title": "Other",
+         "type": "String",
+         "isNullable": false,
+         "isDeactivated": false
+        },
+        "isRequired": false,
+        "descriptionHtml": null
+       }
+      ]
+     },
+     {
+      "title": "Senior Advisor, Wealth Management",
+      "fieldEntries": [
+       {
+        "id": "188c638d-c2d6-574e-b03a-0d8a74734dc8",
+        "field": {
+         "id": "d8e0027b-8de0-5cc6-ba3e-563ba96ec3db",
+         "path": "66e8251e-d0de-5eb3-b3cf-d340b7375934",
+         "title": "Do you hold a CIM or CFA designation or expect to receive this within the next 8 weeks?*",
+         "type": "ValueSelect",
+         "isNullable": false,
+         "isDeactivated": false,
+         "selectableValues": [
+          {
+           "label": "Yes",
+           "value": "95d37b00-afb3-5a7f-a875-315ff81b7e9e"
+          },
+          {
+           "label": "No",
+           "value": "880d9d03-2c42-51f1-95f2-d11bb2f99558"
+          }
+         ]
+        },
+        "isRequired": true,
+        "descriptionHtml": null
+       },
+       {
+        "id": "c02bd6c6-f6e7-5bff-a954-90eecb87dba1",
+        "field": {
+         "id": "8385678e-9c64-5054-a828-7af5c7ca770b",
+         "path": "9da69a5e-5442-52be-91e5-817c3f72f580",
+         "title": "Do you hold a Pl.Fin and a CFP designation?",
+         "type": "MultiValueSelect",
+         "isNullable": false,
+         "isDeactivated": false,
+         "selectableValues": [
+          {
+           "label": "Yes, I hold both a Pl.Fin and a CFP",
+           "value": "Yes, I hold both a Pl.Fin and a CFP"
+          },
+          {
+           "label": "I hold a Pl.Fin but not a CFP",
+           "value": "I hold a Pl.Fin but not a CFP",
+           "isArchived": false
+          },
+          {
+           "label": "I hold a CFP but not Pl.Fin",
+           "value": "I hold a CFP but not Pl.Fin",
+           "isArchived": false
+          },
+          {
+           "label": "No, I do not hold either",
+           "value": "No, I do not hold either",
+           "isArchived": false
+          }
+         ]
+        },
+        "isRequired": true,
+        "descriptionHtml": null
+       },
+       {
+        "id": "e52fc55f-c524-50d4-965f-fe2120a89032",
+        "field": {
+         "id": "41217132-f688-515b-9c8b-5f3391af214a",
+         "path": "b58aff52-1488-59fb-9caf-2c03a6a1aa17",
+         "title": "If you have any additional designations, please share them below.",
+         "type": "LongText",
+         "isNullable": false,
+         "isDeactivated": false
+        },
+        "isRequired": false,
+        "descriptionHtml": null
+       },
+       {
+        "id": "815de81e-704f-5ccf-978c-9004eb21c14a",
+        "field": {
+         "id": "13786365-58cd-593a-8b73-4baf5048128d",
+         "path": "caa4fb33-4867-5f36-936d-e5b244c24dea",
+         "title": "Which of the following best describes your current registration status?",
+         "type": "ValueSelect",
+         "isNullable": false,
+         "isDeactivated": false,
+         "selectableValues": [
+          {
+           "label": "Currently registered, or immediately eligible for registration as an Associate Portfolio Manager (APM) or as a Portfolio Manager (PM) with CIRO",
+           "value": "Currently registered, or immediately eligible for registration as an Associate Portfolio Manager (APM) or as a Portfolio Manager (PM) with CIRO"
+          },
+          {
+           "label": "Not currently registered or immediately eligible for registration as an APM or PM with CIRO",
+           "value": "Not currently registered or immediately eligible for registration as an APM or PM with CIRO",
+           "isArchived": false
+          }
+         ]
+        },
+        "isRequired": true,
+        "descriptionHtml": null
+       },
+       {
+        "id": "5e0fc5c8-8610-5681-9b1f-fafc5b652d28",
+        "field": {
+         "id": "4660287a-2351-5a4b-ba2d-2aa10e45111f",
+         "path": "f14f9fd5-d497-555c-9145-025906612d9d",
+         "title": "Do you have 5+ years of experience in wealth management or financial advisory roles?",
+         "type": "ValueSelect",
+         "isNullable": false,
+         "isDeactivated": false,
+         "selectableValues": [
+          {
+           "label": "Yes",
+           "value": "d2b12207-15a5-5684-8f29-3219aa59fc6b"
+          },
+          {
+           "label": "No",
+           "value": "a22e5ab4-3120-5611-a6da-5dd65831540c"
+          }
+         ]
+        },
+        "isRequired": true,
+        "descriptionHtml": null
+       },
+       {
+        "id": "ae320f6f-bd31-5603-97d5-b457e83b85cc",
+        "field": {
+         "id": "90178129-b89e-5228-aabb-935c6785b1c5",
+         "path": "560dbe23-9081-5852-bbf5-ac6b882aee41",
+         "title": "What does delivering exceptional client service mean to you?",
+         "type": "LongText",
+         "isNullable": false,
+         "isDeactivated": false
+        },
+        "isRequired": true,
+        "descriptionHtml": null
+       }
+      ]
+     },
+     {
+      "title": "Bilingual",
+      "fieldEntries": [
+       {
+        "id": "1d0b424a-615f-5f00-b2e1-d3f5ca88895e",
+        "field": {
+         "id": "f6f6a9d3-8c84-5ff2-b32c-ed7e1eb5b7ce",
+         "path": "895d9a33-e692-556f-b400-0341eba52948",
+         "title": "Are you fluent to a professional level in BOTH French AND English?",
+         "type": "ValueSelect",
+         "isNullable": false,
+         "isDeactivated": false,
+         "selectableValues": [
+          {
+           "label": "YES, I am fluent in both French and English.",
+           "value": "9817a2ba-e522-59e0-835a-9241abfa36b0"
+          },
+          {
+           "label": "NO, I am not bilingual.",
+           "value": "1d22519f-702b-5113-a866-2fae0b58f45f"
+          }
+         ]
+        },
+        "isRequired": true,
+        "descriptionHtml": null
+       },
+       {
+        "id": "02b8c7db-9ffa-5230-b79d-a8c99599296c",
+        "field": {
+         "id": "60a9b036-2a42-5825-b380-20b9d700b819",
+         "path": "_systemfield_recording_consent",
+         "title": "Interview Recording Consent",
+         "type": "ValueSelect",
+         "isNullable": false,
+         "isDeactivated": false,
+         "selectableValues": [
+          {
+           "label": "Yes, I consent to be recorded",
+           "value": "CanRecord"
+          },
+          {
+           "label": "Opt out of recording",
+           "value": "DoNotRecord"
+          }
+         ]
+        },
+        "isRequired": true,
+        "descriptionHtml": "<p>See the posting for details.</p>"
+       }
+      ]
+     },
+     {
+      "title": null,
+      "fieldEntries": [
+       {
+        "id": "e368272b-6765-5d28-9419-a0f3f2ac104d",
+        "field": {
+         "id": "7e56db08-8981-51fb-b4d0-842d80ebe67e",
+         "path": "ee5c8788-8b47-5f1d-b40f-1ce988e7ad8f",
+         "title": "Are you legally eligible to work in Canada?",
+         "type": "Boolean",
+         "isNullable": false,
+         "isDeactivated": false
+        },
+        "isRequired": true,
+        "descriptionHtml": null
+       },
+       {
+        "id": "e2605ec6-4126-59a6-b833-c9084c009163",
+        "field": {
+         "id": "24fd32d3-de49-5262-929e-0438507dbb8e",
+         "path": "e3ce6ccc-687a-5e0f-af1a-85b760645554",
+         "title": "What is the location where you permanently reside?",
+         "type": "Location",
+         "isNullable": false,
+         "isDeactivated": false
+        },
+        "isRequired": true,
+        "descriptionHtml": null
+       },
+       {
+        "id": "b19d7357-e4ba-5983-a35a-17421a748bb9",
+        "field": {
+         "id": "6d9becc3-44a7-5688-8dea-ac2e4a736822",
+         "path": "ace97fea-875c-53f4-96d3-27b6544967ec",
+         "title": "Please verify your CIRO registration status",
+         "type": "ValueSelect",
+         "isNullable": false,
+         "isDeactivated": false,
+         "selectableValues": [
+          {
+           "label": "I am currently registered with CIRO",
+           "value": "I am currently registered with CIRO",
+           "isArchived": false
+          },
+          {
+           "label": "I am not currently registered with CIRO but have previously been registered",
+           "value": "I am not currently registered with CIRO but have previously been registered",
+           "isArchived": false
+          },
+          {
+           "label": "I have never been registered",
+           "value": "I have never been registered",
+           "isArchived": false
+          }
+         ]
+        },
+        "isRequired": false,
+        "descriptionHtml": null
+       }
+      ]
+     }
+    ]
+   }
+  }
+ }
+}

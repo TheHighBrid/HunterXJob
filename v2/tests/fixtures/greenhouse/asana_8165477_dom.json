@@ -1,0 +1,269 @@
+{
+ "url": "https://job-boards.greenhouse.io/embed/job_app?for=asana&token=8165477",
+ "title": "Job Application for Administrative Business Partner at Asana",
+ "form_count": 1,
+ "captcha": true,
+ "fields": [
+  {
+   "tag": "input",
+   "type": "text",
+   "id": "first_name",
+   "name": "",
+   "role": "",
+   "label": "First Name",
+   "required": true,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "text",
+   "id": "last_name",
+   "name": "",
+   "role": "",
+   "label": "Last Name",
+   "required": true,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "text",
+   "id": "preferred_name",
+   "name": "",
+   "role": "",
+   "label": "Preferred First Name",
+   "required": false,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "text",
+   "id": "email",
+   "name": "",
+   "role": "",
+   "label": "Email",
+   "required": true,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "text",
+   "id": "country",
+   "name": "",
+   "role": "combobox",
+   "label": "Country",
+   "required": true,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "search",
+   "id": "iti-0__search-input",
+   "name": "",
+   "role": "combobox",
+   "label": "Search",
+   "required": false,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "tel",
+   "id": "phone",
+   "name": "",
+   "role": "",
+   "label": "Phone",
+   "required": true,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "text",
+   "id": "candidate-location",
+   "name": "",
+   "role": "combobox",
+   "label": "Location (City)",
+   "required": true,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "file",
+   "id": "resume",
+   "name": "",
+   "role": "",
+   "label": "Attach",
+   "required": false,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "file",
+   "id": "cover_letter",
+   "name": "",
+   "role": "",
+   "label": "Attach",
+   "required": false,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "text",
+   "id": "question_68886291",
+   "name": "",
+   "role": "",
+   "label": "[Optional] Preferred Full Name (The name that you would like to be referred to as. Please input your legal name in the first and last name fields above.)",
+   "required": false,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "text",
+   "id": "question_68886292",
+   "name": "",
+   "role": "",
+   "label": "Current Company",
+   "required": true,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "text",
+   "id": "question_68886293",
+   "name": "",
+   "role": "",
+   "label": "Current Title",
+   "required": true,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "text",
+   "id": "question_68886294",
+   "name": "",
+   "role": "",
+   "label": "LinkedIn Profile",
+   "required": false,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "text",
+   "id": "question_68886295",
+   "name": "",
+   "role": "",
+   "label": "Personal Website",
+   "required": false,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "text",
+   "id": "question_68886296",
+   "name": "",
+   "role": "combobox",
+   "label": "[Optional] Pronouns - how should we refer to you in the third person?",
+   "required": false,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "text",
+   "id": "question_68886297",
+   "name": "",
+   "role": "",
+   "label": "[Optional, if \"other\" is selected above] My pronouns are",
+   "required": false,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "text",
+   "id": "question_68886298",
+   "name": "",
+   "role": "combobox",
+   "label": "Do you now, or will you in the future, require immigration sponsorship for work authorization to work in this location?",
+   "required": true,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "text",
+   "id": "question_68886299",
+   "name": "",
+   "role": "combobox",
+   "label": "Have you been employed, or otherwise engaged, by an Asana entity in the past? (Previous independent contractors, select \"Yes.\")",
+   "required": true,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "text",
+   "id": "question_68886300",
+   "name": "",
+   "role": "combobox",
+   "label": "Asana is seeking the below information for the exclusive and limited purpose of complying with U.S. export control laws given that the position for which you are applying may require access to technology subject to those laws. We will not use the information that you provide for any other purpose. Are you a citizen or legal permanent resident of Cuba, Iran, North Korea, Syria or Ukraine (Crimea region)?",
+   "required": true,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "text",
+   "id": "question_68886301",
+   "name": "",
+   "role": "combobox",
+   "label": "Do you currently work for or have you ever worked for a U.S. government entity, either as a contractor or employee?",
+   "required": true,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "text",
+   "id": "question_68886302",
+   "name": "",
+   "role": "",
+   "label": "If you answered “Yes,” please list the U.S. government entity you worked for. If not applicable, type 'N/A.'",
+   "required": true,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "text",
+   "id": "question_68886303",
+   "name": "",
+   "role": "combobox",
+   "label": "By agreeing here: (1) I certify that the information I provided to Asana in connection with my application for employment is accurate and truthful; and (2) I acknowledge and agree that I have carefully read the mutual Applicant Arbitration Agreement set out below and agree to be bound by it",
+   "required": true,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "text",
+   "id": "52921",
+   "name": "",
+   "role": "combobox",
+   "label": "Gender Identity Options",
+   "required": true,
+   "options": []
+  },
+  {
+   "tag": "input",
+   "type": "checkbox",
+   "id": "gdpr_demographic_data_consent_given_1",
+   "name": "gdpr_demographic_data_consent_given",
+   "role": "",
+   "label": "By checking this box, I consent to Asana collecting, storing, and processing my responses to the demographic data surveys above.",
+   "required": true,
+   "options": []
+  },
+  {
+   "tag": "textarea",
+   "type": "",
+   "id": "g-recaptcha-response-100000",
+   "name": "g-recaptcha-response",
+   "role": "",
+   "label": "",
+   "required": false,
+   "options": []
+  }
+ ],
+ "body_text": "[page text removed from fixture]"
+}

@@ -1,0 +1,116 @@
+# HunterXJob profile file (made-up example; replace every value with your own).
+#
+# Load it with:   ./hunterx profile import examples/profile.example.yaml
+# Then review each fact in the app (Profile tab) or with `./hunterx profile list`
+# and verify it. Only VERIFIED facts are ever used in résumés, cover letters
+# and form answers.
+#
+# `verified: true` at the top (or on a single entry) says "I, the owner, have
+# checked this". Leave it false until you have read every line.
+verified: false
+
+contact:
+  first_name: Avery
+  last_name: Quinn
+  email: avery.quinn@example.com
+  phone: "+1 613 555 0142"
+  location: Ottawa, ON
+  linkedin_url: https://www.linkedin.com/in/avery-quinn-example
+
+summary: Bilingual fraud and disputes analyst with 7 years in Canadian banking and payments.
+
+# One entry per country. Never assumed for other countries.
+work_authorization:
+  - country: CA
+    authorized: true
+    requires_sponsorship: false
+    status: Citizen
+  - country: US
+    authorized: false
+    requires_sponsorship: true
+
+employment:
+  - id: northwind
+    employer: Northwind Credit Union
+    title: Senior Fraud Analyst
+    location: Ottawa, ON
+    start: 2022-04
+    current: true
+    achievements:
+      - text: Cut false-positive fraud alerts by 32% by redesigning card-transaction rules in SQL
+        metrics: ["32%"]
+        skills: [SQL, Fraud detection]
+      - text: Led weekly AML case reviews for a team of 6 analysts
+        metrics: ["6"]
+        skills: [AML]
+      - text: Built a Python dashboard that reduced dispute resolution time from 14 to 9 days
+        metrics: ["14", "9"]
+        skills: [Python, Chargebacks]
+      - text: Handled English and French escalations for more than 120 cardholders per month
+        metrics: ["120"]
+        skills: [Customer communication]
+  - id: lakeshore
+    employer: Lakeshore Payments Inc.
+    title: Disputes Analyst
+    location: Toronto, ON
+    start: 2019-06
+    end: 2022-03
+    achievements:
+      - text: Resolved 1,800 chargeback disputes with a 96% win rate on documented cases
+        metrics: ["1,800", "96%"]
+        skills: [Chargebacks]
+      - text: Documented KYC remediation procedures adopted by 3 regional teams
+        metrics: ["3"]
+        skills: [KYC]
+      - text: Automated monthly reporting in Excel and Power BI, saving 10 hours per month
+        metrics: ["10"]
+        skills: [Excel, Power BI]
+  - id: riverbend
+    employer: Riverbend Savings Bank
+    title: Customer Service Representative
+    location: Gatineau, QC
+    start: 2017-05
+    end: 2019-05
+    achievements:
+      - Answered account and card inquiries in English and French
+
+education:
+  - institution: Capital City University
+    degree: Bachelor of Commerce
+    field_of_study: Finance
+    start: 2013-09
+    end: 2017-04
+
+skills:
+  - Fraud detection
+  - AML
+  - KYC
+  - SQL
+  - Python
+  - Excel
+  - Power BI
+  - name: Chargebacks
+    aliases: [disputes, dispute resolution]
+  - Customer communication
+  - Risk analysis
+
+certifications:
+  - name: Fraud Prevention Fundamentals
+    issuer: Example Training Institute
+    date: 2021-11
+
+languages:
+  - name: English
+    proficiency: Native
+  - name: French
+    proficiency: Professional working
+
+projects:
+  - name: Dispute Triage Toolkit
+    role: Author
+    summary: Python scripts that tag incoming chargeback reasons for faster triage
+    skills: [Python, Chargebacks]
+    achievements:
+      - text: Tagged 5 common chargeback reason codes with rule-based matching
+        metrics: ["5"]
+        skills: [Python]

@@ -1,0 +1,454 @@
+{
+ "id": 8556658002,
+ "title": "AI Engineer",
+ "absolute_url": "https://job-boards.greenhouse.io/gitlab/jobs/8556658002",
+ "location": {
+  "name": "Remote, Bangalore"
+ },
+ "company_name": "GitLab",
+ "updated_at": "2026-09-29T10:38:50-04:00",
+ "application_deadline": null,
+ "questions": [
+  {
+   "description": null,
+   "label": "First Name",
+   "required": true,
+   "fields": [
+    {
+     "name": "first_name",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Last Name",
+   "required": true,
+   "fields": [
+    {
+     "name": "last_name",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Email",
+   "required": true,
+   "fields": [
+    {
+     "name": "email",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Phone",
+   "required": false,
+   "fields": [
+    {
+     "name": "phone",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Resume/CV",
+   "required": true,
+   "fields": [
+    {
+     "name": "resume",
+     "type": "input_file",
+     "values": []
+    },
+    {
+     "name": "resume_text",
+     "type": "textarea",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Cover Letter",
+   "required": false,
+   "fields": [
+    {
+     "name": "cover_letter",
+     "type": "input_file",
+     "values": []
+    },
+    {
+     "name": "cover_letter_text",
+     "type": "textarea",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "LinkedIn Profile",
+   "required": false,
+   "fields": [
+    {
+     "name": "question_36622854002",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "What's the name you'd prefer us to use throughout the interview process?",
+   "required": false,
+   "fields": [
+    {
+     "name": "question_36622855002",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Please choose the country in which you are located.",
+   "required": false,
+   "fields": [
+    {
+     "name": "question_36622856002",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "Canada",
+       "value": 242097637002
+      },
+      {
+       "label": "India",
+       "value": 242097683002
+      },
+      {
+       "label": "Netherlands",
+       "value": 242097730002
+      },
+      {
+       "label": "United Kingdom",
+       "value": 242097793002
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "What is your current country of residence?",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_36622861002",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "Canada",
+       "value": 242097842002
+      },
+      {
+       "label": "India",
+       "value": 242097888002
+      },
+      {
+       "label": "Netherlands",
+       "value": 242097935002
+      },
+      {
+       "label": "United Kingdom",
+       "value": 242097997002
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Are you currently located in Bangalore? ",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_36667493002",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "Yes",
+       "value": 1
+      },
+      {
+       "label": "No",
+       "value": 0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Do you have strong proficiency in at least one modern scripting language (Python, JavaScript/TypeScript, or similar) and a solid understanding of REST APIs, GraphQL, and integration patterns? ",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_36667494002",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "Yes",
+       "value": 1
+      },
+      {
+       "label": "No",
+       "value": 0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Do you have practical fluency across the LLM ecosystem? hands-on experience with models from Anthropic, OpenAI, open-source alternatives, and the judgment to know which to reach for and when? ",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_36667495002",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "Yes",
+       "value": 1
+      },
+      {
+       "label": "No",
+       "value": 0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Are you subject to any employment agreements and/or post-employment restrictions with your current employer or a past employer?",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_36622857002",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "Yes",
+       "value": 1
+      },
+      {
+       "label": "No",
+       "value": 0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "It is important to us to create an accessible and inclusive interview experience. Please let us know if there are any adjustments we can make to assist you during the hiring and interview process.",
+   "required": false,
+   "fields": [
+    {
+     "name": "question_36622858002",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Will you now or in the future require sponsorship for a visa to remain in your current location?",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_36622859002",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "No",
+       "value": 242097804002
+      },
+      {
+       "label": "Yes, Netherlands Highly Skilled Migrant Visa",
+       "value": 242097805002
+      },
+      {
+       "label": "Yes, Ireland Highly Skilled Worker Visa",
+       "value": 242097806002
+      },
+      {
+       "label": "Yes, EU Blue Card",
+       "value": 242097807002
+      },
+      {
+       "label": "Yes, USMCA Professional (TN) Visa (USA)",
+       "value": 242097808002
+      },
+      {
+       "label": "Yes, F-1 Visa OPT (USA)",
+       "value": 242097809002
+      },
+      {
+       "label": "Yes, but not one of the visas listed here",
+       "value": 242097810002
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Have you previously worked at or consulted for GitLab?",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_36622860002",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "Yes",
+       "value": 1
+      },
+      {
+       "label": "No",
+       "value": 0
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "location_questions": [],
+ "compliance": [
+  {
+   "type": "eeoc",
+   "questions": [
+    {
+     "required": false,
+     "label": "VeteranStatus",
+     "fields": [
+      {
+       "name": "veteran_status",
+       "type": "multi_value_single_select",
+       "values": [
+        {
+         "label": "I don't wish to answer",
+         "value": "3"
+        },
+        {
+         "label": "I identify as one or more of the classifications of a protected veteran",
+         "value": "2"
+        },
+        {
+         "label": "I am not a protected veteran",
+         "value": "1"
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "description": "[EEOC description removed from fixture]"
+  },
+  {
+   "type": "eeoc",
+   "questions": [
+    {
+     "required": false,
+     "label": "Race",
+     "fields": [
+      {
+       "name": "race",
+       "type": "multi_value_single_select",
+       "values": [
+        {
+         "label": "Decline To Self Identify",
+         "value": "8"
+        },
+        {
+         "label": "Two or More Races",
+         "value": "7"
+        },
+        {
+         "label": "Native Hawaiian or Other Pacific Islander",
+         "value": "6"
+        },
+        {
+         "label": "White",
+         "value": "5"
+        },
+        {
+         "label": "Hispanic or Latino",
+         "value": "4"
+        },
+        {
+         "label": "Black or African American",
+         "value": "3"
+        },
+        {
+         "label": "Asian",
+         "value": "2"
+        },
+        {
+         "label": "American Indian or Alaskan Native",
+         "value": "1"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "required": false,
+     "label": "Gender",
+     "fields": [
+      {
+       "name": "gender",
+       "type": "multi_value_single_select",
+       "values": [
+        {
+         "label": "Decline To Self Identify",
+         "value": "3"
+        },
+        {
+         "label": "Female",
+         "value": "2"
+        },
+        {
+         "label": "Male",
+         "value": "1"
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "description": "[EEOC description removed from fixture]"
+  }
+ ],
+ "demographic_questions": null,
+ "data_compliance": [
+  {
+   "type": "gdpr",
+   "requires_consent": false,
+   "requires_processing_consent": false,
+   "requires_retention_consent": false,
+   "retention_period": null,
+   "demographic_data_consent_applies": false
+  }
+ ],
+ "content": "[job description removed from fixture]"
+}
