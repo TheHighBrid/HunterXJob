@@ -1,0 +1,6 @@
+diff --git a/mobile/src/components/PrimaryButton.tsx b/mobile/src/components/PrimaryButton.tsx
+--- a/mobile/src/components/PrimaryButton.tsx
++++ b/mobile/src/components/PrimaryButton.tsx
+@@ -21,1 +21,1 @@
+-  const isDisabled = disabled || loading;
++  const isDisabled = disabled ?? loading;
