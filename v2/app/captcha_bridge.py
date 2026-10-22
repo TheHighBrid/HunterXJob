@@ -183,6 +183,38 @@ async def inject_captcha_token(page: Any, challenge: CaptchaChallenge, token: st
         return False
 
 
+async def is_captcha_challenge_visible(page: Any) -> bool:
+    """Return True if an interactive CAPTCHA challenge modal/iframe (e.g. reCAPTCHA bframe or hCaptcha) is visibly open on screen."""
+    popup_js = r"""
+    () => {
+      const frames = Array.from(document.querySelectorAll(
+        'iframe[src*="recaptcha"][src*="bframe"], iframe[title*="recaptcha challenge" i], iframe[src*="hcaptcha.com"]'
+      ));
+      for (const f of frames) {
+        const rect = f.getBoundingClientRect();
+        if (rect.width < 200 || rect.height < 200) continue;
+        if (rect.bottom <= 0 || rect.right <= 0) continue;
+        let el = f;
+        let visible = true;
+        while (el && el !== document.body) {
+          const style = window.getComputedStyle(el);
+          if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity || '1') === 0) {
+            visible = false;
+            break;
+          }
+          el = el.parentElement;
+        }
+        if (visible) return true;
+      }
+      return false;
+    }
+    """
+    try:
+        return bool(await page.evaluate(popup_js))
+    except Exception:
+        return False
+
+
 async def wait_for_user_captcha_resolution(
     page: Any,
     poll_interval: float = 1.0,

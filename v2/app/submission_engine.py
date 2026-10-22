@@ -18,7 +18,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from app.captcha_bridge import CaptchaSolver, detect_captcha, inject_captcha_token
+from app.captcha_bridge import (
+    CaptchaSolver,
+    detect_captcha,
+    inject_captcha_token,
+    is_captcha_challenge_visible,
+)
 from app.evidence import CONFIRMATION_MARKERS, evidence_is_sufficient
 
 logger = logging.getLogger(__name__)
@@ -38,8 +43,11 @@ SUBMIT_BUTTON_SELECTORS = [
 ]
 
 CANDIDATE_ID_PATTERNS = [
-    re.compile(r"(?:confirmation|application|candidate|reference|ref)\s*(?:id|number|#)?\s*[:#]?\s*([A-Za-z0-9_-]{6,36})", re.I),
-    re.compile(r"re(?:f|ference)\s*#\s*([A-Za-z0-9_-]{4,24})", re.I),
+    re.compile(
+        r"(?:confirmation|application|candidate|reference|ref)\s+(?:id|number|#)\s*[:#]?\s*([A-Za-z0-9_-]*\d[A-Za-z0-9_-]*)",
+        re.I,
+    ),
+    re.compile(r"re(?:f|ference)\s*[:#]\s*([A-Za-z0-9_-]*\d[A-Za-z0-9_-]*)", re.I),
 ]
 
 
@@ -163,17 +171,25 @@ async def execute_live_submission(
     try:
         try:
             await submit_loc.scroll_into_view_if_needed()
+            await submit_loc.hover()
+            await asyncio.sleep(0.3)
         except Exception:
             pass
         await submit_loc.click()
 
-        # Poll for SPA / GraphQL submission & invisible reCAPTCHA token exchange to complete
+        # Poll for SPA / GraphQL submission & reCAPTCHA token exchange to complete.
+        # If an interactive CAPTCHA challenge modal pops up after clicking Submit,
+        # keep polling for up to 180s so the challenge can be completed in headed mode.
         confirmation_text = None
         candidate_id = None
         body_text = ""
         final_url = page.url
-        for _ in range(24):
+        captcha_popup_notified = False
+        max_ticks = 30  # 15s default for normal submission
+        tick = 0
+        while tick < max_ticks:
             await asyncio.sleep(0.5)
+            tick += 1
             final_url = page.url
             body_text = await page.evaluate("() => document.body ? document.body.innerText : ''")
             confirmation_text, candidate_id = extract_confirmation_evidence(body_text, final_url)
@@ -183,6 +199,23 @@ async def execute_live_submission(
                 final_url=final_url,
             ):
                 break
+
+            if await is_captcha_challenge_visible(page):
+                captcha_detected = True
+                if not captcha_popup_notified:
+                    captcha_popup_notified = True
+                    max_ticks = 360  # Extend wait up to 180 seconds while CAPTCHA is solved
+                    import sys
+                    print(
+                        "\n🔒 [HunterXJob] Interactive CAPTCHA challenge popped up after clicking Submit!\n"
+                        "   👉 Please solve the CAPTCHA puzzle in the open browser window (waiting up to 180s)...\a",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+            elif captcha_popup_notified:
+                # CAPTCHA modal just closed; give the background GraphQL submission up to 15s to finish
+                captcha_resolved = True
+                max_ticks = min(max_ticks, tick + 30)
 
         # 5. Capture post-submission screenshot proof
         sc_sha256 = None
