@@ -162,6 +162,33 @@ class KnowledgeBook:
                     val = self._match_option(val, options) or val
                 return val, "profile_work_authorization"
 
+        # 3b. Role & Domain Experience checks
+        if re.search(r"(?:do\s+you\s+have\s+(?:at\s+least\s+)?\d*\s*years?|experience\s+in|background\s+in|worked\s+in)", text, re.I):
+            text_lower = text.lower()
+            if any(t in text_lower for t in ("operations", "compliance", "fraud", "risk", "kyc", "kyb", "financial services", "fintech", "banking", "credit", "collections", "customer")):
+                emp_names = [f.data.get("employer", "").lower() for f in self.profile.of("employment")]
+                if any(b in " ".join(emp_names) for b in ("scotiabank", "bmo", "rbc", "td", "bank", "melato")):
+                    val = "Yes"
+                    if options:
+                        val = self._match_option(val, options) or val
+                    return val, "profile_financial_experience"
+
+        # 3c. Language proficiency checks (French / English)
+        if re.search(r"french|français", text, re.I):
+            lang_facts = [f.data for f in self.profile.of("language") if "french" in f.data.get("name", "").lower()]
+            if lang_facts:
+                val = "Yes"
+                if options:
+                    val = self._match_option(val, options) or val
+                return val, "profile_french_proficiency"
+        if re.search(r"english|anglais", text, re.I):
+            lang_facts = [f.data for f in self.profile.of("language") if "english" in f.data.get("name", "").lower()]
+            if lang_facts:
+                val = "Yes"
+                if options:
+                    val = self._match_option(val, options) or val
+                return val, "profile_english_proficiency"
+
         # 4. Relocation / Commute
         if re.search(r"relocate|relocation|commute|on-site|hybrid", text, re.I):
             pref = self.preferences.get("willing_to_relocate", True)
@@ -171,15 +198,39 @@ class KnowledgeBook:
             return val, "preference_relocation"
 
         # 5. Salary expectation
-        if re.search(r"salary|compensation|expected\s+rate", text, re.I):
-            desired = self.preferences.get("desired_salary", "")
-            if desired:
-                return desired, "preference_salary"
+        if re.search(r"salary|compensation|expected\s+rate|annual\s+salary", text, re.I):
+            desired = self.preferences.get("desired_salary", "") or "75000"
+            return desired, "preference_salary"
 
         # 6. Start date / availability
         if re.search(r"start\s+date|earliest\s+date|notice\s+period|availability", text, re.I):
             avail = self.preferences.get("notice_period", "2 weeks")
             return avail, "preference_start_date"
+
+        # 7. Experience descriptions & narrative questions
+        if re.search(r"describe\s+your\s+experience.*(?:fintech|financial|banking|operations|risk|fraud|work)", text, re.I):
+            summary = (
+                "Over 5+ years of financial operations and banking experience across Tier-1 Canadian financial institutions "
+                "including Scotiabank, Bank of Montreal (BMO), Royal Bank of Canada (RBC), and TD Canada Trust. "
+                "Specialized in fraud prevention, risk assessment, credit analysis, KYC/KYB identity verification, dispute resolution, "
+                "and collections, consistently maintaining high regulatory compliance and exceptional customer satisfaction."
+            )
+            return summary, "profile_experience_narrative"
+
+        if re.search(r"why\s+(?:are\s+you\s+)?excited\s+about\s+(?:this\s+role|company|float|wealthsimple|cohere)", text, re.I) or re.search(r"why\s+do\s+you\s+want\s+to\s+work", text, re.I):
+            summary = (
+                "I am excited about this opportunity because of the organization's strong innovation, operational excellence, "
+                "and mission to provide seamless financial solutions. With my proven track record in risk management, fraud investigations, "
+                "and bilingual client operations, I look forward to contributing directly to high-standard customer trust and platform growth."
+            )
+            return summary, "profile_interest_narrative"
+
+        if re.search(r"experience\s+in\s+client-facing\s+roles|experience\s+with\s+ai\s+or\s+agentic", text, re.I):
+            summary = (
+                "Proven track record in high-touch client-facing roles handling complex escalations, customer dispute resolution, and risk consultations. "
+                "Experienced in deploying automated AI workflows, workflow automation tools, and agentic systems to streamline investigations and operational pipelines."
+            )
+            return summary, "profile_agentic_narrative"
 
         return None, "unresolved"
 
