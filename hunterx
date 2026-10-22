@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -e
+DIR="$(cd "$(dirname "$0")/v2" && pwd)"
+exec "$DIR/hunterx" "$@"

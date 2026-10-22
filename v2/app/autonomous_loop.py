@@ -150,7 +150,7 @@ class AutonomousRunner:
         ).scalars().all()
 
         summary.candidates_considered = len(candidates)
-        out_dir = self.config.output_dir or Path(self.settings.artifact_dir or "/tmp/hunterx_autonomous")
+        out_dir = self.config.output_dir or Path(getattr(self.settings, "artifact_dir", None) or "/tmp/hunterx_autonomous")
         out_dir.mkdir(parents=True, exist_ok=True)
 
         for job in candidates:
@@ -285,7 +285,7 @@ class AutonomousRunner:
                 stage=job.stage,
                 status="fill_failed",
                 submitted=False,
-                error=f"Unmatched fields: {fill_res.unmatched_fields}",
+                error=fill_res.error or (f"Unmatched fields: {fill_res.unmatched_fields}" if fill_res.unmatched_fields else "No form fields detected or attempted on page"),
             )
 
         # 5. Live Submission or Verified Dry-Run
