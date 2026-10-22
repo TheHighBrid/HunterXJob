@@ -27,7 +27,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.answer_vault import AnswerVault
-from app.browser_filler import fill_application_form
+from app.browser_filler import _fill_single_field, _find_file_input, fill_application_form
 from app.captcha_bridge import MockCaptchaSolver, detect_captcha, inject_captcha_token
 from app.config import Settings, get_settings
 from app.dedup import duplicate_guard
@@ -47,6 +47,7 @@ from app.pipeline import score_pending_jobs
 from app.profile import verified_profile
 from app.real_forms import LiveFormProvider
 from app.render import render_pdf_bytes
+from app.submission_engine import execute_live_submission
 from app.submission_engine import (
     SubmissionResult,
     execute_live_submission,
@@ -264,8 +265,16 @@ class AutonomousRunner:
         files = {"resume": resume_pdf}
         labels = {ctrl.key: ctrl.label for ctrl in real_form.controls}
 
-        # 4. Execute Browser Form Fill
+        # 4. Execute Browser Form Fill & Optional Live Submission
         sc_path = job_dir / "pre_submit.png"
+        post_sc_path = job_dir / "post_submit.png"
+
+        can_submit_live = (
+            self.config.allow_live_submission
+            and self.settings.allow_live_submission
+            and is_enabled(self.db, "allow_live_submission")
+        )
+
         fill_res = await fill_application_form(
             url=real_form.url,
             answers=answers,
@@ -291,20 +300,25 @@ class AutonomousRunner:
             )
 
         # 5. Live Submission or Verified Dry-Run
-        can_submit_live = (
-            self.config.allow_live_submission
-            and self.settings.allow_live_submission
-            and is_enabled(self.db, "allow_live_submission")
-        )
-
         if can_submit_live:
-            # Live submission via Playwright submission engine
             from playwright.async_api import async_playwright
 
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=self.config.headless)
+                browser = await p.chromium.launch(
+                    headless=self.config.headless,
+                    slow_mo=100 if not self.config.headless else 0,
+                )
                 page = await browser.new_page()
                 await page.goto(real_form.url, wait_until="networkidle")
+
+                # Fill the validated form fields and file attachments on the submission page
+                for k, v in answers.items():
+                    if v is not None and v != "":
+                        await _fill_single_field(page, k, v, label=labels.get(k, ""))
+                for fk, fv in files.items():
+                    fl, _ = await _find_file_input(page, fk)
+                    if fl and Path(fv).is_file():
+                        await fl.set_input_files(str(fv))
 
                 # Solve CAPTCHA if needed
                 challenge = await detect_captcha(page)
@@ -316,14 +330,20 @@ class AutonomousRunner:
 
                 sub_res = await execute_live_submission(
                     page=page,
-                    allow_live_submission=True,
-                    evidence_dir=job_dir,
+                    allow_live_submit=True,
+                    screenshot_path=post_sc_path,
                 )
+
+                if not self.config.headless and self.config.headed_pause_ms > 0:
+                    try:
+                        await page.wait_for_timeout(self.config.headed_pause_ms)
+                    except Exception:
+                        pass
                 await browser.close()
 
             if sub_res.success and sub_res.status == "submitted":
                 job.stage = PipelineStage.submitted.value
-                proof_sha = sub_res.screenshot_sha256 or sub_res.trace_sha256 or "live_submit_proof"
+                proof_sha = sub_res.screenshot_sha256 or "live_submit_proof"
                 self.db.add(
                     PipelineEvent(
                         job_id=job.id,
@@ -393,5 +413,5 @@ class AutonomousRunner:
                 stage=job.stage,
                 status="dry_run_verified",
                 submitted=False,
-                evidence_sha256=proof_hash,
+                evidence_sha256=fill_res.screenshot_sha256 or proof_hash,
             )

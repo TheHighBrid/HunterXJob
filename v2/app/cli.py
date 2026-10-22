@@ -85,6 +85,12 @@ def _cmd_autonomous_run(args: argparse.Namespace) -> int:
         if profile_path.is_file():
             profile_data = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
 
+    if getattr(args, "live", False):
+        settings.allow_live_submission = True
+        with SessionLocal() as db:
+            from app.flags import set_flag
+            set_flag(db, "allow_live_submission", True, "enabled via --live CLI flag")
+
     config = AutonomousConfig(
         allow_live_submission=bool(getattr(args, "live", False)),
         min_score_threshold=float(getattr(args, "min_score", 65.0) or 65.0),

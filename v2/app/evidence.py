@@ -11,9 +11,13 @@ from app.models import Application, PipelineStage, SubmissionEvidence
 CONFIRMATION_MARKERS = (
     "thank you for applying",
     "thanks for applying",
+    "thank you",
     "application has been submitted",
+    "application submitted",
     "successfully submitted",
     "we have received your application",
+    "we've received your application",
+    "we received your application",
     "your application was submitted",
     "application received",
 )
