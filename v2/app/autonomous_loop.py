@@ -63,6 +63,7 @@ class AutonomousConfig:
     unattended_mode: bool = False
     min_score_threshold: float = 65.0
     max_applications: int = 10
+    max_errors: int = 5
     headless: bool = True
     headed_pause_ms: int = 4000
     output_dir: Path | None = None
@@ -161,6 +162,10 @@ class AutonomousRunner:
                 break
 
             if summary.submitted_live + summary.verified_dry_runs >= self.config.max_applications:
+                break
+
+            if summary.errors >= self.config.max_errors:
+                logger.warning("Reached maximum error threshold (%d), aborting cycle", self.config.max_errors)
                 break
 
             score = float(job.final_score or 0.0)
@@ -309,7 +314,14 @@ class AutonomousRunner:
                     slow_mo=100 if not self.config.headless else 0,
                 )
                 page = await browser.new_page()
-                await page.goto(real_form.url, wait_until="networkidle")
+                try:
+                    await page.goto(real_form.url, wait_until="domcontentloaded", timeout=30000)
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=4000)
+                    except Exception:
+                        pass
+                except Exception as e:
+                    logger.warning("Navigation warning for %s: %s", real_form.url, e)
 
                 # Fill the validated form fields and file attachments on the submission page
                 for k, v in answers.items():

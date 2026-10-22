@@ -321,6 +321,15 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
             await locator.fill(str(value))
             await locator.dispatch_event("input")
             await locator.dispatch_event("change")
+            try:
+                is_combobox = await locator.evaluate("el => el.getAttribute('role') === 'combobox' || (el.className && el.className.includes('autocomplete'))")
+                if is_combobox:
+                    await asyncio.sleep(0.4)
+                    await page.keyboard.press("ArrowDown")
+                    await asyncio.sleep(0.2)
+                    await page.keyboard.press("Enter")
+            except Exception:
+                pass
 
         # Read back for verification
         read_back = await _read_back_value(locator, tag, control_type)
@@ -402,7 +411,14 @@ async def fill_application_form(
         page = await context.new_page()
 
         try:
-            await page.goto(url, wait_until="networkidle", timeout=timeout_ms)
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=4000)
+                except Exception:
+                    pass
+            except Exception as e:
+                logger.warning("Navigation warning for %s: %s", url, e)
 
             # 1. Fill regular inputs, selects, and textareas
             for key, val in items_to_fill.items():
