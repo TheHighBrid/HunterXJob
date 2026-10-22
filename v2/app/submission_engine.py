@@ -24,6 +24,7 @@ from app.evidence import CONFIRMATION_MARKERS, evidence_is_sufficient
 logger = logging.getLogger(__name__)
 
 SUBMIT_BUTTON_SELECTORS = [
+    ".ashby-application-form-submit-button",
     'button[type="submit"]',
     'input[type="submit"]',
     "#submit_app",
@@ -160,16 +161,28 @@ async def execute_live_submission(
 
     # 4. Click Submit and wait for navigation / network response
     try:
-        await submit_loc.click()
         try:
-            await page.wait_for_load_state("networkidle", timeout=timeout_ms)
+            await submit_loc.scroll_into_view_if_needed()
         except Exception:
-            # Continue even if networkidle times out, page might have updated via DOM
-            await asyncio.sleep(2.0)
+            pass
+        await submit_loc.click()
 
+        # Poll for SPA / GraphQL submission & invisible reCAPTCHA token exchange to complete
+        confirmation_text = None
+        candidate_id = None
+        body_text = ""
         final_url = page.url
-        body_text = await page.evaluate("() => document.body ? document.body.innerText : ''")
-        confirmation_text, candidate_id = extract_confirmation_evidence(body_text, final_url)
+        for _ in range(24):
+            await asyncio.sleep(0.5)
+            final_url = page.url
+            body_text = await page.evaluate("() => document.body ? document.body.innerText : ''")
+            confirmation_text, candidate_id = extract_confirmation_evidence(body_text, final_url)
+            if evidence_is_sufficient(
+                confirmation_text=confirmation_text or body_text,
+                candidate_id=candidate_id,
+                final_url=final_url,
+            ):
+                break
 
         # 5. Capture post-submission screenshot proof
         sc_sha256 = None

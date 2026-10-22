@@ -37,6 +37,14 @@ CAPTCHA_DETECT_JS = r"""
   // 1. Google reCAPTCHA
   const recaptchaEl = document.querySelector('[name="g-recaptcha-response"], .g-recaptcha, iframe[src*="recaptcha"]');
   if (recaptchaEl) {
+    // Invisible reCAPTCHA v3 / Enterprise badges execute automatically on form submit
+    const isInvisible = !!(
+      document.querySelector('iframe[src*="recaptcha"][src*="size=invisible"]') ||
+      document.querySelector('.g-recaptcha[data-size="invisible"]')
+    );
+    if (isInvisible) {
+      return { detected: false };
+    }
     const sitekey = recaptchaEl.getAttribute('data-sitekey') ||
                     (document.querySelector('[data-sitekey]') ? document.querySelector('[data-sitekey]').getAttribute('data-sitekey') : null);
     const resp = document.querySelector('[name="g-recaptcha-response"]');

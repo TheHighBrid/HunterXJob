@@ -270,7 +270,7 @@ class AutonomousRunner:
         files = {"resume": resume_pdf}
         labels = {ctrl.key: ctrl.label for ctrl in real_form.controls}
 
-        # 4. Execute Browser Form Fill & Optional Live Submission
+        # 4. Execute Browser Form Fill & Optional Live Submission (Single Browser Session)
         sc_path = job_dir / "pre_submit.png"
         post_sc_path = job_dir / "post_submit.png"
 
@@ -288,9 +288,13 @@ class AutonomousRunner:
             headless=self.config.headless,
             headed_pause_ms=self.config.headed_pause_ms,
             screenshot_path=sc_path,
+            allow_live_submit=can_submit_live,
+            post_submit_screenshot_path=post_sc_path if can_submit_live else None,
+            live_submit_fn=execute_live_submission if can_submit_live else None,
+            captcha_solver=self.captcha_solver if can_submit_live else None,
         )
 
-        if not fill_res.success:
+        if fill_res.unmatched_fields or fill_res.fields_attempted == 0:
             return AutonomousApplicationRecord(
                 job_id=job.id,
                 company=job.company,
@@ -304,65 +308,18 @@ class AutonomousRunner:
                 error=fill_res.error or (f"Unmatched fields: {fill_res.unmatched_fields}" if fill_res.unmatched_fields else "No form fields detected or attempted on page"),
             )
 
-        # 5. Live Submission or Verified Dry-Run
+        # 5. Live Submission or Verified Dry-Run Result Handling
         if can_submit_live:
-            from playwright.async_api import async_playwright
-
-            async with async_playwright() as p:
-                browser = await p.chromium.launch(
-                    headless=self.config.headless,
-                    slow_mo=100 if not self.config.headless else 0,
-                )
-                page = await browser.new_page()
-                try:
-                    await page.goto(real_form.url, wait_until="domcontentloaded", timeout=30000)
-                    try:
-                        await page.wait_for_load_state("networkidle", timeout=4000)
-                    except Exception:
-                        pass
-                except Exception as e:
-                    logger.warning("Navigation warning for %s: %s", real_form.url, e)
-
-                # Fill the validated form fields and file attachments on the submission page
-                for k, v in answers.items():
-                    if v is not None and v != "":
-                        await _fill_single_field(page, k, v, label=labels.get(k, ""))
-                for fk, fv in files.items():
-                    fl, _ = await _find_file_input(page, fk)
-                    if fl and Path(fv).is_file():
-                        await fl.set_input_files(str(fv))
-
-                # Solve CAPTCHA if needed
-                challenge = await detect_captcha(page)
-                if challenge.detected and challenge.sitekey:
-                    token = await self.captcha_solver.solve(
-                        challenge.captcha_type, challenge.sitekey, page.url
-                    )
-                    await inject_captcha_token(page, challenge, token)
-
-                sub_res = await execute_live_submission(
-                    page=page,
-                    allow_live_submit=True,
-                    screenshot_path=post_sc_path,
-                )
-
-                if not self.config.headless and self.config.headed_pause_ms > 0:
-                    try:
-                        await page.wait_for_timeout(self.config.headed_pause_ms)
-                    except Exception:
-                        pass
-                await browser.close()
-
-            if sub_res.success and sub_res.status == "submitted":
+            if fill_res.submitted:
                 job.stage = PipelineStage.submitted.value
-                proof_sha = sub_res.screenshot_sha256 or "live_submit_proof"
+                proof_sha = fill_res.post_submit_screenshot_sha256 or "live_submit_proof"
                 self.db.add(
                     PipelineEvent(
                         job_id=job.id,
                         from_stage=PipelineStage.ready_to_apply.value,
                         to_stage=PipelineStage.submitted.value,
                         message="Application submitted autonomously with verified proof",
-                        payload_json=f'{{"receipt": "{sub_res.confirmation_text}", "sha256": "{proof_sha}"}}',
+                        payload_json=f'{{"receipt": "{fill_res.confirmation_text}", "sha256": "{proof_sha}"}}',
                     )
                 )
                 self.db.commit()
@@ -380,8 +337,8 @@ class AutonomousRunner:
                     stage=job.stage,
                     status="submitted_live",
                     submitted=True,
-                    confirmation_receipt=sub_res.confirmation_text,
-                    candidate_id=sub_res.candidate_id,
+                    confirmation_receipt=fill_res.confirmation_text,
+                    candidate_id=fill_res.candidate_id,
                     evidence_sha256=proof_sha,
                 )
             else:
@@ -395,8 +352,21 @@ class AutonomousRunner:
                     stage=job.stage,
                     status="submission_failed",
                     submitted=False,
-                    error=sub_res.error or "Submission not confirmed",
+                    error=fill_res.error or "Submission not confirmed",
                 )
+        elif not fill_res.success:
+            return AutonomousApplicationRecord(
+                job_id=job.id,
+                company=job.company,
+                title=job.title,
+                url=job.url,
+                platform=real_form.platform,
+                score=float(job.final_score or 0.0),
+                stage=job.stage,
+                status="fill_failed",
+                submitted=False,
+                error=fill_res.error or "Form fill verification failed",
+            )
         else:
             # Verified Dry-Run Mode
             proof_hash = hashlib.sha256(

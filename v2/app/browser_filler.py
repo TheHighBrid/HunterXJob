@@ -376,6 +376,8 @@ async def fill_application_form(
     headless: bool = True,
     headed_pause_ms: int = 4000,
     allow_live_submit: bool = False,
+    live_submit_fn: Any | None = None,
+    captcha_solver: Any | None = None,
     post_submit_screenshot_path: Path | None = None,
 ) -> FormFillResult:
     """Open the application page, fill in all answers, attach files, and verify read-backs."""
@@ -391,6 +393,7 @@ async def fill_application_form(
     confirmation_text: str | None = None
     candidate_id: str | None = None
     post_sc_sha256: str | None = None
+    submit_error: str | None = None
 
     # If target_fields is provided, filter answers and files down to only targeted fields
     items_to_fill = answers
@@ -482,43 +485,29 @@ async def fill_application_form(
 
             # 4. Live submission execution if enabled and all form fields matched
             if allow_live_submit and not unmatched:
-                from app.submission_engine import SUBMIT_BUTTON_SELECTORS, extract_confirmation_evidence
-                from app.evidence import evidence_is_sufficient
+                from app.captcha_bridge import detect_captcha, inject_captcha_token
+                from app.submission_engine import execute_live_submission as _default_submit
 
-                submit_loc = None
-                for sel in SUBMIT_BUTTON_SELECTORS:
-                    loc = page.locator(sel)
-                    if await loc.count() > 0 and await loc.first.is_visible():
-                        submit_loc = loc.first
-                        break
-
-                if submit_loc:
-                    await submit_loc.click()
-                    try:
-                        await page.wait_for_load_state("networkidle", timeout=timeout_ms)
-                    except Exception:
-                        await asyncio.sleep(3.0)
-
-                    final_url = page.url
-                    body_text = await page.evaluate("() => document.body ? document.body.innerText : ''")
-                    conf_text, cand_id = extract_confirmation_evidence(body_text, final_url)
-
-                    # Post-submit screenshot
-                    if post_submit_screenshot_path:
-                        post_submit_screenshot_path = Path(post_submit_screenshot_path)
-                        post_submit_screenshot_path.parent.mkdir(parents=True, exist_ok=True)
-                        await page.screenshot(path=str(post_submit_screenshot_path), full_page=True)
-                        post_sc_sha256 = hashlib.sha256(post_submit_screenshot_path.read_bytes()).hexdigest()
-
-                    sufficient = evidence_is_sufficient(
-                        confirmation_text=conf_text or body_text,
-                        candidate_id=cand_id,
-                        final_url=final_url,
+                challenge = await detect_captcha(page)
+                if challenge.detected and challenge.sitekey and captcha_solver:
+                    token = await captcha_solver.solve(
+                        challenge.captcha_type, challenge.sitekey, page.url
                     )
-                    submitted_ok = sufficient or any(w in body_text.lower() for w in ("thank you", "application submitted", "received your application", "success"))
-                    submitted = submitted_ok
-                    confirmation_text = conf_text or ("Submission completed" if submitted_ok else None)
-                    candidate_id = cand_id
+                    await inject_captcha_token(page, challenge, token)
+
+                submit_fn = live_submit_fn or _default_submit
+                sub_res = await submit_fn(
+                    page=page,
+                    allow_live_submit=True,
+                    captcha_solver=captcha_solver,
+                    screenshot_path=post_submit_screenshot_path,
+                )
+                submitted = bool(sub_res.success and sub_res.status == "submitted")
+                confirmation_text = sub_res.confirmation_text
+                candidate_id = sub_res.candidate_id
+                post_sc_sha256 = sub_res.screenshot_sha256
+                if not submitted and sub_res.error:
+                    submit_error = sub_res.error
 
         except Exception as exc:
             return FormFillResult(
@@ -574,4 +563,5 @@ async def fill_application_form(
         candidate_id=candidate_id,
         post_submit_screenshot_path=str(post_submit_screenshot_path) if post_submit_screenshot_path else None,
         post_submit_screenshot_sha256=post_sc_sha256,
+        error=submit_error,
     )
