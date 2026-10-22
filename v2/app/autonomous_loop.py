@@ -269,6 +269,12 @@ class AutonomousRunner:
         answers = book.resolve_answers(real_form.controls)
         files = {"resume": resume_pdf}
         labels = {ctrl.key: ctrl.label for ctrl in real_form.controls}
+        required_keys = [
+            ctrl.key
+            for ctrl in real_form.controls
+            if getattr(ctrl, "required", False)
+            and "file" not in str(getattr(ctrl, "control_type", "")).lower()
+        ]
 
         # 4. Execute Browser Form Fill & Optional Live Submission (Single Browser Session)
         sc_path = job_dir / "pre_submit.png"
@@ -285,6 +291,7 @@ class AutonomousRunner:
             answers=answers,
             files=files,
             labels=labels,
+            required_fields=required_keys,
             headless=self.config.headless,
             headed_pause_ms=self.config.headed_pause_ms,
             screenshot_path=sc_path,

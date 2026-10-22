@@ -106,6 +106,20 @@ async def _find_input_for_key(page: Any, key: str, label_hint: str = "", value_h
                         if b_text == v_str or (v_str in ("yes", "true", "1") and b_text == "yes") or (v_str in ("no", "false", "0") and b_text == "no"):
                             if await btn_el.is_visible():
                                 return btn_el, f'[data-field-path="{k}"] button:{b_text}'
+                    # Check radio buttons inside container matching value_hint
+                    c_radios = container.locator('input[type="radio"]')
+                    cr_count = await c_radios.count()
+                    if cr_count > 0:
+                        for idx in range(cr_count):
+                            r = c_radios.nth(idx)
+                            label_text = await r.evaluate("""el => {
+                                if (el.labels && el.labels[0]) return el.labels[0].innerText || '';
+                                const parent = el.closest('label') || el.parentElement;
+                                return parent ? parent.innerText || '' : '';
+                            }""")
+                            val_attr = (await r.get_attribute("value") or "").lower()
+                            if v_str in label_text.strip().lower() or label_text.strip().lower() in v_str or val_attr == v_str:
+                                return r, f'[data-field-path="{k}"] radio:{v_str[:30]}'
                 inputs = container.locator('input:not([type="hidden"]), select, textarea')
                 if await inputs.count() > 0 and await inputs.first.is_visible():
                     return inputs.first, f'[data-field-path="{k}"] input'
@@ -313,7 +327,24 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
             await locator.dispatch_event("change")
 
         elif control_type == "radio":
-            await locator.check(force=True)
+            try:
+                await locator.scroll_into_view_if_needed()
+            except Exception:
+                pass
+            clicked_label = await locator.evaluate("""el => {
+                if (el.labels && el.labels[0]) {
+                    el.labels[0].click();
+                    return true;
+                }
+                const parentLabel = el.closest('label');
+                if (parentLabel) {
+                    parentLabel.click();
+                    return true;
+                }
+                return false;
+            }""")
+            if not clicked_label:
+                await locator.check(force=True)
             await locator.dispatch_event("change")
 
         else:
@@ -401,22 +432,21 @@ async def fill_application_form(
         items_to_fill = {k: v for k, v in answers.items() if k in target_fields}
 
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(
-            headless=headless,
-            slow_mo=100 if not headless else 0,
-            args=[
+        launch_kwargs: dict[str, Any] = {
+            "headless": headless,
+            "slow_mo": 120 if not headless else 0,
+            "args": [
                 "--disable-blink-features=AutomationControlled",
                 "--disable-infobars",
                 "--no-first-run",
             ],
-            ignore_default_args=["--enable-automation"],
-        )
+            "ignore_default_args": ["--enable-automation"],
+        }
+        if not headless and Path("/Applications/Google Chrome.app").exists():
+            launch_kwargs["channel"] = "chrome"
+
+        browser = await playwright.chromium.launch(**launch_kwargs)
         context = await browser.new_context(
-            user_agent=(
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/131.0.0.0 Safari/537.36"
-            ),
             locale="en-CA",
             viewport={"width": 1280, "height": 900},
         )
@@ -424,8 +454,6 @@ async def fill_application_form(
             """
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
             window.chrome = window.chrome || { runtime: {} };
-            Object.defineProperty(navigator, 'languages', { get: () => ['en-CA', 'en-US', 'en'] });
-            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
             """
         )
 
@@ -496,6 +524,14 @@ async def fill_application_form(
                         matched=False,
                         error="File input not found",
                     )
+
+            # 2b. Verify all required_fields were filled and matched
+            if required_fields is not None:
+                for rk in required_fields:
+                    rep = field_reports.get(rk)
+                    if not rep or not rep.matched:
+                        if rk not in unmatched:
+                            unmatched.append(rk)
 
             # 3. Capture screenshot of filled form if requested
             sc_sha256 = None

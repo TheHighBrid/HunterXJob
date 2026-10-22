@@ -185,6 +185,7 @@ async def execute_live_submission(
         body_text = ""
         final_url = page.url
         captcha_popup_notified = False
+        spam_retries = 0
         max_ticks = 30  # 15s default for normal submission
         tick = 0
         while tick < max_ticks:
@@ -212,10 +213,32 @@ async def execute_live_submission(
                         file=sys.stderr,
                         flush=True,
                     )
-            elif captcha_popup_notified:
+                continue
+
+            if captcha_popup_notified:
                 # CAPTCHA modal just closed; give the background GraphQL submission up to 15s to finish
                 captcha_resolved = True
-                max_ticks = min(max_ticks, tick + 30)
+                captcha_popup_notified = False
+                max_ticks = max(max_ticks, tick + 30)
+
+            # If Ashby shows "Your application submission was flagged as possible spam.
+            # If you believe this is a mistake, please submit your application again.",
+            # wait 3.5s, scroll back to the Submit button, and click it again.
+            body_lower = body_text.lower()
+            if (
+                ("flagged as possible spam" in body_lower or "submit your application again" in body_lower)
+                and spam_retries < 2
+            ):
+                spam_retries += 1
+                await asyncio.sleep(3.5)
+                try:
+                    await submit_loc.scroll_into_view_if_needed()
+                    await submit_loc.hover()
+                    await asyncio.sleep(0.4)
+                    await submit_loc.click()
+                    max_ticks = max(max_ticks, tick + 30)
+                except Exception:
+                    pass
 
         # 5. Capture post-submission screenshot proof
         sc_sha256 = None

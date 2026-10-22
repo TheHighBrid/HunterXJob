@@ -234,6 +234,115 @@ class KnowledgeBook:
 
         return None, "unresolved"
 
+    def resolve_with_llm_or_fallback(
+        self,
+        label: str,
+        options: list[str] | None = None,
+        control_type: str = "text",
+    ) -> tuple[Any, str]:
+        """Use local Ollama LLM (llama3.2:3b) with deterministic heuristics fallback for custom questions."""
+        import urllib.request
+
+        text = label.strip()
+        if not text:
+            return None, "empty_label"
+
+        # 1. Multiple-choice / Select / Radio with options
+        if options:
+            numbered = "\n".join(f"{i}: {opt}" for i, opt in enumerate(options))
+            prompt = (
+                "You are assisting a senior financial operations, fraud investigations, compliance, and risk leader "
+                "(5+ years at Scotiabank, BMO, RBC, TD Canada Trust; based in Ottawa, Ontario, Canada; bilingual English/French) "
+                "completing a job application.\n\n"
+                f"Question: {text}\n\n"
+                f"Options:\n{numbered}\n\n"
+                "Select the single strongest, most collaborative, risk-sound professional option. "
+                "Reply with ONLY the option number (e.g. 0, 1, 2, or 3)."
+            )
+            try:
+                req = urllib.request.Request(
+                    "http://127.0.0.1:11434/api/generate",
+                    data=json.dumps({
+                        "model": "llama3.2:3b",
+                        "prompt": prompt,
+                        "stream": False,
+                        "options": {"temperature": 0.1, "num_predict": 16},
+                    }).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=8.0) as resp:
+                    body = json.loads(resp.read().decode("utf-8"))
+                    reply = (body.get("response") or "").strip()
+                    m = re.search(r"\b(\d+)\b", reply)
+                    if m:
+                        idx = int(m.group(1))
+                        if 0 <= idx < len(options):
+                            return options[idx], "ollama_option_choice"
+            except Exception as exc:
+                logger.debug("Ollama option resolution fallback (%s)", exc)
+
+            # Heuristic option scoring fallback
+            pos_words = (
+                "review", "collaborate", "escalate", "consolidate", "huddle", "protocol",
+                "root cause", "quantify", "stakeholder", "verification", "systemic",
+                "yes", "authorized", "eligible", "fluent", "native", "consent",
+            )
+            neg_words = (
+                "immediately unfreeze", "refuse", "best judgment on a case-by-case",
+                "automated macros", "personally review and approve every single",
+                "pause the team", "opt out",
+            )
+            best_opt = options[0]
+            best_score = -999
+            for opt in options:
+                ol = opt.lower()
+                score = sum(2 for w in pos_words if w in ol) - sum(3 for w in neg_words if w in ol)
+                if score > best_score:
+                    best_score = score
+                    best_opt = opt
+            return best_opt, "heuristic_option_choice"
+
+        # 2. Open-ended Textarea / Text question
+        ctype_lower = str(control_type).lower()
+        if any(t in ctype_lower for t in ("textarea", "text")):
+            prompt = (
+                "Write a concise, first-person ('I...') job application answer in 3 to 4 sentences (plain text only, no placeholders, no bullet points). "
+                "Candidate background: Mohamed Alem, based in Ottawa, ON, bilingual English/French, 5+ years of experience across Scotiabank, "
+                "Bank of Montreal (BMO), Royal Bank of Canada (RBC), TD Canada Trust, and Melato specializing in fraud investigations, "
+                "KYC/KYB compliance, risk operations, team coaching, escalation handling, and process improvement.\n\n"
+                f"Application Question: {text}\n\n"
+                "Answer:"
+            )
+            try:
+                req = urllib.request.Request(
+                    "http://127.0.0.1:11434/api/generate",
+                    data=json.dumps({
+                        "model": "llama3.2:3b",
+                        "prompt": prompt,
+                        "stream": False,
+                        "options": {"temperature": 0.2, "num_predict": 180},
+                    }).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=12.0) as resp:
+                    body = json.loads(resp.read().decode("utf-8"))
+                    reply = (body.get("response") or "").strip().strip('"')
+                    if len(reply) >= 25:
+                        return reply, "ollama_narrative"
+            except Exception as exc:
+                logger.debug("Ollama narrative fallback (%s)", exc)
+
+            fallback_narrative = (
+                "In my financial operations and fraud risk roles across Scotiabank, BMO, RBC, and TD Canada Trust, "
+                "I addressed high-stakes operational challenges by immediately containing risk exposure, reviewing root causes with team members "
+                "in a constructive and psychologically safe 1-on-1 setting, and updating standard operating checklists so the entire team prevented recurrence."
+            )
+            return fallback_narrative, "heuristic_narrative_fallback"
+
+        return None, "unresolved"
+
     def _match_option(self, target: str, options: list[str]) -> str | None:
         """Find the closest option in a list of options."""
         target_clean = str(target).strip().lower()
@@ -306,7 +415,12 @@ class KnowledgeBook:
                     val = answers.get("github_url")
                 elif re.search(r"portfolio|personal\s+website", label_lower):
                     val = answers.get("portfolio_url")
-                elif re.search(r"current\s+city|city\s+of\s+residence", label_lower):
+                elif re.search(
+                    r"current\s+city|city\s+of\s+residence|location\s+where\s+you.*reside|"
+                    r"where\s+do\s+you\s+(?:currently\s+|permanently\s+)?reside|current\s+location|"
+                    r"where\s+are\s+you\s+(?:based|located)|location\s*\(city\)",
+                    label_lower,
+                ):
                     val = answers.get("city") or answers.get("location")
 
             # 3. Screening question resolver
@@ -314,9 +428,14 @@ class KnowledgeBook:
                 val, reason = self.resolve_screening_question(label, options)
 
             # 4. Checkbox / consent fallbacks
-            if val is None and str(getattr(ctrl, "control_type", "")).lower() in ("checkbox", "controltype.checkbox"):
+            ctype_str = str(getattr(ctrl, "control_type", "")).lower()
+            if val is None and ctype_str in ("checkbox", "controltype.checkbox"):
                 if getattr(ctrl, "legal", False) or any(p in label.lower() for p in ("agree", "consent", "terms", "privacy", "policy")):
                     val = True
+
+            # 5. Local Ollama LLM (llama3.2:3b) + heuristic fallback for custom role/scenario questions
+            if val is None and "file" not in ctype_str:
+                val, reason = self.resolve_with_llm_or_fallback(label, options, ctype_str)
 
             if val is not None:
                 if options:
