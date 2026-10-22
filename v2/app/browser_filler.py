@@ -68,41 +68,115 @@ def _file_record(path: Path, key: str) -> FileAttachmentRecord:
     )
 
 
-async def _find_input_for_key(page: Any, key: str, label_hint: str = "") -> Any:
+async def _find_input_for_key(page: Any, key: str, label_hint: str = "", value_hint: Any = None) -> Any:
     """Find a form control locator using multiple fallback strategies."""
     key_parts = key.split("_")
     key_camel = key_parts[0] + "".join(p.capitalize() for p in key_parts[1:]) if len(key_parts) > 1 else key
 
-    # 1. Exact ID (snake_case and camelCase)
+    # 0a. Check for button option toggles (e.g. Ashby yes/no buttons)
+    if value_hint is not None:
+        v_str = str(value_hint).strip().lower()
+        btn_loc = page.locator(f'[data-field-path*="{key}"] button[data-option="{v_str}" i], [id*="{key}"] button[data-option="{v_str}" i]')
+        try:
+            if await btn_loc.count() > 0 and await btn_loc.first.is_visible():
+                return btn_loc.first, f'button[data-option="{v_str}"]'
+        except Exception:
+            pass
+
+    # 0b. Check for data-field-path container (Ashby standard container)
     for k in (key, key_camel):
-        loc = page.locator(f"#{k}")
-        if await loc.count() > 0 and await loc.first.is_visible():
-            return loc.first, f"#{k}"
+        container = page.locator(f'[data-field-path="{k}" i], [data-field-path*="{k}" i]')
+        try:
+            if await container.count() > 0:
+                if value_hint is not None:
+                    v_str = str(value_hint).strip().lower()
+                    b_opt = container.locator(f'button[data-option="{v_str}" i]')
+                    if await b_opt.count() > 0 and await b_opt.first.is_visible():
+                        return b_opt.first, f'[data-field-path="{k}"] button[data-option="{v_str}"]'
+                    # Also check container buttons with matching inner text
+                    btns = container.locator('button')
+                    for b_idx in range(await btns.count()):
+                        btn_el = btns.nth(b_idx)
+                        b_text = (await btn_el.inner_text()).strip().lower()
+                        if b_text == v_str or (v_str in ("yes", "true", "1") and b_text == "yes") or (v_str in ("no", "false", "0") and b_text == "no"):
+                            if await btn_el.is_visible():
+                                return btn_el, f'[data-field-path="{k}"] button:{b_text}'
+                inputs = container.locator('input:not([type="hidden"]), select, textarea')
+                if await inputs.count() > 0 and await inputs.first.is_visible():
+                    return inputs.first, f'[data-field-path="{k}"] input'
+                any_input = container.locator('input, select, textarea')
+                if await any_input.count() > 0:
+                    return any_input.first, f'[data-field-path="{k}"] backing-input'
+        except Exception:
+            pass
+
+    # 0c. Check for radio group matching key (e.g. Ashby compound {option_id}_{field_id})
+    for k in (key, key_camel):
+        radios = page.locator(f'input[type="radio"][name*="{k}" i], input[type="radio"][id*="{k}" i]')
+        try:
+            r_count = await radios.count()
+            if r_count > 0:
+                if value_hint is not None:
+                    str_hint = str(value_hint).strip().lower()
+                    for idx in range(r_count):
+                        r = radios.nth(idx)
+                        label_text = await r.evaluate("""el => {
+                            if (el.labels && el.labels[0]) return el.labels[0].innerText || '';
+                            const parent = el.closest('label') || el.parentElement;
+                            return parent ? parent.innerText || '' : '';
+                        }""")
+                        val_attr = (await r.get_attribute("value") or "").lower()
+                        if str_hint in label_text.lower() or val_attr == str_hint:
+                            return r, f'radio:{k}={value_hint}'
+                return radios.first, f'radio:{k}'
+        except Exception:
+            pass
+
+    # 1. Exact ID (snake_case and camelCase) using safe [id="..."] selector to support IDs starting with digits/UUIDs
+    for k in (key, key_camel):
+        loc = page.locator(f'[id="{k}"]')
+        try:
+            if await loc.count() > 0 and await loc.first.is_visible():
+                return loc.first, f'[id="{k}"]'
+        except Exception:
+            pass
 
     for part in key_parts:
         if len(part) >= 4:
-            loc = page.locator(f"#{part}")
-            if await loc.count() > 0 and await loc.first.is_visible():
-                return loc.first, f"#{part}"
+            loc = page.locator(f'[id="{part}"]')
+            try:
+                if await loc.count() > 0 and await loc.first.is_visible():
+                    return loc.first, f'[id="{part}"]'
+            except Exception:
+                pass
 
     # 2. Exact Name (snake_case and camelCase)
     for k in (key, key_camel):
         loc = page.locator(f'[name="{k}"]')
-        if await loc.count() > 0 and await loc.first.is_visible():
-            return loc.first, f'[name="{k}"]'
+        try:
+            if await loc.count() > 0 and await loc.first.is_visible():
+                return loc.first, f'[name="{k}"]'
+        except Exception:
+            pass
 
     # 3. data-automation-id (Workday), data-qa, data-testid
     for k in (key, key_camel):
         for attr in ("data-automation-id", "data-qa", "data-testid"):
             loc = page.locator(f'[{attr}*="{k}" i]')
-            if await loc.count() > 0 and await loc.first.is_visible():
-                return loc.first, f'[{attr}*="{k}"]'
+            try:
+                if await loc.count() > 0 and await loc.first.is_visible():
+                    return loc.first, f'[{attr}*="{k}"]'
+            except Exception:
+                pass
 
-    # 4. Partial Name (e.g. key in cards[...][field0])
+    # 4. Partial Name or ID (e.g. key in cards[...][field0] or Ashby compound UUIDs)
     for k in (key, key_camel):
-        loc = page.locator(f'input[name*="{k}" i], select[name*="{k}" i], textarea[name*="{k}" i]')
-        if await loc.count() > 0 and await loc.first.is_visible():
-            return loc.first, f'name*="{k}"'
+        loc = page.locator(f'input[name*="{k}" i], select[name*="{k}" i], textarea[name*="{k}" i], [id*="{k}" i]')
+        try:
+            if await loc.count() > 0 and await loc.first.is_visible():
+                return loc.first, f'name/id*="{k}"'
+        except Exception:
+            pass
 
     # 5. Label text matching
     search_text = label_hint or key.replace("_", " ")
@@ -132,9 +206,12 @@ async def _find_input_for_key(page: Any, key: str, label_hint: str = "") -> Any:
 async def _find_file_input(page: Any, key: str) -> tuple[Any, str]:
     """Find the file input for resume or cover letter."""
     # Try direct id / name / data-qa
-    loc = page.locator(f'input[type="file"]#{key}, input[type="file"][name="{key}"], input[type="file"][data-qa*="{key}"]')
-    if await loc.count() > 0:
-        return loc.first, f'input[type="file"][name/id="{key}"]'
+    loc = page.locator(f'input[type="file"][id="{key}"], input[type="file"][name="{key}"], input[type="file"][data-qa*="{key}"]')
+    try:
+        if await loc.count() > 0:
+            return loc.first, f'input[type="file"][name/id="{key}"]'
+    except Exception:
+        pass
 
     # Look for file inputs matching key or keywords
     keywords = ["resume", "cv"] if "resume" in key.lower() or "cv" in key.lower() else ["cover", "letter"]
@@ -154,11 +231,16 @@ async def _find_file_input(page: Any, key: str) -> tuple[Any, str]:
 async def _read_back_value(locator: Any, tag: str, control_type: str) -> Any:
     """Read back the current value of a form control from the DOM."""
     try:
+        if tag == "button":
+            pressed = await locator.get_attribute("aria-pressed")
+            if pressed == "true":
+                return True
+            return (await locator.inner_text()).strip()
         if tag == "select":
             return await locator.evaluate(
                 "el => el.selectedIndex >= 0 ? el.options[el.selectedIndex].text.trim() : el.value"
             )
-        if control_type == "checkbox":
+        if control_type in ("checkbox", "radio"):
             return await locator.is_checked()
         if control_type == "file":
             return await locator.evaluate("el => el.files && el.files[0] ? el.files[0].name : ''")
@@ -170,7 +252,7 @@ async def _read_back_value(locator: Any, tag: str, control_type: str) -> Any:
 
 async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -> FieldFillReport:
     """Locate and fill a single form field, returning a verification report."""
-    locator, selector_used = await _find_input_for_key(page, key, label_hint=label)
+    locator, selector_used = await _find_input_for_key(page, key, label_hint=label, value_hint=value)
     if not locator:
         return FieldFillReport(
             key=key,
@@ -186,7 +268,11 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
     control_type = await locator.evaluate("el => (el.getAttribute('type') || '').toLowerCase()")
 
     try:
-        if tag == "select":
+        if tag == "button":
+            await locator.click()
+            await locator.dispatch_event("change")
+
+        elif tag == "select":
             str_val = str(value).strip()
             options_info = await locator.evaluate(
                 "el => Array.from(el.options).map((o, idx) => ({index: idx, value: o.value, text: o.text.trim()}))"
@@ -211,7 +297,14 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
 
         elif control_type == "checkbox":
             bool_val = value is True or str(value).lower() in ("yes", "true", "1")
-            await locator.set_checked(bool_val)
+            try:
+                await locator.set_checked(bool_val)
+            except Exception:
+                await locator.evaluate("""(el, checked) => {
+                    el.checked = checked;
+                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                    el.dispatchEvent(new Event('change', {bubbles: true}));
+                }""", bool_val)
             await locator.dispatch_event("change")
 
         elif control_type == "radio":
@@ -229,6 +322,8 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
         matched = False
         if control_type == "checkbox":
             matched = (read_back == (value is True or str(value).lower() in ("yes", "true", "1")))
+        elif control_type == "radio" or tag == "button":
+            matched = (read_back is True or str(value).strip().lower() in str(read_back).strip().lower())
         else:
             # Check for substring or exact match
             matched = str(value).strip().lower() in str(read_back).strip().lower() or str(read_back).strip().lower() in str(value).strip().lower()
@@ -265,6 +360,7 @@ async def fill_application_form(
     trace_path: Path | None = None,
     screenshot_path: Path | None = None,
     headless: bool = True,
+    headed_pause_ms: int = 4000,
 ) -> FormFillResult:
     """Open the application page, fill in all answers, attach files, and verify read-backs."""
     from collections.abc import Collection
@@ -282,7 +378,10 @@ async def fill_application_form(
         items_to_fill = {k: v for k, v in answers.items() if k in target_fields}
 
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=headless)
+        browser = await playwright.chromium.launch(
+            headless=headless,
+            slow_mo=100 if not headless else 0,
+        )
         context = await browser.new_context()
 
         if trace_path:
@@ -366,6 +465,11 @@ async def fill_application_form(
                 error=str(exc),
             )
         finally:
+            if not headless and headed_pause_ms > 0:
+                try:
+                    await page.wait_for_timeout(headed_pause_ms)
+                except Exception:
+                    pass
             trace_sha256 = None
             if trace_path:
                 await context.tracing.stop(path=str(trace_path))

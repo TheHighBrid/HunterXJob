@@ -40,6 +40,14 @@ DEFAULT_SCREENING_PATTERNS: list[tuple[re.Pattern[str], Any, str]] = [
     (re.compile(r"read\s+and\s+agree|disclaimer\s+and\s+consent|privacy\s+notice|terms\s+and\s+conditions", re.I), "Yes", "terms_consent"),
     # Non-compete / restrictive covenants
     (re.compile(r"non-compete|restrictive\s+covenant|conflict\s+of\s+interest", re.I), "No", "non_compete_default"),
+    # Current residence in Canada / location residency
+    (re.compile(r"currently\s+reside\s+in\s+canada|permanently\s+reside.*canada", re.I), "Yes", "reside_in_canada_default"),
+    # Shift / business hours alignment
+    (re.compile(r"comfortable\s+working\s+a\s+schedule|aligned\s+with\s+these\s+business\s+hours", re.I), "Yes", "business_hours_consent"),
+    # Communication medium consent
+    (re.compile(r"comfortable\s+with\s+writing\s+being\s+your\s+primary\s+communication", re.I), "Yes", "writing_comm_consent"),
+    # Interview recording consent
+    (re.compile(r"recording\s+consent|consent\s+to.*record", re.I), "Yes", "recording_consent"),
 ]
 
 
@@ -202,22 +210,68 @@ class KnowledgeBook:
         """Resolve answers for a list of FormControls from contact info, vault, and screening logic."""
         answers = self.export_all_vault_answers()
         resolved: dict[str, Any] = {}
+
+        # Standard ATS system fields mapping (Ashby, Greenhouse, etc.)
+        system_map = {
+            "_systemfield_name": answers.get("name") or answers.get("full_name"),
+            "_systemfield_first_name": answers.get("first_name"),
+            "_systemfield_last_name": answers.get("last_name"),
+            "_systemfield_email": answers.get("email"),
+            "_systemfield_phone": answers.get("phone"),
+            "_systemfield_location": answers.get("location") or answers.get("city"),
+            "_systemfield_linkedin": answers.get("linkedin_url"),
+            "_systemfield_github": answers.get("github_url"),
+            "_systemfield_website": answers.get("portfolio_url"),
+        }
+
         for ctrl in controls:
             key = getattr(ctrl, "key", "")
             label = getattr(ctrl, "label", "") or key
             options = getattr(ctrl, "options", [])
+
+            # 1. Exact match in answers or system field map
+            val = None
             if key in answers and answers[key] is not None:
                 val = answers[key]
+            elif key in system_map and system_map[key] is not None:
+                val = system_map[key]
+
+            # 2. Contact label heuristics (for ATS platforms that assign UUIDs to contact fields)
+            if val is None:
+                label_lower = label.strip().lower()
+                if re.search(r"^(?:full\s+)?name$", label_lower):
+                    val = answers.get("name") or answers.get("full_name")
+                elif re.search(r"^first\s+name$", label_lower):
+                    val = answers.get("first_name")
+                elif re.search(r"^last\s+name$", label_lower):
+                    val = answers.get("last_name")
+                elif re.search(r"^(?:e-?mail|email\s+address)$", label_lower):
+                    val = answers.get("email")
+                elif re.search(r"^(?:phone|phone\s+number|mobile)$", label_lower):
+                    val = answers.get("phone")
+                elif re.search(r"linkedin", label_lower):
+                    val = answers.get("linkedin_url")
+                elif re.search(r"github", label_lower):
+                    val = answers.get("github_url")
+                elif re.search(r"portfolio|personal\s+website", label_lower):
+                    val = answers.get("portfolio_url")
+                elif re.search(r"current\s+city|city\s+of\s+residence", label_lower):
+                    val = answers.get("city") or answers.get("location")
+
+            # 3. Screening question resolver
+            if val is None:
+                val, reason = self.resolve_screening_question(label, options)
+
+            # 4. Checkbox / consent fallbacks
+            if val is None and str(getattr(ctrl, "control_type", "")).lower() in ("checkbox", "controltype.checkbox"):
+                if getattr(ctrl, "legal", False) or any(p in label.lower() for p in ("agree", "consent", "terms", "privacy", "policy")):
+                    val = True
+
+            if val is not None:
                 if options:
                     matched = self._match_option(str(val), options)
                     resolved[key] = matched or val
                 else:
                     resolved[key] = val
-                continue
-            val, reason = self.resolve_screening_question(label, options)
-            if val is not None:
-                resolved[key] = val
-            elif str(getattr(ctrl, "control_type", "")).lower() in ("checkbox", "controltype.checkbox"):
-                if getattr(ctrl, "legal", False) or any(p in label.lower() for p in ("agree", "consent", "terms", "privacy", "policy")):
-                    resolved[key] = True
+
         return resolved

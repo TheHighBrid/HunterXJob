@@ -90,6 +90,7 @@ def _cmd_autonomous_run(args: argparse.Namespace) -> int:
         min_score_threshold=float(getattr(args, "min_score", 65.0) or 65.0),
         max_applications=int(getattr(args, "limit", 10) or 10),
         headless=not bool(getattr(args, "headed", False)),
+        headed_pause_ms=int(getattr(args, "pause", 5) or 5) * 1000,
         profile_data=profile_data,
     )
 
@@ -216,6 +217,7 @@ def main(argv: list[str] | None = None) -> int:
             command.add_argument("--min-score", type=float, default=65.0, help="minimum candidate match score threshold (default: 65.0)")
             command.add_argument("--profile", help="path to custom candidate profile YAML")
             command.add_argument("--headed", action="store_true", help="run browser in visible (headed) mode for inspection")
+            command.add_argument("--pause", type=int, default=5, help="seconds to pause and inspect the filled form in headed mode (default: 5)")
     from app.cli_profile import register
 
     register(sub)

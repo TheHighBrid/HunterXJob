@@ -63,6 +63,7 @@ class AutonomousConfig:
     min_score_threshold: float = 65.0
     max_applications: int = 10
     headless: bool = True
+    headed_pause_ms: int = 4000
     output_dir: Path | None = None
     profile_data: dict[str, Any] | None = None
 
@@ -271,6 +272,7 @@ class AutonomousRunner:
             files=files,
             labels=labels,
             headless=self.config.headless,
+            headed_pause_ms=self.config.headed_pause_ms,
             screenshot_path=sc_path,
         )
 
