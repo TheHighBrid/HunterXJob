@@ -106,12 +106,12 @@ async def _find_input_for_key(page: Any, key: str, label_hint: str = "", value_h
                         if b_text == v_str or (v_str in ("yes", "true", "1") and b_text == "yes") or (v_str in ("no", "false", "0") and b_text == "no"):
                             if await btn_el.is_visible():
                                 return btn_el, f'[data-field-path="{k}"] button:{b_text}'
-                    # Check radio buttons inside container matching value_hint
-                    c_radios = container.locator('input[type="radio"]')
-                    cr_count = await c_radios.count()
-                    if cr_count > 0:
-                        for idx in range(cr_count):
-                            r = c_radios.nth(idx)
+                    # Check radio or checkbox buttons inside container matching value_hint
+                    c_options = container.locator('input[type="radio"], input[type="checkbox"]')
+                    co_count = await c_options.count()
+                    if co_count > 0:
+                        for idx in range(co_count):
+                            r = c_options.nth(idx)
                             label_text = await r.evaluate("""el => {
                                 if (el.labels && el.labels[0]) return el.labels[0].innerText || '';
                                 const parent = el.closest('label') || el.parentElement;
@@ -119,7 +119,8 @@ async def _find_input_for_key(page: Any, key: str, label_hint: str = "", value_h
                             }""")
                             val_attr = (await r.get_attribute("value") or "").lower()
                             if v_str in label_text.strip().lower() or label_text.strip().lower() in v_str or val_attr == v_str:
-                                return r, f'[data-field-path="{k}"] radio:{v_str[:30]}'
+                                opt_type = (await r.get_attribute("type")) or "option"
+                                return r, f'[data-field-path="{k}"] {opt_type}:{v_str[:30]}'
                 inputs = container.locator('input:not([type="hidden"]), select, textarea')
                 if await inputs.count() > 0 and await inputs.first.is_visible():
                     return inputs.first, f'[data-field-path="{k}"] input'
@@ -315,15 +316,34 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
             await locator.dispatch_event("change")
 
         elif control_type == "checkbox":
-            bool_val = value is True or str(value).lower() in ("yes", "true", "1")
+            bool_val = value is not False and str(value).strip().lower() not in ("no", "false", "0", "")
             try:
-                await locator.set_checked(bool_val)
+                await locator.scroll_into_view_if_needed()
             except Exception:
-                await locator.evaluate("""(el, checked) => {
-                    el.checked = checked;
-                    el.dispatchEvent(new Event('input', {bubbles: true}));
-                    el.dispatchEvent(new Event('change', {bubbles: true}));
-                }""", bool_val)
+                pass
+            clicked_label = await locator.evaluate("""(el, targetChecked) => {
+                if (el.checked !== targetChecked) {
+                    if (el.labels && el.labels[0]) {
+                        el.labels[0].click();
+                        return true;
+                    }
+                    const parentLabel = el.closest('label');
+                    if (parentLabel) {
+                        parentLabel.click();
+                        return true;
+                    }
+                }
+                return false;
+            }""", bool_val)
+            if not clicked_label:
+                try:
+                    await locator.set_checked(bool_val)
+                except Exception:
+                    await locator.evaluate("""(el, checked) => {
+                        el.checked = checked;
+                        el.dispatchEvent(new Event('input', {bubbles: true}));
+                        el.dispatchEvent(new Event('change', {bubbles: true}));
+                    }""", bool_val)
             await locator.dispatch_event("change")
 
         elif control_type == "radio":
@@ -366,7 +386,8 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
         read_back = await _read_back_value(locator, tag, control_type)
         matched = False
         if control_type == "checkbox":
-            matched = (read_back == (value is True or str(value).lower() in ("yes", "true", "1")))
+            expected_bool = value is not False and str(value).strip().lower() not in ("no", "false", "0", "")
+            matched = (read_back == expected_bool)
         elif control_type == "radio" or tag == "button":
             matched = (read_back is True or str(value).strip().lower() in str(read_back).strip().lower())
         else:

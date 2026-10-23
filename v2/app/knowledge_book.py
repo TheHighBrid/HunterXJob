@@ -137,6 +137,10 @@ class KnowledgeBook:
         """Resolve a screening question using pattern rules, custom answers, or profile facts."""
         text = label.strip()
 
+        # 0. Single-option acknowledgment checkbox (e.g. on-call policy acknowledgment)
+        if options and len(options) == 1:
+            return options[0], "single_option_acknowledgment"
+
         # 1. Direct custom answer override if configured
         for key, val in self.custom_answers.items():
             if key.lower() in text.lower():
@@ -170,8 +174,11 @@ class KnowledgeBook:
                 if any(b in " ".join(emp_names) for b in ("scotiabank", "bmo", "rbc", "td", "bank", "melato")):
                     val = "Yes"
                     if options:
-                        val = self._match_option(val, options) or val
-                    return val, "profile_financial_experience"
+                        matched = self._match_option(val, options)
+                        if matched:
+                            return matched, "profile_financial_experience"
+                    else:
+                        return val, "profile_financial_experience"
 
         # 3c. Language proficiency checks (French / English)
         if re.search(r"french|français", text, re.I):
@@ -194,11 +201,14 @@ class KnowledgeBook:
             pref = self.preferences.get("willing_to_relocate", True)
             val = "Yes" if pref else "No"
             if options:
-                val = self._match_option(val, options) or val
-            return val, "preference_relocation"
+                matched = self._match_option(val, options)
+                if matched:
+                    return matched, "preference_relocation"
+            else:
+                return val, "preference_relocation"
 
-        # 5. Salary expectation
-        if re.search(r"salary|compensation|expected\s+rate|annual\s+salary", text, re.I):
+        # 5. Salary expectation (only for open-ended text/number fields without custom choice options)
+        if not options and re.search(r"salary|compensation|expected\s+rate|annual\s+salary", text, re.I):
             desired = self.preferences.get("desired_salary", "") or "75000"
             return desired, "preference_salary"
 
@@ -307,12 +317,13 @@ class KnowledgeBook:
         ctype_lower = str(control_type).lower()
         if any(t in ctype_lower for t in ("textarea", "text")):
             prompt = (
-                "Write a concise, first-person ('I...') job application answer in 3 to 4 sentences (plain text only, no placeholders, no bullet points). "
+                "Write ONLY the direct first-person ('I...') job application answer in 3 to 4 sentences "
+                "(plain text only, no introductory preamble, no placeholders, no bullet points). "
                 "Candidate background: Mohamed Alem, based in Ottawa, ON, bilingual English/French, 5+ years of experience across Scotiabank, "
                 "Bank of Montreal (BMO), Royal Bank of Canada (RBC), TD Canada Trust, and Melato specializing in fraud investigations, "
                 "KYC/KYB compliance, risk operations, team coaching, escalation handling, and process improvement.\n\n"
                 f"Application Question: {text}\n\n"
-                "Answer:"
+                "Direct Answer:"
             )
             try:
                 req = urllib.request.Request(
@@ -329,6 +340,8 @@ class KnowledgeBook:
                 with urllib.request.urlopen(req, timeout=12.0) as resp:
                     body = json.loads(resp.read().decode("utf-8"))
                     reply = (body.get("response") or "").strip().strip('"')
+                    reply = re.sub(r"^(?:Here(?:'s|\s+is)[^:]*:|I'd be happy to[^:]*:)\s*", "", reply, flags=re.I)
+                    reply = " ".join(reply.split())
                     if len(reply) >= 25:
                         return reply, "ollama_narrative"
             except Exception as exc:
@@ -401,9 +414,9 @@ class KnowledgeBook:
                 label_lower = label.strip().lower()
                 if re.search(r"^(?:full\s+)?name$", label_lower):
                     val = answers.get("name") or answers.get("full_name")
-                elif re.search(r"^first\s+name$", label_lower):
+                elif re.search(r"^(?:preferred\s+)?first\s+name$", label_lower):
                     val = answers.get("first_name")
-                elif re.search(r"^last\s+name$", label_lower):
+                elif re.search(r"^(?:preferred\s+)?last\s+name$", label_lower):
                     val = answers.get("last_name")
                 elif re.search(r"^(?:e-?mail|email\s+address)$", label_lower):
                     val = answers.get("email")
@@ -416,7 +429,7 @@ class KnowledgeBook:
                 elif re.search(r"portfolio|personal\s+website", label_lower):
                     val = answers.get("portfolio_url")
                 elif re.search(
-                    r"current\s+city|city\s+of\s+residence|location\s+where\s+you.*reside|"
+                    r"^location$|current\s+city|city\s+of\s+residence|location\s+where\s+you.*reside|"
                     r"where\s+do\s+you\s+(?:currently\s+|permanently\s+)?reside|current\s+location|"
                     r"where\s+are\s+you\s+(?:based|located)|location\s*\(city\)",
                     label_lower,
@@ -433,8 +446,8 @@ class KnowledgeBook:
                 if getattr(ctrl, "legal", False) or any(p in label.lower() for p in ("agree", "consent", "terms", "privacy", "policy")):
                     val = True
 
-            # 5. Local Ollama LLM (llama3.2:3b) + heuristic fallback for custom role/scenario questions
-            if val is None and "file" not in ctype_str:
+            # 5. Local Ollama LLM (llama3.2:3b) + heuristic fallback for required custom role/scenario questions
+            if val is None and getattr(ctrl, "required", False) and "file" not in ctype_str:
                 val, reason = self.resolve_with_llm_or_fallback(label, options, ctype_str)
 
             if val is not None:
