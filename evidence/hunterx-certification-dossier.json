@@ -24,7 +24,7 @@
     }
   },
   "evidence_ledger": {
-    "ledger_digest": "12a11d406ed4d9b834a0ec7ac3dfb0b02dd8c723a31ed0ce1d38b85ff8492f3c",
+    "ledger_digest": "4d106675849210efd49e4669d89a1df752e3040a0a72b5f084939b11582eb763",
     "records": [
       {
         "company": "float",
@@ -97,11 +97,23 @@
         "submitted_at": "2026-10-23 12:18:04.276755",
         "title": "Manager, Credit Risk",
         "url": "https://jobs.ashbyhq.com/jobber/e10af44f-1a6f-4c4d-a63e-d5de27f9a458"
+      },
+      {
+        "company": "wealthsimple",
+        "evidence_snapshot_hash": "8e661d68d18a61c79dc98cf920190334dfb6d3c98c68b7534a2cfc2dfab8ddc0",
+        "is_concrete_confirmation": true,
+        "job_id": "6e0c0bd5-6d33-45d3-a2f9-b4805637cab2",
+        "platform": "ashby",
+        "receipt_sha256": "dbaec69f32d764475d9e772d4e3949840933e0dd952790598301e7fd79e368c0",
+        "receipt_snippet": "posting.  Overview Application Success  Thanks for applying to Wealthsimple \ud83d\ude4c  Powered by\u00a0  Privacy PolicySecurityVulner",
+        "submitted_at": "2026-10-23 12:23:14.613025",
+        "title": "Senior Specialist, Incident Response",
+        "url": "https://jobs.ashbyhq.com/wealthsimple/108e4513-0e74-4e4c-af3c-8e66e4222db8"
       }
     ],
-    "total_verified_submissions": 6
+    "total_verified_submissions": 7
   },
-  "generated_at": "2026-10-23T12:18:08.254483+00:00",
+  "generated_at": "2026-10-23T12:23:33.961395+00:00",
   "milestones": {
     "gate1": {
       "blockers": [],
@@ -132,7 +144,7 @@
         "zero_false_positive_submissions": true
       },
       "metadata": {
-        "credited_submissions": 6,
+        "credited_submissions": 7,
         "distinct_employers": 4,
         "platforms": [
           "ashby"
@@ -174,11 +186,11 @@
   "safety_invariants": {
     "allow_real_application_submit": true,
     "captcha_or_mfa_bypass_attempted": false,
-    "credited_real_submissions": 6,
+    "credited_real_submissions": 7,
     "fail_closed_on_unmatched_required_fields": true,
     "false_submitted_records": 0,
     "uncertain_outcomes_credited_as_submitted": 0
   },
   "schema_version": "hunterx-certification-v2",
-  "source_commit": "7d9469e2703861b67e18bbcf7f1e42375c0fdebc"
+  "source_commit": "d586abd4f060dfe2cdd25c940c11fb59e779b5e5"
 }
