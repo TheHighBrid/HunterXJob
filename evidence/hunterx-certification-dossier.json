@@ -24,7 +24,7 @@
     }
   },
   "evidence_ledger": {
-    "ledger_digest": "c8454ec934cefed24ee5886749ee3d6e3e3eefcbbcb7076195a52ee61f190137",
+    "ledger_digest": "12a11d406ed4d9b834a0ec7ac3dfb0b02dd8c723a31ed0ce1d38b85ff8492f3c",
     "records": [
       {
         "company": "float",
@@ -85,11 +85,23 @@
         "submitted_at": "2026-10-23 00:00:54.992764",
         "title": "Product Operations Manager, Cards & Spend Management",
         "url": "https://jobs.ashbyhq.com/float/a0438a03-2952-4e38-9c72-ee132d344437"
+      },
+      {
+        "company": "jobber",
+        "evidence_snapshot_hash": "9cc8e3353fd7b502a8321d495cdac667490c2b8bdbaacbd56347b27fa312edf0",
+        "is_concrete_confirmation": true,
+        "job_id": "c7c35a74-2e74-4247-887b-136ba09f8ca3",
+        "platform": "ashby",
+        "receipt_sha256": "61e00901e14c6664f674a54177ef944e6cd5bf695fb9910095e2b57d37e2e676",
+        "receipt_snippet": "Success Your application was successfully submitted. We'll contact you if there are next steps.",
+        "submitted_at": "2026-10-23 12:18:04.276755",
+        "title": "Manager, Credit Risk",
+        "url": "https://jobs.ashbyhq.com/jobber/e10af44f-1a6f-4c4d-a63e-d5de27f9a458"
       }
     ],
-    "total_verified_submissions": 5
+    "total_verified_submissions": 6
   },
-  "generated_at": "2026-10-23T12:01:12.271338+00:00",
+  "generated_at": "2026-10-23T12:18:08.254483+00:00",
   "milestones": {
     "gate1": {
       "blockers": [],
@@ -120,8 +132,8 @@
         "zero_false_positive_submissions": true
       },
       "metadata": {
-        "credited_submissions": 5,
-        "distinct_employers": 3,
+        "credited_submissions": 6,
+        "distinct_employers": 4,
         "platforms": [
           "ashby"
         ]
@@ -162,11 +174,11 @@
   "safety_invariants": {
     "allow_real_application_submit": true,
     "captcha_or_mfa_bypass_attempted": false,
-    "credited_real_submissions": 5,
+    "credited_real_submissions": 6,
     "fail_closed_on_unmatched_required_fields": true,
     "false_submitted_records": 0,
     "uncertain_outcomes_credited_as_submitted": 0
   },
   "schema_version": "hunterx-certification-v2",
-  "source_commit": "c5009b61256bbacd8c49caa478cc6318de5296d4"
+  "source_commit": "7d9469e2703861b67e18bbcf7f1e42375c0fdebc"
 }

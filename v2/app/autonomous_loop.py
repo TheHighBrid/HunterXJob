@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -326,7 +327,7 @@ class AutonomousRunner:
                         from_stage=PipelineStage.ready_to_apply.value,
                         to_stage=PipelineStage.submitted.value,
                         message="Application submitted autonomously with verified proof",
-                        payload_json=f'{{"receipt": "{fill_res.confirmation_text}", "sha256": "{proof_sha}"}}',
+                        payload_json=json.dumps({"receipt": fill_res.confirmation_text, "sha256": proof_sha}),
                     )
                 )
                 self.db.commit()
