@@ -30,9 +30,9 @@ def test_gap_categories_are_locked():
         "role_screening": (8, 3),
         "free_text_essay": (5, 4),
         "legal_consent": (7, 1),
-        "prior_employment": (4, 0),
+        "prior_employment": (1, 0),
         "sensitive_self_id": (4, 1),
-        "option_mismatch": (4, 0),
+        "option_mismatch": (2, 0),
         "referral": (0, 2),
         "work_authorization": (1, 0),
     }

@@ -34,6 +34,7 @@ from app.greenhouse_form import (
     looks_like,
     shared_answer_key,
 )
+from app.prior_employment import tag_prior_employer
 
 LEVER_JOBS_HOST = "jobs.lever.co"
 LEVER_API_HOST = "api.lever.co"
@@ -422,6 +423,7 @@ def parse_lever_apply_page(html_text: str, ref: LeverJobRef, *, job_location: st
         warnings.append("form contains field types this engine does not support")
     if parser.captcha:
         warnings.append("page carries an hCaptcha at submit; a live submission would require manual handoff")
+    tag_prior_employer(controls, ref.company)
     return RealForm(
         platform="lever",
         source="lever_page",
