@@ -274,6 +274,7 @@ case "$cmd" in
   migrate) py_cli migrate ;;
   cycle) py_cli cycle ;;
   autonomous-run) shift; py_cli autonomous-run "$@" ;;
+  certify) shift; py_cli certify "$@" ;;
   dedup-scan) py_cli dedup-scan ;;
   liveness) py_cli liveness ;;
   api-key) py_cli api-key ;;

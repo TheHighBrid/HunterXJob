@@ -190,6 +190,45 @@ def _cmd_openapi(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_certify(args: argparse.Namespace) -> int:
+    from app.certification_system import DEFAULT_DB_PATH, DEFAULT_DOSSIER_PATH, build_certification_dossier
+
+    db_path = Path(args.db) if getattr(args, "db", None) else DEFAULT_DB_PATH
+    output_path = Path(args.output) if getattr(args, "output", None) else DEFAULT_DOSSIER_PATH
+    dossier = build_certification_dossier(db_path=db_path, output_path=output_path)
+
+    print("\n" + "=" * 68)
+    print("      HUNTERXJOB v2 - AUTONOMOUS SUBMISSION CERTIFICATION DOSSIER")
+    print("=" * 68)
+    print(f"Status:            {dossier['overall_certification_status']}")
+    print(f"Commit:            {dossier['source_commit']}")
+    print(f"Generated:         {dossier['generated_at']}")
+    print(f"Candidate:         {dossier['candidate']}")
+    print("-" * 68)
+
+    for gid, m in dossier["milestones"].items():
+        mark = "✓ PASSED" if m["passed"] else "✗ BLOCKED"
+        print(f"[{mark}] {m['title']} ({m['score']:.0f}%)")
+        for check, passed in m["checks"].items():
+            c_mark = "  ✓" if passed else "  ✗"
+            print(f"   {c_mark} {check}")
+        if m["blockers"]:
+            print(f"   Blockers: {', '.join(m['blockers'])}")
+
+    print("-" * 68)
+    ledger = dossier["evidence_ledger"]
+    print(f"Verified Live Submissions ({ledger['total_verified_submissions']}):")
+    for r in ledger["records"]:
+        print(f"  • {r['company']} - {r['title']} ({r['platform']})")
+        print(f"    Receipt SHA-256: {r['receipt_sha256'][:16]}... | Timestamp: {r['submitted_at']}")
+        print(f"    Snippet: \"{r['receipt_snippet'][:80]}...\"")
+
+    print("-" * 68)
+    print(f"Dossier written to: {output_path}")
+    print("=" * 68 + "\n")
+    return 0 if dossier["overall_certification_status"] == "CERTIFIED" else 1
+
+
 COMMANDS = {
     "version": (_cmd_version, "print the version"),
     "migrate": (_cmd_migrate, "apply pending database migrations (backs up first)"),
@@ -203,6 +242,7 @@ COMMANDS = {
     "check-auth": (_cmd_check_auth, "report the API authentication posture"),
     "openapi": (_cmd_openapi, "write (or --check) the OpenAPI snapshot used for the mobile types"),
     "autonomous-run": (_cmd_autonomous_run, "run the fully autonomous discovery-to-submission engine"),
+    "certify": (_cmd_certify, "generate and verify the official autonomy certification dossier and evidence ledger"),
 }
 
 
@@ -218,6 +258,9 @@ def main(argv: list[str] | None = None) -> int:
             command.add_argument("--check", action="store_true", help="exit 1 if the snapshot is out of date")
         if name == "backup":
             command.add_argument("--keep", type=int, help="number of backups to keep (default: BACKUP_RETENTION)")
+        if name == "certify":
+            command.add_argument("--db", help="path to database (default: v2/data/hunterxjob-v2.db)")
+            command.add_argument("--output", help="path to output certification dossier JSON (default: evidence/hunterx-certification-dossier.json)")
         if name == "autonomous-run":
             command.add_argument("--live", action="store_true", help="enable live submission (requires ALLOW_LIVE_SUBMISSION=true)")
             command.add_argument("--limit", type=int, default=10, help="maximum applications to process in this run (default: 10)")
