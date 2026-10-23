@@ -209,9 +209,11 @@ async def execute_live_submission(
 
             if await is_captcha_challenge_visible(page):
                 captcha_detected = True
+                # Dynamically keep at least 30s remaining as long as the user is actively solving the challenge
+                max_ticks = max(max_ticks, tick + 60)
                 if not captcha_popup_notified:
                     captcha_popup_notified = True
-                    max_ticks = 360  # Extend wait up to 180 seconds while CAPTCHA is solved
+                    max_ticks = max(max_ticks, tick + 600)  # Allow up to 5 minutes total
                     try:
                         await page.bring_to_front()
                         import subprocess
@@ -222,7 +224,7 @@ async def execute_live_submission(
                     import sys
                     print(
                         "\n🔒 [HunterXJob] Interactive CAPTCHA challenge popped up after clicking Submit!\n"
-                        "   👉 Please solve the CAPTCHA puzzle in the open browser window (waiting up to 180s)...\a",
+                        "   👉 Please solve the CAPTCHA puzzle in the open browser window (Hunter will wait while you solve it)...\a",
                         file=sys.stderr,
                         flush=True,
                     )
