@@ -24,7 +24,7 @@
     }
   },
   "evidence_ledger": {
-    "ledger_digest": "a0be6c8a328d584e11b4d98bbb0d6d7a8d714faf5eeea0e00e98510a9b9f22c8",
+    "ledger_digest": "24984bc77f36354f8a478a7dc2f5d8c7ca88c3651bd3dfe1bdb0e8689dce755b",
     "records": [
       {
         "company": "float",
@@ -121,11 +121,23 @@
         "submitted_at": "2026-10-23 15:44:01.849399",
         "title": "Technical Program Manager, AI Delivery",
         "url": "https://jobs.ashbyhq.com/cohere/41cb2a12-e33a-4368-a9f8-0ae0d19c023e"
+      },
+      {
+        "company": "1password",
+        "evidence_snapshot_hash": "82b05f9b9e5f311e8750f95ef1a28c1f9df717aa4c8c3dd599b158fb1329f6eb",
+        "is_concrete_confirmation": true,
+        "job_id": "c19dd8e7-d905-4167-a35e-ff7aee65f178",
+        "platform": "ashby",
+        "receipt_sha256": "f278fd054e4d03590dd15ae67b28fe79f5e973c363ecd5a72c7ddf17eae07388",
+        "receipt_snippet": "ank you for your interest in 1Password. We have received your application and are excited that you\u2019ve found your way to",
+        "submitted_at": "2026-10-23 16:19:02.240481",
+        "title": "Manager, Security Incident Response",
+        "url": "https://jobs.ashbyhq.com/1password/423fd747-cf5d-46f6-a439-134d3bef3a5c"
       }
     ],
-    "total_verified_submissions": 8
+    "total_verified_submissions": 9
   },
-  "generated_at": "2026-10-23T15:44:45.925709+00:00",
+  "generated_at": "2026-10-23T16:20:47.781191+00:00",
   "milestones": {
     "gate1": {
       "blockers": [],
@@ -156,8 +168,8 @@
         "zero_false_positive_submissions": true
       },
       "metadata": {
-        "credited_submissions": 8,
-        "distinct_employers": 4,
+        "credited_submissions": 9,
+        "distinct_employers": 5,
         "platforms": [
           "ashby"
         ]
@@ -198,11 +210,11 @@
   "safety_invariants": {
     "allow_real_application_submit": true,
     "captcha_or_mfa_bypass_attempted": false,
-    "credited_real_submissions": 8,
+    "credited_real_submissions": 9,
     "fail_closed_on_unmatched_required_fields": true,
     "false_submitted_records": 0,
     "uncertain_outcomes_credited_as_submitted": 0
   },
   "schema_version": "hunterx-certification-v2",
-  "source_commit": "062d90c00012bd24a7847d87c5a79393f746830d"
+  "source_commit": "ef847c22a3c166b9c34a3da758c77537a02eedcd"
 }
