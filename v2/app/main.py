@@ -16,6 +16,7 @@ from app.adapter_runtime import ADAPTER_CATALOG
 from app.ai import LocalAI
 from app.api_schemas import HealthOut
 from app.config import Settings, get_settings
+from app.dashboard_template import get_dashboard_html
 from app.db import SessionLocal, get_db, init_db
 from app.discovery import discover_all, upsert_jobs
 from app.flags import ensure_flags, snapshot
@@ -100,28 +101,7 @@ class AnswerIn(BaseModel):
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard() -> str:
-    return """<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><title>HunterXJob v2</title>
-<style>body{font-family:system-ui;background:#111;color:#eee;max-width:960px;margin:auto;padding:24px}button{padding:12px;margin:4px;background:#eee;color:#111;border:0;border-radius:8px}input{padding:10px;width:60%;border-radius:8px;border:0}pre{white-space:pre-wrap;background:#1d1d1d;padding:16px;border-radius:10px}</style></head>
-<body><h1>HunterXJob v2</h1><p>Bounded autonomy. Dry-run by default. Live submit stays locked until an adapter is certified.</p>
-<p><input id='key' type='password' placeholder='API key (stored in this browser only)'><button onclick=\"saveKey()\">Save key</button></p>
-<button onclick=\"run('/api/discovery/run')\">Discover</button>
-<button onclick=\"run('/api/scoring/run')\">Score</button>
-<button onclick=\"run('/api/scheduler/run')\">Run cycle</button>
-<button onclick=\"load('/api/scheduler/status')\">Scheduler</button>
-<button onclick=\"load('/api/jobs')\">Jobs</button>
-<button onclick=\"load('/api/applications')\">Applications</button>
-<button onclick=\"load('/api/review-tasks')\">Review queue</button>
-<button onclick=\"load('/api/adapters')\">Adapters</button>
-<button onclick=\"load('/api/flags')\">Flags</button>
-<button onclick=\"load('/api/health')\">Health</button>
-<pre id='out'>Ready.</pre>
-<script>
-key.value=localStorage.getItem('hunterxKey')||'';
-function saveKey(){localStorage.setItem('hunterxKey',key.value);out.textContent='Key saved in this browser.'}
-function hdrs(){return {'X-API-Key':localStorage.getItem('hunterxKey')||''}}
-async function run(u){out.textContent='Working...';let r=await fetch(u,{method:'POST',headers:hdrs()});out.textContent=JSON.stringify(await r.json(),null,2)}
-async function load(u){let r=await fetch(u,{headers:hdrs()});out.textContent=JSON.stringify(await r.json(),null,2)}
-</script></body></html>"""
+    return get_dashboard_html()
 
 
 @app.get("/api/health", response_model=HealthOut, response_model_exclude_none=True)
@@ -267,6 +247,71 @@ def autonomous_status(db: DbSession) -> dict[str, object]:
         "unattended_mode": is_enabled(db, "unattended_mode"),
         "adapters_available": [k for k, v in ADAPTER_CATALOG.items() if v.maturity.value != "unsupported"],
     }
+
+
+@api.get("/api/certification/dossier")
+def get_certification_dossier() -> dict[str, object]:
+    import json
+    from app.certification_system import DEFAULT_DOSSIER_PATH, build_certification_dossier
+
+    if DEFAULT_DOSSIER_PATH.exists():
+        try:
+            return json.loads(DEFAULT_DOSSIER_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return build_certification_dossier()
+
+
+@api.get("/api/vault/catalog")
+def get_vault_catalog() -> dict[str, object]:
+    from app.question_catalog import QUESTION_CATALOG
+
+    items = []
+    for item in QUESTION_CATALOG:
+        items.append({
+            "id": item.get("canonical_key") or item.get("id"),
+            "canonical_key": item.get("canonical_key"),
+            "label": item.get("label", ""),
+            "category": item.get("category", "general"),
+            "setup_group": item.get("setup_group", "General"),
+            "resolved_answer": (item.get("suggested_answers") or ["Grounded profile facts"])[0],
+            "description": item.get("description", ""),
+        })
+    return {
+        "catalog_size": len(items),
+        "items": items,
+        "candidate": {
+            "name": "Mohamed Alem",
+            "location": "Ottawa, ON, Canada",
+            "languages": ["English (Fluent)", "French (Bilingual)"],
+            "work_authorization": "Canadian Citizen / Authorized without sponsorship",
+        },
+    }
+
+
+@api.post("/api/jobs/{job_id}/run-autonomous")
+def run_job_autonomous(job_id: str, db: DbSession, current: CurrentSettings) -> dict[str, object]:
+    from app.autonomous_loop import AutonomousConfig, AutonomousRunner
+    from app.models import Job
+
+    job = db.get(Job, job_id)
+    if not job:
+        raise HTTPException(404, f"Job {job_id} not found")
+
+    try:
+        runner = AutonomousRunner(db, current, AutonomousConfig())
+        record = runner.run_job(job)
+        return {
+            "job_id": record.job_id,
+            "status": record.status,
+            "submitted": record.submitted,
+            "platform": record.platform,
+            "stage": record.stage,
+            "evidence_sha256": record.evidence_sha256,
+            "error": record.error,
+        }
+    except Exception as exc:
+        raise HTTPException(409, f"autonomous job execution failed: {exc}") from exc
 
 
 app.include_router(api)

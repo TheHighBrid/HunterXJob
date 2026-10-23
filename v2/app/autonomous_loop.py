@@ -121,6 +121,21 @@ class AutonomousRunner:
         """Synchronous wrapper for the autonomous cycle."""
         return asyncio.run(self.run_async())
 
+    def run_job(self, job: Job) -> AutonomousApplicationRecord:
+        """Synchronous wrapper to process a single job."""
+        return asyncio.run(self.run_job_async(job))
+
+    async def run_job_async(self, job: Job) -> AutonomousApplicationRecord:
+        """Process a single job autonomously."""
+        if kill_switch_engaged(self.db):
+            raise RuntimeError("Autonomous run aborted: global kill-switch is engaged")
+
+        profile_dict = self.config.profile_data or verified_profile(self.db) or {}
+        book = KnowledgeBook(profile_dict)
+        out_dir = self.config.output_dir or Path(getattr(self.settings, "artifact_dir", None) or "/tmp/hunterx_autonomous")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        return await self._process_job(job, book, out_dir)
+
     async def run_async(self) -> AutonomousRunSummary:
         summary = AutonomousRunSummary(started_at=datetime.now(UTC).isoformat())
 

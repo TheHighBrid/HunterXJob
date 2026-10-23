@@ -4267,6 +4267,26 @@
         ]
       }
     },
+    "/api/certification/dossier": {
+      "get": {
+        "operationId": "get_certification_dossier_api_certification_dossier_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Certification Dossier Api Certification Dossier Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Certification Dossier"
+      }
+    },
     "/api/discovery/run": {
       "post": {
         "operationId": "run_discovery_api_discovery_run_post",
@@ -4732,6 +4752,47 @@
         "tags": [
           "materials"
         ]
+      }
+    },
+    "/api/jobs/{job_id}/run-autonomous": {
+      "post": {
+        "operationId": "run_job_autonomous_api_jobs__job_id__run_autonomous_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Job Autonomous Api Jobs  Job Id  Run Autonomous Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Job Autonomous"
       }
     },
     "/api/jobs/{job_id}/unlink-duplicate": {
@@ -5894,6 +5955,26 @@
         "tags": [
           "remote"
         ]
+      }
+    },
+    "/api/vault/catalog": {
+      "get": {
+        "operationId": "get_vault_catalog_api_vault_catalog_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Vault Catalog Api Vault Catalog Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Vault Catalog"
       }
     }
   }
