@@ -14,9 +14,19 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from app.knowledge_book import enforce_length_constraints
+from app.question_catalog import (
+    OptionRecord,
+    boolean_value,
+    match_answers_to_options,
+    normalize_text,
+    score_option,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -286,6 +296,7 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
 
     tag = await locator.evaluate("el => el.tagName.toLowerCase()")
     control_type = await locator.evaluate("el => (el.getAttribute('type') || '').toLowerCase()")
+    val_str = str(value)
 
     try:
         if tag == "button":
@@ -297,26 +308,35 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
             options_info = await locator.evaluate(
                 "el => Array.from(el.options).map((o, idx) => ({index: idx, value: o.value, text: o.text.trim()}))"
             )
-            # 1. Exact text match
-            matched_opt = next((o for o in options_info if o["text"].lower() == str_val.lower()), None)
-            # 2. Exact value match
-            if not matched_opt:
-                matched_opt = next((o for o in options_info if o["value"].lower() == str_val.lower()), None)
-            # 3. Substring match in text
-            if not matched_opt:
-                matched_opt = next((o for o in options_info if str_val.lower() in o["text"].lower() or o["text"].lower() in str_val.lower()), None)
-            # 4. Substring match in value
-            if not matched_opt:
-                matched_opt = next((o for o in options_info if str_val.lower() in o["value"].lower()), None)
-
-            if matched_opt:
-                await locator.select_option(value=matched_opt["value"])
+            op_records = [
+                OptionRecord(key=str(o["index"]), label=o["text"], value=o["value"])
+                for o in options_info
+            ]
+            match_res = match_answers_to_options([str_val], op_records, allow_multiple=False)
+            if match_res.matched:
+                matched_idx = int(match_res.matched[0].key)
+                selected_val = options_info[matched_idx]["value"]
+                await locator.select_option(value=selected_val)
             else:
-                raise ValueError(f"No option matching '{str_val}' in {[o['text'] for o in options_info]}")
+                # Fallback to direct string / substring comparisons
+                matched_opt = next((o for o in options_info if o["text"].lower() == str_val.lower()), None)
+                if not matched_opt:
+                    matched_opt = next((o for o in options_info if o["value"].lower() == str_val.lower()), None)
+                if not matched_opt:
+                    matched_opt = next((o for o in options_info if str_val.lower() in o["text"].lower() or o["text"].lower() in str_val.lower()), None)
+                if not matched_opt:
+                    matched_opt = next((o for o in options_info if str_val.lower() in o["value"].lower()), None)
+
+                if matched_opt:
+                    await locator.select_option(value=matched_opt["value"])
+                else:
+                    raise ValueError(f"No option matching '{str_val}' in {[o['text'] for o in options_info]}")
             await locator.dispatch_event("change")
 
         elif control_type == "checkbox":
-            bool_val = value is not False and str(value).strip().lower() not in ("no", "false", "0", "")
+            bool_val = boolean_value(value) if boolean_value(value) is not None else (
+                value is not False and str(value).strip().lower() not in ("no", "false", "0", "")
+            )
             try:
                 await locator.scroll_into_view_if_needed()
             except Exception:
@@ -368,8 +388,28 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
             await locator.dispatch_event("change")
 
         else:
-            # Text, textarea, email, tel, number, etc.
-            await locator.fill(str(value))
+            # Text, textarea, email, tel, number, etc. with min/max character limits
+            dom_constraints = await locator.evaluate("""el => {
+                let minLen = el.getAttribute('minlength') ? parseInt(el.getAttribute('minlength'), 10) : 0;
+                let maxLen = el.getAttribute('maxlength') ? parseInt(el.getAttribute('maxlength'), 10) : null;
+                return {minLen, maxLen};
+            }""")
+            min_l = dom_constraints.get("minLen") or 0
+            max_l = dom_constraints.get("maxLen")
+
+            if label:
+                min_m = re.search(r"min(?:imum)?\s*(?:of\s*)?(\d+)\s*(?:chars?|characters?)", label, re.I)
+                if min_m:
+                    min_l = max(min_l, int(min_m.group(1)))
+                max_m = re.search(r"max(?:imum)?\s*(?:of\s*)?(\d+)\s*(?:chars?|characters?)", label, re.I)
+                if max_m:
+                    max_l = int(max_m.group(1)) if not max_l else min(max_l, int(max_m.group(1)))
+
+            val_str = str(value)
+            if min_l > 0 or max_l is not None:
+                val_str = enforce_length_constraints(val_str, min_length=min_l, max_length=max_l)
+
+            await locator.fill(val_str)
             await locator.dispatch_event("input")
             await locator.dispatch_event("change")
             try:
@@ -386,19 +426,41 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
         read_back = await _read_back_value(locator, tag, control_type)
         matched = False
         if control_type == "checkbox":
-            expected_bool = value is not False and str(value).strip().lower() not in ("no", "false", "0", "")
+            expected_bool = boolean_value(value) if boolean_value(value) is not None else (
+                value is not False and str(value).strip().lower() not in ("no", "false", "0", "")
+            )
             matched = (read_back == expected_bool)
         elif control_type == "radio" or tag == "button":
-            matched = (read_back is True or str(value).strip().lower() in str(read_back).strip().lower())
+            matched = (
+                read_back is True
+                or normalize_text(value) in normalize_text(read_back)
+                or (boolean_value(value) is not None and boolean_value(value) == boolean_value(read_back))
+            )
+        elif tag == "select":
+            matched = (
+                normalize_text(value) == normalize_text(read_back)
+                or score_option(str(value), OptionRecord(key="", label=str(read_back), value=str(read_back))) >= 70
+                or str(value).strip().lower() in str(read_back).strip().lower()
+            )
         else:
-            # Check for substring or exact match
-            matched = str(value).strip().lower() in str(read_back).strip().lower() or str(read_back).strip().lower() in str(value).strip().lower()
+            # Check for substring, exact match, or normalized match
+            norm_val = normalize_text(value).rstrip(". ")
+            norm_rb = normalize_text(read_back).rstrip(". ")
+            norm_str = normalize_text(val_str).rstrip(". ")
+            matched = (
+                str(val_str).strip().lower() in str(read_back).strip().lower()
+                or str(read_back).strip().lower() in str(val_str).strip().lower()
+                or (norm_str and norm_str in norm_rb)
+                or (norm_rb and norm_rb in norm_str)
+                or (norm_val and norm_val in norm_rb)
+                or (norm_rb and norm_rb in norm_val)
+            )
 
         return FieldFillReport(
             key=key,
             control_type=tag if tag in ("select", "textarea") else (control_type or "text"),
             selector_used=selector_used,
-            attempted_value=value,
+            attempted_value=val_str,
             read_back_value=read_back,
             matched=matched,
         )

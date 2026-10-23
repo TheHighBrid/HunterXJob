@@ -18,6 +18,7 @@ __pycache__/
 backend/data/*.db
 
 # v2 local runtime state (created by ./hunterx doctor/start)
+data/
 v2/data/
 v2/logs/
 v2/run/

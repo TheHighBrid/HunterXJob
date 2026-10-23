@@ -23,16 +23,30 @@ class ResolutionStatus(str, Enum):
 SENSITIVE_KEYS = frozenset({
     "work_authorization",
     "sponsorship",
+    "sponsorship_required",
+    "sponsorship_future_required",
     "citizenship",
+    "citizenship_residency",
     "security_clearance",
     "salary_expectation",
+    "hourly_rate_expectation",
     "criminal_record",
+    "criminal_history",
+    "drug_screening_consent",
+    "credit_check_consent",
+    "driving_record_check_consent",
+    "termination_history",
+    "rehire_eligibility",
     "disability",
+    "disability_status",
     "veteran_status",
     "gender",
+    "gender_identity",
     "race_ethnicity",
     "hispanic_ethnicity",
+    "hispanic_latino",
     "pronouns",
+    "sexual_orientation",
     "voluntary_self_identification",
 })
 
@@ -41,13 +55,19 @@ _KEY_ALIASES = {
     "work-authorization": "work_authorization",
     "sponsorshiprequired": "sponsorship",
     "sponsorship-required": "sponsorship",
+    "sponsorship_required": "sponsorship",
+    "sponsorship_future_required": "sponsorship",
     "citizenshipstatus": "citizenship",
+    "citizenship_residency": "citizenship",
     "securityclearance": "security_clearance",
     "desired_salary": "salary_expectation",
     "desired-salary": "salary_expectation",
     "desiredsalary": "salary_expectation",
     "salary": "salary_expectation",
+    "hourly_rate": "hourly_rate_expectation",
+    "hourly_rate_expectation": "hourly_rate_expectation",
     "criminalrecord": "criminal_record",
+    "criminal_history": "criminal_record",
     "veteranstatus": "veteran_status",
     "veteran-status": "veteran_status",
     "raceethnicity": "race_ethnicity",
@@ -55,6 +75,8 @@ _KEY_ALIASES = {
     "race": "race_ethnicity",
     "disability_status": "disability",
     "disabilitystatus": "disability",
+    "gender_identity": "gender",
+    "hispanic_latino": "hispanic_ethnicity",
 }
 
 
@@ -77,6 +99,8 @@ class FieldRequest:
     key: str
     required: bool = True
     sensitive: bool | None = None
+    min_length: int = 0
+    max_length: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +175,22 @@ class AnswerVault:
                 status=ResolutionStatus.REVIEW,
                 source=record.source,
                 reason="required fields cannot rely on generated facts",
+            )
+
+        if request.min_length > 0 and isinstance(record.value, str) and len(record.value.strip()) < request.min_length:
+            return ResolvedAnswer(
+                key=key,
+                status=ResolutionStatus.REVIEW,
+                source=record.source,
+                reason=f"answer length {len(record.value.strip())} is below minimum requirement {request.min_length}",
+            )
+
+        if request.max_length is not None and isinstance(record.value, str) and len(record.value.strip()) > request.max_length:
+            return ResolvedAnswer(
+                key=key,
+                status=ResolutionStatus.REVIEW,
+                source=record.source,
+                reason=f"answer length {len(record.value.strip())} exceeds maximum limit {request.max_length}",
             )
 
         return ResolvedAnswer(

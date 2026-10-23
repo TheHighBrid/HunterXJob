@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head><title>Form Constraints Test</title></head>
+<body>
+  <h1>Role Application</h1>
+  <form id="constrained_form">
+    <label for="short_answer">Brief Summary (Max 40 chars)</label>
+    <input id="short_answer" name="short_answer" maxlength="40">
+
+    <label for="long_narrative">Detailed Motivation (Min 80 chars)</label>
+    <textarea id="long_narrative" name="long_narrative" minlength="80"></textarea>
+
+    <label for="french_consent">Consentement préalable</label>
+    <select id="french_consent" name="french_consent">
+      <option value="">Sélectionnez...</option>
+      <option value="opt_yes">Oui, j'accepte les conditions</option>
+      <option value="opt_no">Non, je refuse</option>
+    </select>
+
+    <label for="remote_ready">
+      <input type="checkbox" id="remote_ready" name="remote_ready">
+      I have a dedicated quiet home workspace
+    </label>
+
+    <button type="submit" id="submit_btn">Submit</button>
+  </form>
+</body>
+</html>

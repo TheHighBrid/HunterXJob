@@ -168,3 +168,48 @@ def test_browser_filler_fills_lever_fixture(fixture_server, tmp_path):
     assert len(result.files_attached) == 1
     assert result.files_attached[0].file_name == "jane_doe_cv.pdf"
 
+
+
+def test_browser_filler_enforces_dom_constraints(fixture_server):
+    url = f"{fixture_server}/constraints_form.html"
+    answers = {
+        # String exceeding 40 chars -> should be truncated <= 40 chars
+        "short_answer": "This is an overly verbose answer that definitely exceeds forty characters in total length",
+        # String shorter than 80 chars -> should be expanded to >= 80 chars
+        "long_narrative": "Excited to apply.",
+        # Bilingual boolean match ("Yes" matching "Oui, j'accepte les conditions")
+        "french_consent": "Yes",
+        # Checkbox boolean
+        "remote_ready": "Yes",
+    }
+    labels = {
+        "short_answer": "Brief Summary (Max 40 chars)",
+        "long_narrative": "Detailed Motivation (Min 80 chars)",
+    }
+
+    result = asyncio.run(
+        fill_application_form(
+            url=url,
+            answers=answers,
+            labels=labels,
+            headless=True,
+        )
+    )
+
+    assert result.success is True
+    # 1. Check truncation
+    short_read = result.field_reports["short_answer"].read_back_value
+    assert len(short_read) <= 40
+    assert result.field_reports["short_answer"].matched is True
+
+    # 2. Check expansion
+    long_read = result.field_reports["long_narrative"].read_back_value
+    assert len(long_read) >= 80
+    assert result.field_reports["long_narrative"].matched is True
+
+    # 3. Check dropdown match
+    assert result.field_reports["french_consent"].matched is True
+    assert "j'accepte" in result.field_reports["french_consent"].read_back_value
+
+    # 4. Check checkbox
+    assert result.field_reports["remote_ready"].read_back_value is True

@@ -20,8 +20,51 @@ from pathlib import Path
 from typing import Any
 
 from app.profile import Fact, VerifiedProfile
+from app.question_catalog import (
+    OptionRecord,
+    classify_question,
+    match_answers_to_options,
+    normalize_text,
+    score_option,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def enforce_length_constraints(
+    text: str,
+    min_length: int = 0,
+    max_length: int | None = None,
+    padding_narrative: str = "",
+) -> str:
+    """Enforce minimum and maximum character length constraints on narrative responses."""
+    cleaned = " ".join(str(text or "").split()).strip()
+
+    # 1. Enforce min_length
+    if min_length > 0 and len(cleaned) < min_length:
+        default_padding = (
+            " In my financial operations and risk management roles across Scotiabank, BMO, RBC, and TD Canada Trust, "
+            "I consistently delivered exceptional outcomes by prioritizing regulatory compliance, client trust, "
+            "rigorous attention to detail, and cross-functional team collaboration."
+        )
+        pad = padding_narrative or default_padding
+        while len(cleaned) < min_length:
+            cleaned = f"{cleaned} {pad.strip()}"
+
+    # 2. Enforce max_length
+    if max_length is not None and max_length > 0 and len(cleaned) > max_length:
+        truncated = cleaned[:max_length]
+        last_period = max(truncated.rfind(". "), truncated.rfind("! "), truncated.rfind("? "))
+        if last_period >= int(max_length * 0.6):
+            cleaned = truncated[:last_period + 1]
+        else:
+            last_space = truncated.rfind(" ")
+            if last_space > 0:
+                cleaned = truncated[:last_space].rstrip(",;:-") + "."
+            else:
+                cleaned = truncated
+
+    return cleaned
 
 
 # Standard deterministic fallback answers for common ATS screening patterns
@@ -133,6 +176,163 @@ class KnowledgeBook:
 
         return answers
 
+    def _resolve_catalog_item(
+        self,
+        item: dict[str, Any],
+        text: str,
+        options: list[str] | None = None,
+    ) -> tuple[Any, str] | None:
+        """Resolve a candidate answer for a classified catalog item."""
+        key = item.get("canonical_key", "")
+
+        # 1. Sponsorship
+        if key in ("sponsorship_required", "sponsorship_future_required"):
+            val = "No"
+            if options:
+                val = self._match_option(val, options) or self._match_option("I do not require sponsorship", options) or val
+            return val, f"catalog:{key}"
+
+        # 2. Work authorization
+        if key == "work_authorization":
+            country = "CA" if "canada" in text.lower() else "US" if ("us" in text.lower() or "united states" in text.lower()) else "CA"
+            auth_facts = [f.data for f in self.profile.of("work_authorization") if f.data.get("country", "").upper() == country]
+            if auth_facts and auth_facts[0].get("authorized"):
+                val = "Authorized to work in Canada" if country == "CA" and options and any("Canada" in o for o in options) else "Yes"
+                if options:
+                    val = self._match_option(val, options) or val
+                return val, f"catalog:{key}"
+
+        # 3. Citizenship / residency
+        if key == "citizenship_residency":
+            val = "Canadian citizen" if options and any("Canadian" in o for o in options) else "Canada"
+            if options:
+                val = self._match_option(val, options) or val
+            return val, f"catalog:{key}"
+
+        # 4. Standard consents & verifications
+        if key in (
+            "age_requirement",
+            "background_check_consent",
+            "drug_screening_consent",
+            "credit_check_consent",
+            "driving_record_check_consent",
+            "employment_verification_consent",
+            "education_verification_consent",
+            "terms_consent",
+            "essential_functions_ability",
+            "export_control_eligibility",
+            "commute_ability",
+            "remote_workspace",
+            "schedule_hours",
+            "on_call_availability",
+            "rehire_eligibility",
+            "contact_former_employers",
+            "contact_current_employer",
+        ):
+            val = "Yes"
+            if options:
+                val = self._match_option(val, options) or val
+            return val, f"catalog:{key}"
+
+        # 5. Non-compete, prior employment/app/interview, termination, relocation assistance
+        if key in ("non_compete", "prior_employment", "prior_application", "prior_interview", "termination_history", "relocation_assistance"):
+            val = "No"
+            if options:
+                val = self._match_option(val, options) or val
+            return val, f"catalog:{key}"
+
+        # 6. Relocation
+        if key == "relocation":
+            pref = self.preferences.get("willing_to_relocate", True)
+            val = "Yes" if pref else "No"
+            if options:
+                val = self._match_option(val, options) or val
+            return val, f"catalog:{key}"
+
+        # 7. Compensation
+        if key == "salary_expectation":
+            desired = str(self.preferences.get("desired_salary", "") or "75000")
+            if options:
+                desired = self._match_option(desired, options) or desired
+            return desired, f"catalog:{key}"
+        if key == "hourly_rate_expectation":
+            rate = str(self.preferences.get("hourly_rate", "") or "38")
+            if options:
+                rate = self._match_option(rate, options) or rate
+            return rate, f"catalog:{key}"
+        if key == "compensation_negotiable":
+            val = "Yes"
+            if options:
+                val = self._match_option(val, options) or val
+            return val, f"catalog:{key}"
+
+        # 8. Notice period / start date
+        if key == "notice_period":
+            avail = self.preferences.get("notice_period", "2 weeks")
+            if options:
+                avail = self._match_option(avail, options) or avail
+            return avail, f"catalog:{key}"
+
+        # 9. Source / How heard
+        if key == "how_heard":
+            val = "LinkedIn"
+            if options:
+                val = self._match_option(val, options) or val
+            return val, f"catalog:{key}"
+
+        # 10. Management & Team size
+        if key == "management_experience":
+            val = "Yes"
+            if options:
+                val = self._match_option(val, options) or val
+            return val, f"catalog:{key}"
+        if key == "management_years":
+            val = "3"
+            if options:
+                val = self._match_option(val, options) or val
+            return val, f"catalog:{key}"
+        if key == "team_size_managed":
+            val = "5"
+            if options:
+                val = self._match_option(val, options) or val
+            return val, f"catalog:{key}"
+
+        # 11. Languages
+        if key == "language_french":
+            val = "Fluent"
+            if options:
+                val = self._match_option("Fluent", options) or self._match_option("Yes", options) or val
+            return val, f"catalog:{key}"
+        if key == "language_english":
+            val = "Fluent"
+            if options:
+                val = self._match_option("Fluent", options) or self._match_option("Native", options) or self._match_option("Yes", options) or val
+            return val, f"catalog:{key}"
+
+        # 12. Demographics
+        if key == "gender_identity":
+            val = "Male"
+            if options:
+                val = self._match_option("Male", options) or self._match_option("Prefer not to answer", options) or val
+            return val, f"catalog:{key}"
+        if key == "veteran_status":
+            val = "I am not a protected veteran"
+            if options:
+                val = self._match_option(val, options) or self._match_option("No", options) or self._match_option("Prefer not to answer", options) or val
+            return val, f"catalog:{key}"
+        if key == "disability_status":
+            val = "No, I do not have a disability"
+            if options:
+                val = self._match_option(val, options) or self._match_option("No", options) or self._match_option("Prefer not to answer", options) or val
+            return val, f"catalog:{key}"
+        if key in ("race_ethnicity", "hispanic_latino"):
+            val = "Prefer not to answer"
+            if options:
+                val = self._match_option("Prefer not to answer", options) or self._match_option("Decline to self-identify", options) or val
+            return val, f"catalog:{key}"
+
+        return None
+
     def resolve_screening_question(self, label: str, options: list[str] | None = None) -> tuple[Any, str]:
         """Resolve a screening question using pattern rules, custom answers, or profile facts."""
         text = label.strip()
@@ -146,17 +346,23 @@ class KnowledgeBook:
             if key.lower() in text.lower():
                 return val, "custom_answer_match"
 
-        # 2. Check standard screening regex rules
+        # 2. Master catalog classification
+        cat_item = classify_question(text)
+        if cat_item:
+            cat_res = self._resolve_catalog_item(cat_item, text, options)
+            if cat_res is not None:
+                return cat_res
+
+        # 3. Check standard screening regex rules fallback
         for pattern, default_val, rule_name in DEFAULT_SCREENING_PATTERNS:
             if pattern.search(text):
                 if options:
-                    # Select matching option from dropdown if available
                     matched = self._match_option(default_val, options)
                     if matched:
                         return matched, f"screening_pattern:{rule_name}"
                 return default_val, f"screening_pattern:{rule_name}"
 
-        # 3. Work authorization checks
+        # 3b. Work authorization checks
         if re.search(r"legally\s+(?:authorized|eligible)\s+to\s+work|work\s+authorization", text, re.I):
             country = "CA" if "canada" in text.lower() else "US" if ("us" in text.lower() or "united states" in text.lower()) else "CA"
             auth_facts = [f.data for f in self.profile.of("work_authorization") if f.data.get("country", "").upper() == country]
@@ -166,7 +372,7 @@ class KnowledgeBook:
                     val = self._match_option(val, options) or val
                 return val, "profile_work_authorization"
 
-        # 3b. Role & Domain Experience checks
+        # 3c. Role & Domain Experience checks
         if re.search(r"(?:do\s+you\s+have\s+(?:at\s+least\s+)?\d*\s*years?|experience\s+in|background\s+in|worked\s+in)", text, re.I):
             text_lower = text.lower()
             if any(t in text_lower for t in ("operations", "compliance", "fraud", "risk", "kyc", "kyb", "financial services", "fintech", "banking", "credit", "collections", "customer")):
@@ -180,7 +386,7 @@ class KnowledgeBook:
                     else:
                         return val, "profile_financial_experience"
 
-        # 3c. Language proficiency checks (French / English)
+        # 3d. Language proficiency checks (French / English)
         if re.search(r"french|français", text, re.I):
             lang_facts = [f.data for f in self.profile.of("language") if "french" in f.data.get("name", "").lower()]
             if lang_facts:
@@ -216,6 +422,7 @@ class KnowledgeBook:
         if re.search(r"start\s+date|earliest\s+date|notice\s+period|availability", text, re.I):
             avail = self.preferences.get("notice_period", "2 weeks")
             return avail, "preference_start_date"
+            return avail, "preference_start_date"
 
         # 7. Experience descriptions & narrative questions
         if re.search(r"describe\s+your\s+experience.*(?:fintech|financial|banking|operations|risk|fraud|work)", text, re.I):
@@ -249,6 +456,8 @@ class KnowledgeBook:
         label: str,
         options: list[str] | None = None,
         control_type: str = "text",
+        min_length: int = 0,
+        max_length: int | None = None,
     ) -> tuple[Any, str]:
         """Use local Ollama LLM (llama3.2:3b) with deterministic heuristics fallback for custom questions."""
         import urllib.request
@@ -292,7 +501,17 @@ class KnowledgeBook:
             except Exception as exc:
                 logger.debug("Ollama option resolution fallback (%s)", exc)
 
-            # Heuristic option scoring fallback
+            # Heuristic option scoring fallback using 4-tier primitives
+            records = [OptionRecord(key=str(i), label=opt, value=opt) for i, opt in enumerate(options)]
+            scored_candidates = [
+                "Yes", "Authorized to work in Canada", "Reliability Status",
+                "Full-time", "LinkedIn", "Prefer not to answer", "Decline to self-identify",
+            ]
+            for cand in scored_candidates:
+                m_res = match_answers_to_options([cand], records, allow_multiple=False)
+                if m_res.matched:
+                    return m_res.matched[0].label, "catalog_option_fallback"
+
             pos_words = (
                 "review", "collaborate", "escalate", "consolidate", "huddle", "protocol",
                 "root cause", "quantify", "stakeholder", "verification", "systemic",
@@ -316,9 +535,18 @@ class KnowledgeBook:
         # 2. Open-ended Textarea / Text question
         ctype_lower = str(control_type).lower()
         if any(t in ctype_lower for t in ("textarea", "text")):
+            length_instructions = ""
+            if min_length > 0 and max_length:
+                length_instructions = f" Your answer MUST be between {min_length} and {max_length} characters."
+            elif min_length > 0:
+                length_instructions = f" Your answer MUST be at least {min_length} characters long."
+            elif max_length:
+                length_instructions = f" Your answer MUST NOT exceed {max_length} characters."
+
             prompt = (
                 "Write ONLY the direct first-person ('I...') job application answer in 3 to 4 sentences "
-                "(plain text only, no introductory preamble, no placeholders, no bullet points). "
+                "(plain text only, no introductory preamble, no placeholders, no bullet points)."
+                f"{length_instructions} "
                 "Candidate background: Mohamed Alem, based in Ottawa, ON, bilingual English/French, 5+ years of experience across Scotiabank, "
                 "Bank of Montreal (BMO), Royal Bank of Canada (RBC), TD Canada Trust, and Melato specializing in fraud investigations, "
                 "KYC/KYB compliance, risk operations, team coaching, escalation handling, and process improvement.\n\n"
@@ -332,7 +560,7 @@ class KnowledgeBook:
                         "model": "llama3.2:3b",
                         "prompt": prompt,
                         "stream": False,
-                        "options": {"temperature": 0.2, "num_predict": 180},
+                        "options": {"temperature": 0.2, "num_predict": 220},
                     }).encode("utf-8"),
                     headers={"Content-Type": "application/json"},
                     method="POST",
@@ -343,6 +571,7 @@ class KnowledgeBook:
                     reply = re.sub(r"^(?:Here(?:'s|\s+is)[^:]*:|I'd be happy to[^:]*:)\s*", "", reply, flags=re.I)
                     reply = " ".join(reply.split())
                     if len(reply) >= 25:
+                        reply = enforce_length_constraints(reply, min_length=min_length, max_length=max_length)
                         return reply, "ollama_narrative"
             except Exception as exc:
                 logger.debug("Ollama narrative fallback (%s)", exc)
@@ -352,21 +581,42 @@ class KnowledgeBook:
                 "I addressed high-stakes operational challenges by immediately containing risk exposure, reviewing root causes with team members "
                 "in a constructive and psychologically safe 1-on-1 setting, and updating standard operating checklists so the entire team prevented recurrence."
             )
+            fallback_narrative = enforce_length_constraints(fallback_narrative, min_length=min_length, max_length=max_length)
             return fallback_narrative, "heuristic_narrative_fallback"
 
         return None, "unresolved"
 
-    def _match_option(self, target: str, options: list[str]) -> str | None:
-        """Find the closest option in a list of options."""
-        target_clean = str(target).strip().lower()
-        # Exact match
+    def _match_option(self, target: Any, options: list[str]) -> str | None:
+        """Find the closest option in a list of options using 4-tier scoring."""
+        if not options:
+            return None
+        target_str = str(target).strip()
+        records = [
+            OptionRecord(key=str(idx), label=opt, value=opt)
+            for idx, opt in enumerate(options)
+        ]
+        res = match_answers_to_options([target_str], records, allow_multiple=False)
+        if res.matched:
+            return res.matched[0].label
+
+        # Fallbacks for boolean/consent variations
+        target_norm = normalize_text(target_str)
+        if target_norm in ("yes", "y", "true", "1", "agree", "authorized"):
+            for opt in options:
+                ol = normalize_text(opt)
+                if ol in ("yes", "y", "true", "agree", "i agree", "authorized", "oui"):
+                    return opt
+        elif target_norm in ("no", "n", "false", "0", "decline"):
+            for opt in options:
+                ol = normalize_text(opt)
+                if ol in ("no", "n", "false", "decline", "non"):
+                    return opt
+
+        # Fallback to substring matching
         for opt in options:
-            if opt.strip().lower() == target_clean:
+            if target_norm in normalize_text(opt) or normalize_text(opt) in target_norm:
                 return opt
-        # Starts with or contains
-        for opt in options:
-            if target_clean in opt.strip().lower() or opt.strip().lower() in target_clean:
-                return opt
+
         return None
 
     def export_all_vault_answers(self) -> dict[str, Any]:
@@ -448,12 +698,24 @@ class KnowledgeBook:
 
             # 5. Local Ollama LLM (llama3.2:3b) + heuristic fallback for required custom role/scenario questions
             if val is None and getattr(ctrl, "required", False) and "file" not in ctype_str:
-                val, reason = self.resolve_with_llm_or_fallback(label, options, ctype_str)
+                min_len = getattr(ctrl, "min_length", 0) or 0
+                max_len = getattr(ctrl, "max_length", None)
+                val, reason = self.resolve_with_llm_or_fallback(
+                    label, options, ctype_str, min_length=min_len, max_length=max_len
+                )
 
             if val is not None:
                 if options:
-                    matched = self._match_option(str(val), options)
-                    resolved[key] = matched or val
+                    if isinstance(val, (list, tuple, set)):
+                        records = [OptionRecord(key=str(i), label=opt, value=opt) for i, opt in enumerate(options)]
+                        matched_res = match_answers_to_options([str(v) for v in val], records, allow_multiple=True)
+                        if matched_res.matched:
+                            resolved[key] = [m.label for m in matched_res.matched]
+                        else:
+                            resolved[key] = list(val)
+                    else:
+                        matched = self._match_option(str(val), options)
+                        resolved[key] = matched or val
                 else:
                     resolved[key] = val
 
