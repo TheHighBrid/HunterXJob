@@ -9,10 +9,11 @@ HunterXJob v2 bridges from planning and dry-runs to **full agentic autonomy**:
 1. **Discovery & Dedup**: Ingests live job postings from Greenhouse, Lever, Ashby, SmartRecruiters, and Workday. Normalizes them, verifies liveness, and blocks duplicates.
 2. **Fit Scoring**: Evaluates candidate profile against requirements using a deterministic six-dimension core and optional local AI.
 3. **Truth Guard & Material Tailoring**: Personalizes ATS-friendly résumé PDFs and truthful cover letters without hallucinations—every statement is backed by verified candidate facts.
-4. **Interactive Browser Automation**: Uses Playwright to interactively fill form inputs, fuzzy-match dropdowns, toggle checkboxes, attach generated documents (`set_input_files`), and record DOM proofs.
-5. **CAPTCHA Bridge**: Detects reCAPTCHA v2/v3, hCaptcha, and Cloudflare Turnstile, injecting solved tokens into the DOM with supervised fallback.
-6. **Live Submission Engine**: Gated live submission execution with confirmation screen extraction, candidate ID capture, and cryptographic SHA-256 evidence recording.
-7. **Post-Submission Lifecycle**: Inbound email matching and automated 7-day and 14-day follow-up cadence scheduling.
+4. **Candidate Knowledge Book + Local Ollama LLM (`llama3.2:3b`)**: Resolves standard contact/system fields, UUID-keyed ATS fields, and screening rules deterministically, and invokes local Ollama (`llama3.2:3b` at `127.0.0.1:11434`, with heuristic fallback) for custom role-specific behavioral/scenario questions and multiple-choice options.
+5. **Unified Single-Browser Playwright Automation**: Uses a single browser session (with real Google Chrome channel support in headed mode and anti-bot stealth hardening) to interactively fill text inputs, select comboboxes (`ArrowDown` + `Enter`), click `<label>`-bound radio buttons and Ashby `button[data-option]` toggles, attach generated documents (`set_input_files`), and verify required DOM read-backs.
+6. **Smart CAPTCHA Bridge & Interactive Challenge Hold**: Detects reCAPTCHA v2/v3/Enterprise, hCaptcha, and Cloudflare Turnstile, bypasses passive invisible reCAPTCHA v3 false positives, injects solved tokens into the DOM, and holds headed browser windows open up to 180s when interactive post-submit CAPTCHA modals (`bframe` / hCaptcha) appear.
+7. **Live Submission Engine**: Gated live submission execution with anti-spam retry backoff, confirmation screen extraction, digit-validated candidate ID capture, and cryptographic SHA-256 post-submit screenshot and ledger recording.
+8. **Post-Submission Lifecycle**: Inbound email matching and automated 7-day and 14-day follow-up cadence scheduling.
 
 ---
 
@@ -79,11 +80,13 @@ The autonomous engine orchestrates the entire discovery-to-submission lifecycle:
 ```
 
 ### Options:
-* `--live`: Enables live submission (requires `ALLOW_LIVE_SUBMISSION=true` in `.env`).
+* `--live`: Enables live submission (automatically unlocks `allow_live_submission` runtime flag for the CLI session).
 * `--limit N`: Maximum applications to process in this run (default: 10).
 * `--min-score SCORE`: Minimum fit score threshold (default: 65.0).
 * `--profile PATH`: Optional path to custom candidate profile YAML.
-* `--headed`: Launches visible browser window for interactive observation.
+* `--headed`: Launches visible browser window (using real Google Chrome channel when available) for interactive observation and CAPTCHA handoff.
+* `--pause SECONDS`: Seconds to pause and inspect the filled/submitted form in headed mode before closing (default: 5).
+* `--max-errors N`: Maximum consecutive/cumulative errors before stopping the cycle (default: 3).
 
 ---
 
@@ -93,7 +96,7 @@ The autonomous engine orchestrates the entire discovery-to-submission lifecycle:
 |---|---|---|---|---|---|
 | **Greenhouse** | `boards.greenhouse.io`, `job-boards.greenhouse.io` | `human_reviewed_submit` | Yes | Yes (PDF/DOCX) | Yes |
 | **Lever** | `jobs.lever.co` | `human_reviewed_submit` | Yes | Yes (PDF/DOCX) | Yes |
-| **Ashby** | `jobs.ashbyhq.com` | `human_reviewed_submit` | Yes | Yes (PDF/DOCX) | Yes |
+| **Ashby** | `jobs.ashbyhq.com` | `human_reviewed_submit` *(Live Production Verified)* | Yes (`[data-field-path]`, UUIDs, toggles, `<label>` radios) | Yes (PDF/DOCX) | Yes (Verified on Cohere, Wealthsimple, Float) |
 | **SmartRecruiters** | `jobs.smartrecruiters.com`, `careers.smartrecruiters.com` | `human_reviewed_submit` | Yes | Yes (PDF/DOCX) | Yes |
 | **Workday** | `*.myworkdayjobs.com` | `human_reviewed_submit` | Yes | Yes (PDF/DOCX) | Yes |
 
