@@ -414,12 +414,30 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
             await locator.dispatch_event("input")
             await locator.dispatch_event("change")
             try:
-                is_combobox = await locator.evaluate("el => el.getAttribute('role') === 'combobox' || (el.className && el.className.includes('autocomplete'))")
+                is_combobox = await locator.evaluate(
+                    "el => el.getAttribute('role') === 'combobox' || (el.className && el.className.includes('autocomplete')) || !!el.closest('[data-field-path*=\"location\"]')"
+                )
                 if is_combobox:
-                    await asyncio.sleep(0.4)
-                    await page.keyboard.press("ArrowDown")
-                    await asyncio.sleep(0.2)
-                    await page.keyboard.press("Enter")
+                    await asyncio.sleep(0.5)
+                    # Check for visible autocomplete suggestion items
+                    opt_loc = page.locator('[role="option"]:visible, .ashby-application-form-autocomplete-option:visible, [role="listbox"] div:visible')
+                    opt_count = await opt_loc.count()
+                    if opt_count > 0:
+                        best_match = None
+                        str_low = val_str.lower()
+                        for o_idx in range(opt_count):
+                            item = opt_loc.nth(o_idx)
+                            text = (await item.inner_text()).lower()
+                            if "ottawa" in text or "ontario" in text or "canada" in text or str_low in text:
+                                best_match = item
+                                break
+                        if not best_match:
+                            best_match = opt_loc.first
+                        await best_match.click()
+                    else:
+                        await page.keyboard.press("ArrowDown")
+                        await asyncio.sleep(0.2)
+                        await page.keyboard.press("Enter")
             except Exception:
                 pass
 
@@ -586,7 +604,10 @@ async def fill_application_form(
                 file_loc, sel_used = await _find_file_input(page, file_key)
                 if file_loc:
                     await file_loc.set_input_files(str(file_path))
-                    await file_loc.dispatch_event("change")
+                    try:
+                        await file_loc.dispatch_event("change", timeout=1000)
+                    except Exception:
+                        pass
                     record = _file_record(file_path, file_key)
                     files_attached.append(record)
                     field_reports[file_key] = FieldFillReport(

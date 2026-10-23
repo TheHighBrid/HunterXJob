@@ -156,6 +156,7 @@ class AutonomousRunner:
         summary.candidates_considered = len(candidates)
         out_dir = self.config.output_dir or Path(getattr(self.settings, "artifact_dir", None) or "/tmp/hunterx_autonomous")
         out_dir.mkdir(parents=True, exist_ok=True)
+        submitted_companies_in_cycle: set[str] = set()
 
         for job in candidates:
             if kill_switch_engaged(self.db):
@@ -173,9 +174,15 @@ class AutonomousRunner:
             if score < self.config.min_score_threshold:
                 continue
 
+            # 5a. Company-level submission rate limiter (anti-bot cooldown)
+            comp_norm = (job.company or "").strip().lower()
+            if comp_norm and comp_norm in submitted_companies_in_cycle:
+                logger.info("Deferring %s for company '%s' (company already submitted in this cycle)", job.title, job.company)
+                continue
+
             summary.shortlisted += 1
 
-            # 5. Deduplication check
+            # 5b. Deduplication check
             dedup_reason = duplicate_guard(self.db, job, action="submit")
             if dedup_reason is not None:
                 summary.skipped_duplicates += 1
@@ -195,6 +202,8 @@ class AutonomousRunner:
 
             if record.submitted:
                 summary.submitted_live += 1
+                if comp_norm:
+                    submitted_companies_in_cycle.add(comp_norm)
             elif record.status == "dry_run_verified":
                 summary.verified_dry_runs += 1
             else:
@@ -304,6 +313,17 @@ class AutonomousRunner:
         )
 
         if fill_res.unmatched_fields or fill_res.fields_attempted == 0:
+            err = fill_res.error or (f"Unmatched fields: {fill_res.unmatched_fields}" if fill_res.unmatched_fields else "No form fields detected or attempted on page")
+            job.stage = PipelineStage.review.value
+            self.db.add(
+                PipelineEvent(
+                    job_id=job.id,
+                    from_stage=PipelineStage.ready_to_apply.value,
+                    to_stage=PipelineStage.review.value,
+                    message=f"Form fill held for review: {err[:200]}",
+                )
+            )
+            self.db.commit()
             return AutonomousApplicationRecord(
                 job_id=job.id,
                 company=job.company,
@@ -314,7 +334,7 @@ class AutonomousRunner:
                 stage=job.stage,
                 status="fill_failed",
                 submitted=False,
-                error=fill_res.error or (f"Unmatched fields: {fill_res.unmatched_fields}" if fill_res.unmatched_fields else "No form fields detected or attempted on page"),
+                error=err,
             )
 
         # 5. Live Submission or Verified Dry-Run Result Handling
@@ -351,6 +371,17 @@ class AutonomousRunner:
                     evidence_sha256=proof_sha,
                 )
             else:
+                err = fill_res.error or "Submission not confirmed"
+                job.stage = PipelineStage.review.value
+                self.db.add(
+                    PipelineEvent(
+                        job_id=job.id,
+                        from_stage=PipelineStage.ready_to_apply.value,
+                        to_stage=PipelineStage.review.value,
+                        message=f"Live submission held for review: {err[:200]}",
+                    )
+                )
+                self.db.commit()
                 return AutonomousApplicationRecord(
                     job_id=job.id,
                     company=job.company,
@@ -361,7 +392,7 @@ class AutonomousRunner:
                     stage=job.stage,
                     status="submission_failed",
                     submitted=False,
-                    error=fill_res.error or "Submission not confirmed",
+                    error=err,
                 )
         elif not fill_res.success:
             return AutonomousApplicationRecord(
