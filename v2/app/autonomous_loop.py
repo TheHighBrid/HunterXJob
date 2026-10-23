@@ -275,6 +275,7 @@ class AutonomousRunner:
             for ctrl in real_form.controls
             if getattr(ctrl, "required", False)
             and "file" not in str(getattr(ctrl, "control_type", "")).lower()
+            and "hidden" not in str(getattr(ctrl, "control_type", "")).lower()
         ]
 
         # 4. Execute Browser Form Fill & Optional Live Submission (Single Browser Session)

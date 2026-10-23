@@ -243,6 +243,9 @@ class KnowledgeBook:
 
         # 6. Relocation
         if key == "relocation":
+            if options and any("already live in canada" in o.lower() or "live in canada" in o.lower() for o in options):
+                val = next(o for o in options if "already live in canada" in o.lower() or "live in canada" in o.lower())
+                return val, f"catalog:{key}"
             pref = self.preferences.get("willing_to_relocate", True)
             val = "Yes" if pref else "No"
             if options:
@@ -345,6 +348,18 @@ class KnowledgeBook:
         for key, val in self.custom_answers.items():
             if key.lower() in text.lower():
                 return val, "custom_answer_match"
+
+        if "maxmind" in text.lower() and ("interested" in text.lower() or "fit" in text.lower()):
+            val = (
+                "I am very interested in joining MaxMind as a Collections Specialist because of the company's clear social mission, "
+                "collaborative remote culture, and commitment to thoughtful, case-by-case customer engagement without rigid scripts. "
+                "With over five years of banking and financial operations experience at Scotiabank, BMO, RBC, and Melato, I have extensive "
+                "hands-on experience managing delinquent accounts, negotiating structured repayment solutions, and resolving payment blockers "
+                "with empathy and professional firmness. I am experienced in researching customer contacts, working with invoicing portals and POs, "
+                "and collaborating with cross-functional teams to reconcile accounts while maintaining positive customer relationships. "
+                "I look forward to bringing this balanced approach to MaxMind to help optimize cash flow and support our business customers."
+            )
+            return val, "custom:maxmind_collections_fit"
 
         # 2. Master catalog classification
         cat_item = classify_question(text)
@@ -684,7 +699,10 @@ class KnowledgeBook:
                     r"where\s+are\s+you\s+(?:based|located)|location\s*\(city\)",
                     label_lower,
                 ):
-                    val = answers.get("city") or answers.get("location")
+                    if "province" in label_lower or "country" in label_lower:
+                        val = "Ontario, Canada"
+                    else:
+                        val = answers.get("city") or answers.get("location")
 
             # 3. Screening question resolver
             if val is None:

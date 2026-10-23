@@ -29,6 +29,8 @@ from app.evidence import CONFIRMATION_MARKERS, evidence_is_sufficient
 logger = logging.getLogger(__name__)
 
 SUBMIT_BUTTON_SELECTORS = [
+    "#btn-submit",
+    ".template-btn-submit",
     ".ashby-application-form-submit-button",
     'button[type="submit"]',
     'input[type="submit"]',
@@ -36,6 +38,7 @@ SUBMIT_BUTTON_SELECTORS = [
     "#submit-application",
     "#submit-button",
     'button:has-text("Submit Application")',
+    'button:has-text("SUBMIT APPLICATION")',
     'button:has-text("Submit application")',
     'button:has-text("Submit")',
     'button:has-text("Apply now")',
@@ -192,7 +195,10 @@ async def execute_live_submission(
             await asyncio.sleep(0.5)
             tick += 1
             final_url = page.url
-            body_text = await page.evaluate("() => document.body ? document.body.innerText : ''")
+            try:
+                body_text = await page.evaluate("() => document.body ? document.body.innerText : ''")
+            except Exception:
+                body_text = ""
             confirmation_text, candidate_id = extract_confirmation_evidence(body_text, final_url)
             if evidence_is_sufficient(
                 confirmation_text=confirmation_text or body_text,
@@ -206,6 +212,13 @@ async def execute_live_submission(
                 if not captcha_popup_notified:
                     captcha_popup_notified = True
                     max_ticks = 360  # Extend wait up to 180 seconds while CAPTCHA is solved
+                    try:
+                        await page.bring_to_front()
+                        import subprocess
+                        subprocess.run(["osascript", "-e", 'tell application "Google Chrome" to activate'], check=False)
+                        subprocess.run(["osascript", "-e", 'tell application "Chromium" to activate'], check=False)
+                    except Exception:
+                        pass
                     import sys
                     print(
                         "\n🔒 [HunterXJob] Interactive CAPTCHA challenge popped up after clicking Submit!\n"
@@ -216,17 +229,22 @@ async def execute_live_submission(
                 continue
 
             if captcha_popup_notified:
-                # CAPTCHA modal just closed; give the background GraphQL submission up to 15s to finish
+                # CAPTCHA modal just closed; re-click submit on platforms like Lever where token is verified on click
                 captcha_resolved = True
                 captcha_popup_notified = False
                 max_ticks = max(max_ticks, tick + 30)
+                try:
+                    await asyncio.sleep(1.0)
+                    await submit_loc.scroll_into_view_if_needed()
+                    await submit_loc.click()
+                except Exception:
+                    pass
 
-            # If Ashby shows "Your application submission was flagged as possible spam.
-            # If you believe this is a mistake, please submit your application again.",
+            # If Ashby shows "flagged as possible spam" or Lever shows "error verifying your application",
             # wait 3.5s, scroll back to the Submit button, and click it again.
             body_lower = body_text.lower()
             if (
-                ("flagged as possible spam" in body_lower or "submit your application again" in body_lower)
+                ("flagged as possible spam" in body_lower or "submit your application again" in body_lower or "error verifying your application" in body_lower)
                 and spam_retries < 2
             ):
                 spam_retries += 1

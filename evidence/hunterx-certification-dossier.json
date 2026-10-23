@@ -24,7 +24,7 @@
     }
   },
   "evidence_ledger": {
-    "ledger_digest": "4d106675849210efd49e4669d89a1df752e3040a0a72b5f084939b11582eb763",
+    "ledger_digest": "a0be6c8a328d584e11b4d98bbb0d6d7a8d714faf5eeea0e00e98510a9b9f22c8",
     "records": [
       {
         "company": "float",
@@ -109,11 +109,23 @@
         "submitted_at": "2026-10-23 12:23:14.613025",
         "title": "Senior Specialist, Incident Response",
         "url": "https://jobs.ashbyhq.com/wealthsimple/108e4513-0e74-4e4c-af3c-8e66e4222db8"
+      },
+      {
+        "company": "cohere",
+        "evidence_snapshot_hash": "4f2535ccada131a775d6dc1185d734c55af91608d9c78f92a18137926df3bbab",
+        "is_concrete_confirmation": true,
+        "job_id": "f48554db-074f-44c0-acef-749e4863c21f",
+        "platform": "ashby",
+        "receipt_sha256": "e082a45820065164acd08a8c8298a4ee59a41264529218269ec3b24b279782a2",
+        "receipt_snippet": "ce.  Overview Application Success  Your application has been submitted! Thank you for your interest in a career growth o",
+        "submitted_at": "2026-10-23 15:44:01.849399",
+        "title": "Technical Program Manager, AI Delivery",
+        "url": "https://jobs.ashbyhq.com/cohere/41cb2a12-e33a-4368-a9f8-0ae0d19c023e"
       }
     ],
-    "total_verified_submissions": 7
+    "total_verified_submissions": 8
   },
-  "generated_at": "2026-10-23T12:23:33.961395+00:00",
+  "generated_at": "2026-10-23T15:44:45.925709+00:00",
   "milestones": {
     "gate1": {
       "blockers": [],
@@ -144,7 +156,7 @@
         "zero_false_positive_submissions": true
       },
       "metadata": {
-        "credited_submissions": 7,
+        "credited_submissions": 8,
         "distinct_employers": 4,
         "platforms": [
           "ashby"
@@ -186,11 +198,11 @@
   "safety_invariants": {
     "allow_real_application_submit": true,
     "captcha_or_mfa_bypass_attempted": false,
-    "credited_real_submissions": 7,
+    "credited_real_submissions": 8,
     "fail_closed_on_unmatched_required_fields": true,
     "false_submitted_records": 0,
     "uncertain_outcomes_credited_as_submitted": 0
   },
   "schema_version": "hunterx-certification-v2",
-  "source_commit": "d586abd4f060dfe2cdd25c940c11fb59e779b5e5"
+  "source_commit": "062d90c00012bd24a7847d87c5a79393f746830d"
 }

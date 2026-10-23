@@ -140,27 +140,28 @@ async def _find_input_for_key(page: Any, key: str, label_hint: str = "", value_h
         except Exception:
             pass
 
-    # 0c. Check for radio group matching key (e.g. Ashby compound {option_id}_{field_id})
+    # 0c. Check for radio group matching key (e.g. Lever cards[...][field0] or Ashby compound {option_id}_{field_id})
     for k in (key, key_camel):
-        radios = page.locator(f'input[type="radio"][name*="{k}" i], input[type="radio"][id*="{k}" i]')
-        try:
-            r_count = await radios.count()
-            if r_count > 0:
-                if value_hint is not None:
-                    str_hint = str(value_hint).strip().lower()
-                    for idx in range(r_count):
-                        r = radios.nth(idx)
-                        label_text = await r.evaluate("""el => {
-                            if (el.labels && el.labels[0]) return el.labels[0].innerText || '';
-                            const parent = el.closest('label') || el.parentElement;
-                            return parent ? parent.innerText || '' : '';
-                        }""")
-                        val_attr = (await r.get_attribute("value") or "").lower()
-                        if str_hint in label_text.lower() or val_attr == str_hint:
-                            return r, f'radio:{k}={value_hint}'
-                return radios.first, f'radio:{k}'
-        except Exception:
-            pass
+        for sel in (f'input[type="radio"][name="{k}"]', f'input[type="radio"][name*="{k}"]', f'input[type="radio"][id*="{k}"]'):
+            try:
+                radios = page.locator(sel)
+                r_count = await radios.count()
+                if r_count > 0:
+                    if value_hint is not None:
+                        str_hint = str(value_hint).strip().lower()
+                        for idx in range(r_count):
+                            r = radios.nth(idx)
+                            label_text = await r.evaluate("""el => {
+                                if (el.labels && el.labels[0]) return el.labels[0].innerText || '';
+                                const parent = el.closest('label') || el.parentElement;
+                                return parent ? parent.innerText || '' : '';
+                            }""")
+                            val_attr = (await r.get_attribute("value") or "").lower()
+                            if str_hint in label_text.lower() or val_attr == str_hint or (str_hint in ("yes", "true", "1") and val_attr == "yes") or (str_hint in ("no", "false", "0") and val_attr == "no"):
+                                return r, f'radio:{k}={value_hint}'
+                    return radios.first, f'radio:{k}'
+            except Exception:
+                pass
 
     # 1. Exact ID (snake_case and camelCase) using safe [id="..."] selector to support IDs starting with digits/UUIDs
     for k in (key, key_camel):
