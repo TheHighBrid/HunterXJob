@@ -37,8 +37,10 @@ def test_dashboard_renders_html(client_env):
     assert "text/html" in response.headers.get("content-type", "")
     assert "HunterXJob" in response.text
     assert "Command Center" in response.text
+    assert "Review Tasks" in response.text
     assert "Evidence Ledger" in response.text
     assert "Knowledge Book" in response.text
+    assert "ATS Platform Adapters & Health Matrix" in response.text
 
 
 def test_certification_dossier_endpoint(client_env):

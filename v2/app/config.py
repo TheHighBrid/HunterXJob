@@ -159,11 +159,16 @@ class Settings(BaseSettings):
 
     @property
     def database_file(self) -> Path:
-        return Path(self.database_path).expanduser().resolve()
+        raw = Path(self.database_path).expanduser()
+        if not raw.is_absolute() and Path.cwd().name != "v2":
+            v2_candidate = Path("v2") / raw
+            if v2_candidate.exists():
+                return v2_candidate.resolve()
+        return raw.resolve()
 
     @property
     def database_url(self) -> str:
-        path = Path(self.database_path).expanduser().resolve()
+        path = self.database_file
         path.parent.mkdir(parents=True, exist_ok=True)
         return f"sqlite:///{path}"
 
