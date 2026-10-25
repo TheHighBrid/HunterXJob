@@ -530,9 +530,15 @@ def get_dashboard_html() -> str:
 
     <!-- TAB 5: SYSTEM OPS -->
     <section id="tab-ops" class="tab-pane hidden space-y-6">
-      <div>
-        <h2 class="text-lg font-bold text-white tracking-tight">System Operations & Diagnostic Health</h2>
-        <p class="text-xs text-slate-400">Service posture, continuous scheduler, database backups, and adapter health</p>
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-lg font-bold text-white tracking-tight">System Operations & Diagnostic Health</h2>
+          <p class="text-xs text-slate-400">Service posture, continuous scheduler, database backups, and adapter health</p>
+        </div>
+        <button onclick="downloadDiagnosticsBundle()" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white flex items-center gap-1.5 shadow-sm transition-colors self-start sm:self-auto">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          Export Diagnostic Bundle
+        </button>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1616,6 +1622,26 @@ def get_dashboard_html() -> str:
     function downloadDossier() {
       window.open('/api/certification/dossier', '_blank');
       toast('Downloading verified cryptographic dossier...', 'info');
+    }
+
+    async function downloadDiagnosticsBundle() {
+      try {
+        toast('Compiling system diagnostics bundle...', 'info');
+        const res = await fetch('/api/diagnostics/export', { headers: authHeaders() });
+        if (!res.ok) throw new Error('Failed to export diagnostics');
+        const data = await res.json();
+        const payload = JSON.stringify(data, null, 2);
+        const blob = new Blob([payload], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `hunterx-diagnostics-${new Date().toISOString().slice(0, 10)}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+        toast('Diagnostics bundle exported successfully', 'success');
+      } catch (err) {
+        toast(`Export error: ${err.message}`, 'error');
+      }
     }
 
     async function verifyDossier() {

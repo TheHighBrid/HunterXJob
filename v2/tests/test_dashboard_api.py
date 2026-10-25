@@ -113,3 +113,17 @@ def test_job_artifacts_endpoints(client_env, tmp_path):
     res_file = client_env.get("/api/jobs/test-123/artifacts/post_submit.png", headers=HEADERS)
     assert res_file.status_code == 200
     assert res_file.headers.get("content-type") == "image/png"
+
+
+def test_export_system_diagnostics(client_env):
+    res = client_env.get("/api/diagnostics/export", headers=HEADERS)
+    assert res.status_code == 200
+    data = res.json()
+    assert "hunterx_version" in data
+    assert "system" in data
+    assert "posture" in data
+    assert "database" in data
+    assert "profile" in data
+    assert "certification_dossier_summary" in data
+    assert data["posture"]["live_submission_locked"] is True
+

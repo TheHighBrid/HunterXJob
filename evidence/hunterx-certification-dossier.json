@@ -24,32 +24,8 @@
     }
   },
   "evidence_ledger": {
-    "ledger_digest": "24984bc77f36354f8a478a7dc2f5d8c7ca88c3651bd3dfe1bdb0e8689dce755b",
+    "ledger_digest": "a1aa668dc045cc4ea9c52235e11a67c7fc97bc9a655ebf7b16766c4fe41edeb3",
     "records": [
-      {
-        "company": "float",
-        "evidence_snapshot_hash": "cde5aa8c63f473ddf9012b0fa61759364ecea15ef21ad87a9acf382f488c44de",
-        "is_concrete_confirmation": true,
-        "job_id": "b3dd584d-afc8-4554-a872-c04f2412166f",
-        "platform": "ashby",
-        "receipt_sha256": "9fad143e7879b8e68873affbdc77ab77e42e0e45520639a049ed70fe346294cb",
-        "receipt_snippet": "plication Success  Your application was successfully submitted!  Powered by\u00a0  Privacy PolicySecurityVulnerability Disclo",
-        "submitted_at": "2026-10-22 23:51:11.275994",
-        "title": "Bilingual Operations Associate, Risk",
-        "url": "https://jobs.ashbyhq.com/float/8083d9e0-3243-4a4d-925a-7d29beb8f9fb"
-      },
-      {
-        "company": "wealthsimple",
-        "evidence_snapshot_hash": "1db3799d0505fc8d3540d1deb3223fc3b2da0083409d6788edbe384fa175a184",
-        "is_concrete_confirmation": true,
-        "job_id": "8acfeb2a-a82e-4063-b573-a2d07ac4348e",
-        "platform": "ashby",
-        "receipt_sha256": "3bab1d56f8049f87a9f4ba714a1756404a56252fb48574f34867f701853c1742",
-        "receipt_snippet": "company.  Overview Application Success  Thanks for applying to Wealthsimple \ud83d\ude4c  Powered by\u00a0  Privacy PolicySecurityVulner",
-        "submitted_at": "2026-10-22 23:54:29.444365",
-        "title": "Team Lead, Fraud Investigations",
-        "url": "https://jobs.ashbyhq.com/wealthsimple/e089a81a-9409-4a19-87c8-36f3c0182aa8"
-      },
       {
         "company": "cohere",
         "evidence_snapshot_hash": "9919cd3a646242ee9ea5c48f1783beb01811894877d1e20d4bb5804c21a6b7a2",
@@ -61,54 +37,6 @@
         "submitted_at": "2026-10-22 23:58:02.350185",
         "title": "Forward Deployed Engineer, Agentic Platform",
         "url": "https://jobs.ashbyhq.com/cohere/b0bcef37-1d20-414f-aade-c54942d63df9"
-      },
-      {
-        "company": "wealthsimple",
-        "evidence_snapshot_hash": "c41307f7d4f13dec53474835732c333077c3d29b67382bf21622f698ac80a3c5",
-        "is_concrete_confirmation": true,
-        "job_id": "ecdec848-090c-4755-bc4c-5af1a7ff33dd",
-        "platform": "ashby",
-        "receipt_sha256": "65641aaf51cd287622c6319ac7a65448a8ddcc3e51535f8097cc236fe7c0eafe",
-        "receipt_snippet": "posting.  Overview Application Success  Thanks for applying to Wealthsimple \ud83d\ude4c  Powered by\u00a0  Privacy PolicySecurityVulner",
-        "submitted_at": "2026-10-22 23:59:05.047074",
-        "title": "Associate, Fraud Investigations Cards and Disputes (Fixed Term Contract)",
-        "url": "https://jobs.ashbyhq.com/wealthsimple/4aab1824-583c-4e39-b210-eb766bd49929"
-      },
-      {
-        "company": "float",
-        "evidence_snapshot_hash": "373c10b3a534e3db4d4ebf87ba2a3d23a97ad1a48b00c77b850154c35c0cc4d1",
-        "is_concrete_confirmation": true,
-        "job_id": "cbbda9fc-6338-4d6d-bb7f-36e7b07f6718",
-        "platform": "ashby",
-        "receipt_sha256": "a56d4bee197ed1eb4ed2fe053bd9b4f7248b4c8feca3e2112e5684b50fffc692",
-        "receipt_snippet": "plication Success  Your application was successfully submitted!  Powered by\u00a0  Privacy PolicySecurityVulnerability Disclo",
-        "submitted_at": "2026-10-23 00:00:54.992764",
-        "title": "Product Operations Manager, Cards & Spend Management",
-        "url": "https://jobs.ashbyhq.com/float/a0438a03-2952-4e38-9c72-ee132d344437"
-      },
-      {
-        "company": "jobber",
-        "evidence_snapshot_hash": "9cc8e3353fd7b502a8321d495cdac667490c2b8bdbaacbd56347b27fa312edf0",
-        "is_concrete_confirmation": true,
-        "job_id": "c7c35a74-2e74-4247-887b-136ba09f8ca3",
-        "platform": "ashby",
-        "receipt_sha256": "61e00901e14c6664f674a54177ef944e6cd5bf695fb9910095e2b57d37e2e676",
-        "receipt_snippet": "Success Your application was successfully submitted. We'll contact you if there are next steps.",
-        "submitted_at": "2026-10-23 12:18:04.276755",
-        "title": "Manager, Credit Risk",
-        "url": "https://jobs.ashbyhq.com/jobber/e10af44f-1a6f-4c4d-a63e-d5de27f9a458"
-      },
-      {
-        "company": "wealthsimple",
-        "evidence_snapshot_hash": "8e661d68d18a61c79dc98cf920190334dfb6d3c98c68b7534a2cfc2dfab8ddc0",
-        "is_concrete_confirmation": true,
-        "job_id": "6e0c0bd5-6d33-45d3-a2f9-b4805637cab2",
-        "platform": "ashby",
-        "receipt_sha256": "dbaec69f32d764475d9e772d4e3949840933e0dd952790598301e7fd79e368c0",
-        "receipt_snippet": "posting.  Overview Application Success  Thanks for applying to Wealthsimple \ud83d\ude4c  Powered by\u00a0  Privacy PolicySecurityVulner",
-        "submitted_at": "2026-10-23 12:23:14.613025",
-        "title": "Senior Specialist, Incident Response",
-        "url": "https://jobs.ashbyhq.com/wealthsimple/108e4513-0e74-4e4c-af3c-8e66e4222db8"
       },
       {
         "company": "cohere",
@@ -123,6 +51,42 @@
         "url": "https://jobs.ashbyhq.com/cohere/41cb2a12-e33a-4368-a9f8-0ae0d19c023e"
       },
       {
+        "company": "wealthsimple",
+        "evidence_snapshot_hash": "8e661d68d18a61c79dc98cf920190334dfb6d3c98c68b7534a2cfc2dfab8ddc0",
+        "is_concrete_confirmation": true,
+        "job_id": "6e0c0bd5-6d33-45d3-a2f9-b4805637cab2",
+        "platform": "ashby",
+        "receipt_sha256": "dbaec69f32d764475d9e772d4e3949840933e0dd952790598301e7fd79e368c0",
+        "receipt_snippet": "posting.  Overview Application Success  Thanks for applying to Wealthsimple \ud83d\ude4c  Powered by\u00a0  Privacy PolicySecurityVulner",
+        "submitted_at": "2026-10-23 12:23:14.613025",
+        "title": "Senior Specialist, Incident Response",
+        "url": "https://jobs.ashbyhq.com/wealthsimple/108e4513-0e74-4e4c-af3c-8e66e4222db8"
+      },
+      {
+        "company": "wealthsimple",
+        "evidence_snapshot_hash": "df8c89a3448b4882c03b387ab2c54020f921811ada2861d804883ceb43e04bbf",
+        "is_concrete_confirmation": true,
+        "job_id": "8acfeb2a-a82e-4063-b573-a2d07ac4348e",
+        "platform": "ashby",
+        "receipt_sha256": "3bab1d56f8049f87a9f4ba714a1756404a56252fb48574f34867f701853c1742",
+        "receipt_snippet": "company.  Overview Application Success  Thanks for applying to Wealthsimple \ud83d\ude4c  Powered by\u00a0  Privacy PolicySecurityVulner",
+        "submitted_at": "2026-10-22 23:54:29.444365",
+        "title": "Team Lead, Disputes",
+        "url": "https://jobs.ashbyhq.com/wealthsimple/e089a81a-9409-4a19-87c8-36f3c0182aa8"
+      },
+      {
+        "company": "wealthsimple",
+        "evidence_snapshot_hash": "c41307f7d4f13dec53474835732c333077c3d29b67382bf21622f698ac80a3c5",
+        "is_concrete_confirmation": true,
+        "job_id": "ecdec848-090c-4755-bc4c-5af1a7ff33dd",
+        "platform": "ashby",
+        "receipt_sha256": "65641aaf51cd287622c6319ac7a65448a8ddcc3e51535f8097cc236fe7c0eafe",
+        "receipt_snippet": "posting.  Overview Application Success  Thanks for applying to Wealthsimple \ud83d\ude4c  Powered by\u00a0  Privacy PolicySecurityVulner",
+        "submitted_at": "2026-10-22 23:59:05.047074",
+        "title": "Associate, Fraud Investigations Cards and Disputes (Fixed Term Contract)",
+        "url": "https://jobs.ashbyhq.com/wealthsimple/4aab1824-583c-4e39-b210-eb766bd49929"
+      },
+      {
         "company": "1password",
         "evidence_snapshot_hash": "82b05f9b9e5f311e8750f95ef1a28c1f9df717aa4c8c3dd599b158fb1329f6eb",
         "is_concrete_confirmation": true,
@@ -133,11 +97,47 @@
         "submitted_at": "2026-10-23 16:19:02.240481",
         "title": "Manager, Security Incident Response",
         "url": "https://jobs.ashbyhq.com/1password/423fd747-cf5d-46f6-a439-134d3bef3a5c"
+      },
+      {
+        "company": "jobber",
+        "evidence_snapshot_hash": "9cc8e3353fd7b502a8321d495cdac667490c2b8bdbaacbd56347b27fa312edf0",
+        "is_concrete_confirmation": true,
+        "job_id": "c7c35a74-2e74-4247-887b-136ba09f8ca3",
+        "platform": "ashby",
+        "receipt_sha256": "61e00901e14c6664f674a54177ef944e6cd5bf695fb9910095e2b57d37e2e676",
+        "receipt_snippet": "Success Your application was successfully submitted. We'll contact you if there are next steps.",
+        "submitted_at": "2026-10-23 12:18:04.276755",
+        "title": "Manager, Credit Risk",
+        "url": "https://jobs.ashbyhq.com/jobber/e10af44f-1a6f-4c4d-a63e-d5de27f9a458"
+      },
+      {
+        "company": "float",
+        "evidence_snapshot_hash": "cde5aa8c63f473ddf9012b0fa61759364ecea15ef21ad87a9acf382f488c44de",
+        "is_concrete_confirmation": true,
+        "job_id": "b3dd584d-afc8-4554-a872-c04f2412166f",
+        "platform": "ashby",
+        "receipt_sha256": "9fad143e7879b8e68873affbdc77ab77e42e0e45520639a049ed70fe346294cb",
+        "receipt_snippet": "plication Success  Your application was successfully submitted!  Powered by\u00a0  Privacy PolicySecurityVulnerability Disclo",
+        "submitted_at": "2026-10-22 23:51:11.275994",
+        "title": "Bilingual Operations Associate, Risk",
+        "url": "https://jobs.ashbyhq.com/float/8083d9e0-3243-4a4d-925a-7d29beb8f9fb"
+      },
+      {
+        "company": "float",
+        "evidence_snapshot_hash": "373c10b3a534e3db4d4ebf87ba2a3d23a97ad1a48b00c77b850154c35c0cc4d1",
+        "is_concrete_confirmation": true,
+        "job_id": "cbbda9fc-6338-4d6d-bb7f-36e7b07f6718",
+        "platform": "ashby",
+        "receipt_sha256": "a56d4bee197ed1eb4ed2fe053bd9b4f7248b4c8feca3e2112e5684b50fffc692",
+        "receipt_snippet": "plication Success  Your application was successfully submitted!  Powered by\u00a0  Privacy PolicySecurityVulnerability Disclo",
+        "submitted_at": "2026-10-23 00:00:54.992764",
+        "title": "Product Operations Manager, Cards & Spend Management",
+        "url": "https://jobs.ashbyhq.com/float/a0438a03-2952-4e38-9c72-ee132d344437"
       }
     ],
     "total_verified_submissions": 9
   },
-  "generated_at": "2026-10-23T19:02:01.626590+00:00",
+  "generated_at": "2026-10-25T05:25:20.825925+00:00",
   "milestones": {
     "gate1": {
       "blockers": [],
@@ -216,5 +216,5 @@
     "uncertain_outcomes_credited_as_submitted": 0
   },
   "schema_version": "hunterx-certification-v2",
-  "source_commit": "5db3473b25ae7baa3dddaa2d53e317c8dcf8956c"
+  "source_commit": "4485d644a14acd264357cd07050e893844dbe347"
 }

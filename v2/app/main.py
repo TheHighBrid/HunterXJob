@@ -418,6 +418,78 @@ def get_job_artifact(job_id: str, artifact_name: str, current: CurrentSettings):
     return FileResponse(file_path, media_type=media_types[artifact_name])
 
 
+@api.get("/api/diagnostics/export")
+def export_system_diagnostics(db: DbSession, current: CurrentSettings) -> dict[str, object]:
+    """Compiles a complete offline diagnostic snapshot of the autonomous engine."""
+    from datetime import UTC, datetime
+    import platform
+    import sys
+    from app.certification_system import build_certification_dossier
+    from app.flags import snapshot as flags_snapshot
+    from app.models import Job, ReviewTask
+    from app.profile import verified_profile
+
+    # Job stage counts
+    stage_counts = dict(
+        db.execute(select(Job.stage, func.count(Job.id)).group_by(Job.stage)).all()
+    )
+    total_jobs = sum(stage_counts.values())
+
+    # Review tasks by reason
+    review_counts = dict(
+        db.execute(
+            select(ReviewTask.reason_code, func.count(ReviewTask.id))
+            .where(ReviewTask.status == "open")
+            .group_by(ReviewTask.reason_code)
+        ).all()
+    )
+    total_open_reviews = sum(review_counts.values())
+
+    profile = verified_profile(db)
+    try:
+        from app.certification_system import build_certification_dossier
+        db_path = getattr(current, "database_file", None) or getattr(current, "database_path", None) or "./data/hunterxjob-v2.db"
+        dossier = build_certification_dossier(db_path=db_path)
+        dossier_summary = {
+            "status": dossier.get("overall_certification_status"),
+            "total_verified_submissions": dossier.get("evidence_ledger", {}).get("total_verified_submissions", 0),
+            "dossier_digest": dossier.get("dossier_digest"),
+            "milestones": {k: v.get("passed") for k, v in (dossier.get("milestones") or {}).items()},
+        }
+    except Exception as exc:
+        dossier_summary = {"status": "unavailable", "error": str(exc)}
+
+    return {
+        "timestamp": datetime.now(UTC).isoformat(),
+        "hunterx_version": __version__,
+        "system": {
+            "platform": platform.platform(),
+            "python_version": sys.version,
+        },
+        "posture": {
+            "application_mode": current.application_mode,
+            "automation_enabled": current.automation_enabled,
+            "allow_live_submission": current.allow_live_submission,
+            "live_submission_locked": True,
+            "continuous_run_enabled": current.continuous_run_enabled,
+            "flags": flags_snapshot(db),
+        },
+        "database": {
+            "total_jobs": total_jobs,
+            "by_stage": stage_counts,
+            "open_review_tasks_total": total_open_reviews,
+            "open_review_tasks_by_reason": review_counts,
+        },
+        "profile": {
+            "facts_count": len(profile.facts),
+            "is_empty": profile.empty,
+        },
+        "ai": LocalAI(current).health(),
+        "certification_dossier_summary": dossier_summary,
+    }
+
+
+
 app.include_router(api)
 app.include_router(remote_router)
 app.include_router(materials_router)

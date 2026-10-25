@@ -275,7 +275,26 @@ async def _read_back_value(locator: Any, tag: str, control_type: str) -> Any:
             return await locator.is_checked()
         if control_type == "file":
             return await locator.evaluate("el => el.files && el.files[0] ? el.files[0].name : ''")
-        return await locator.input_value()
+        val = await locator.input_value()
+        if val:
+            return val
+        # Check custom React/Tailwind/Ashby combobox wrapper for selected label
+        custom_val = await locator.evaluate(
+            """(el) => {
+              const root = el.closest(
+                '[data-field],.field-wrapper,.select__container,.select-container,' +
+                '[class*="select__control"],[class*="select-container"],' +
+                '[class*="field-wrapper"],[class*="application-field"]'
+              ) || el.parentElement;
+              if (!root) return '';
+              const singleVal = root.querySelector('[class*="single-value"],[aria-selected="true"],.selected-option');
+              if (singleVal && singleVal.innerText) return singleVal.innerText.trim();
+              const hidden = root.querySelector('input[type="hidden"]');
+              if (hidden && hidden.value) return hidden.value.trim();
+              return '';
+            }"""
+        )
+        return custom_val or val
     except Exception as exc:
         logger.debug("Failed reading back value: %s", exc)
         return ""
@@ -438,6 +457,11 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
                         await page.keyboard.press("ArrowDown")
                         await asyncio.sleep(0.2)
                         await page.keyboard.press("Enter")
+                    await asyncio.sleep(0.2)
+                    try:
+                        await locator.press("Escape")
+                    except Exception:
+                        pass
             except Exception:
                 pass
 

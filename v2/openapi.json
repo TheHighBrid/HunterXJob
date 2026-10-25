@@ -4495,6 +4495,27 @@
         "summary": "Get Certification Dossier"
       }
     },
+    "/api/diagnostics/export": {
+      "get": {
+        "description": "Compiles a complete offline diagnostic snapshot of the autonomous engine.",
+        "operationId": "export_system_diagnostics_api_diagnostics_export_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Export System Diagnostics Api Diagnostics Export Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Export System Diagnostics"
+      }
+    },
     "/api/discovery/run": {
       "post": {
         "operationId": "run_discovery_api_discovery_run_post",
