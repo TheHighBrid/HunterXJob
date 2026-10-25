@@ -64,3 +64,23 @@ def test_vault_catalog_endpoint(client_env):
     assert len(data["items"]) == data["catalog_size"]
     assert "candidate" in data
     assert data["candidate"]["name"] == "Mohamed Alem"
+
+
+def test_inbox_matcher_endpoint(client_env):
+    payload = {
+        "sender": "recruiting@cohere.com",
+        "subject": "Thank you for applying to Cohere",
+        "body": "Hi Mohamed, thank you for applying to Cohere! We have received your application.",
+    }
+    response = client_env.post("/api/inbox/match", json=payload, headers=HEADERS)
+    assert response.status_code == 200
+    data = response.json()
+    assert "intent" in data
+    assert data["intent"] == "confirmation"
+
+
+def test_follow_ups_due_endpoint(client_env):
+    response = client_env.get("/api/follow-ups/due", headers=HEADERS)
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)

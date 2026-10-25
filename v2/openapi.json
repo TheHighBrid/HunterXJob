@@ -1039,6 +1039,45 @@
         "title": "HistoryDayOut",
         "type": "object"
       },
+      "InboxEmailIn": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "received_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Received At"
+          },
+          "recipient": {
+            "default": "",
+            "title": "Recipient",
+            "type": "string"
+          },
+          "sender": {
+            "title": "Sender",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sender",
+          "subject",
+          "body"
+        ],
+        "title": "InboxEmailIn",
+        "type": "object"
+      },
       "JobApplicationOut": {
         "properties": {
           "adapter": {
@@ -4429,6 +4468,49 @@
         ]
       }
     },
+    "/api/follow-ups/due": {
+      "get": {
+        "operationId": "list_due_follow_ups_api_follow_ups_due_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Due Follow Ups Api Follow Ups Due Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Due Follow Ups"
+      }
+    },
+    "/api/follow-ups/run": {
+      "post": {
+        "operationId": "run_due_follow_ups_api_follow_ups_run_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Due Follow Ups Api Follow Ups Run Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Run Due Follow Ups"
+      }
+    },
     "/api/health": {
       "get": {
         "description": "Liveness probe. Open to everyone; details only for authenticated callers.",
@@ -4446,6 +4528,46 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/api/inbox/match": {
+      "post": {
+        "operationId": "match_inbox_email_api_inbox_match_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InboxEmailIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Match Inbox Email Api Inbox Match Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Match Inbox Email"
       }
     },
     "/api/jobs": {

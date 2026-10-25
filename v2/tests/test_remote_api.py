@@ -419,6 +419,8 @@ MUTATING_ROUTES = {
     ("POST", "/api/jobs/{job_id}/check-liveness"),
     ("POST", "/api/jobs/{job_id}/run-autonomous"),
     ("POST", "/api/autonomous/run"),
+    ("POST", "/api/inbox/match"),
+    ("POST", "/api/follow-ups/run"),
 }
 
 HOSTILE_BODIES = [

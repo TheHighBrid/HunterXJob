@@ -337,6 +337,14 @@ def get_dashboard_html() -> str:
           <p class="text-xs text-slate-400">Applications and postings requiring review before autonomous applying (sensitive questions, missing facts, or decision flags)</p>
         </div>
         <div class="flex items-center gap-2">
+          <button onclick="runFollowUpsCadence()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Scan Follow-ups (7d/14d)
+          </button>
+          <button onclick="openEmailModal()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 transition-colors flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+            Classify Email
+          </button>
           <div class="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-xs">
             <button onclick="setReviewFilter('open')" id="btn-review-open" class="px-3 py-1 rounded bg-brand-600 text-white font-semibold">Open</button>
             <button onclick="setReviewFilter('closed')" id="btn-review-closed" class="px-3 py-1 rounded text-slate-400 hover:text-white">Closed</button>
@@ -632,6 +640,39 @@ def get_dashboard_html() -> str:
       <div class="p-3 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between">
         <span id="modal-status-note" class="text-[11px] text-slate-500"></span>
         <button onclick="closeModal()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RECRUITER EMAIL CLASSIFIER MODAL -->
+  <div id="email-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full flex flex-col overflow-hidden shadow-2xl">
+      <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+        <div>
+          <h3 class="font-bold text-sm text-white">Recruiter Email Classifier & Matcher</h3>
+          <p class="text-xs text-slate-400">Match incoming recruiter communication to application and classify intent</p>
+        </div>
+        <button onclick="closeEmailModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">✕</button>
+      </div>
+      <div class="p-4 space-y-3 text-xs">
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-400 mb-1">Sender Email</label>
+          <input type="text" id="email-sender" placeholder="e.g. recruiting@cohere.com or jobs@wealthsimple.com" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-brand-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-400 mb-1">Email Subject</label>
+          <input type="text" id="email-subject" placeholder="e.g. Invitation to Interview / Application received" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-brand-500">
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-400 mb-1">Email Body</label>
+          <textarea id="email-body" rows="4" placeholder="Paste email content, Calendly links, or assessment requests..." class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-brand-500"></textarea>
+        </div>
+        <div id="email-match-result" class="hidden p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+        </div>
+      </div>
+      <div class="p-3 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between">
+        <button onclick="closeEmailModal()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200">Cancel</button>
+        <button onclick="submitEmailMatch()" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white shadow-sm">Analyze & Match</button>
       </div>
     </div>
   </div>
@@ -1109,6 +1150,86 @@ def get_dashboard_html() -> str:
         }
       } catch (e) {
         toast(`Network error: ${e.message}`, 'error');
+      }
+    }
+
+    async function runFollowUpsCadence() {
+      try {
+        toast('Scanning submitted applications for 7d & 14d follow-up cadence...', 'info');
+        const res = await fetch('/api/follow-ups/run', { method: 'POST', headers: authHeaders() });
+        const data = await res.json();
+        if (res.ok) {
+          if (data.processed > 0) {
+            toast(`Generated ${data.processed} follow-up review drafts`, 'success');
+            loadReviewTasks();
+            refreshKPIsAndStatus();
+          } else {
+            toast('All active applications are up-to-date with follow-up schedule.', 'info');
+          }
+        } else {
+          toast(`Follow-up check error: ${data.detail || 'Failed'}`, 'error');
+        }
+      } catch (e) {
+        toast(`Network error: ${e.message}`, 'error');
+      }
+    }
+
+    function openEmailModal() {
+      document.getElementById('email-sender').value = '';
+      document.getElementById('email-subject').value = '';
+      document.getElementById('email-body').value = '';
+      document.getElementById('email-match-result').classList.add('hidden');
+      document.getElementById('email-modal').classList.remove('hidden');
+      document.getElementById('email-modal').classList.add('flex');
+    }
+
+    function closeEmailModal() {
+      document.getElementById('email-modal').classList.add('hidden');
+      document.getElementById('email-modal').classList.remove('flex');
+    }
+
+    async function submitEmailMatch() {
+      const sender = document.getElementById('email-sender').value.trim();
+      const subject = document.getElementById('email-subject').value.trim();
+      const body = document.getElementById('email-body').value.trim();
+      if (!sender || !subject) {
+        toast('Please enter sender and subject', 'error');
+        return;
+      }
+      try {
+        toast('Classifying and matching recruiter email...', 'info');
+        const res = await fetch('/api/inbox/match', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ sender, subject, body })
+        });
+        const data = await res.json();
+        const resBox = document.getElementById('email-match-result');
+        resBox.classList.remove('hidden');
+        if (data.matched) {
+          resBox.innerHTML = `
+            <div class="text-emerald-400 font-bold text-xs flex items-center gap-1.5">
+              <span>✓ Matched to Application</span>
+              <span class="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-mono">${escapeHtml(data.intent)}</span>
+            </div>
+            <div class="text-slate-300 text-[11px]">${escapeHtml(data.summary)}</div>
+            ${data.extracted_links && data.extracted_links.length ? `<div class="text-[10px] text-brand-400 mt-1">Extracted Links: ${data.extracted_links.join(', ')}</div>` : ''}
+          `;
+          toast('Email matched and audit logged', 'success');
+          loadReviewTasks();
+          refreshKPIsAndStatus();
+        } else {
+          resBox.innerHTML = `
+            <div class="text-amber-400 font-bold text-xs flex items-center gap-1.5">
+              <span>Intent: ${escapeHtml(data.intent)}</span>
+              <span class="text-[10px] text-slate-400">(Score: ${data.confidence})</span>
+            </div>
+            <div class="text-slate-400 text-[11px]">${escapeHtml(data.summary)}</div>
+          `;
+          toast('Email analyzed (no existing application matched)', 'info');
+        }
+      } catch (e) {
+        toast(`Error analyzing email: ${e.message}`, 'error');
       }
     }
 

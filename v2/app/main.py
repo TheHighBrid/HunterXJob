@@ -99,6 +99,14 @@ class AnswerIn(BaseModel):
     note: str = ""
 
 
+class InboxEmailIn(BaseModel):
+    sender: str
+    recipient: str = ""
+    subject: str
+    body: str
+    received_at: str | None = None
+
+
 @app.get("/", response_class=HTMLResponse)
 def dashboard() -> str:
     return get_dashboard_html()
@@ -312,6 +320,65 @@ def run_job_autonomous(job_id: str, db: DbSession, current: CurrentSettings) -> 
         }
     except Exception as exc:
         raise HTTPException(409, f"autonomous job execution failed: {exc}") from exc
+
+
+@api.post("/api/inbox/match")
+def match_inbox_email(payload: InboxEmailIn, db: DbSession) -> dict[str, object]:
+    from datetime import UTC, datetime
+    from app.inbox_matcher import EmailMessage, process_inbox_email
+
+    dt = None
+    if payload.received_at:
+        try:
+            dt = datetime.fromisoformat(payload.received_at)
+        except Exception:
+            dt = datetime.now(UTC)
+
+    email = EmailMessage(
+        sender=payload.sender,
+        recipient=payload.recipient,
+        subject=payload.subject,
+        body=payload.body,
+        date=dt or datetime.now(UTC),
+    )
+    result = process_inbox_email(db, email)
+    return {
+        "matched": result.matched,
+        "application_id": result.application_id,
+        "job_id": result.job_id,
+        "intent": result.intent.value,
+        "confidence": result.confidence,
+        "extracted_reference_id": result.extracted_reference_id,
+        "extracted_links": result.extracted_links,
+        "summary": result.summary,
+    }
+
+
+@api.get("/api/follow-ups/due")
+def list_due_follow_ups(db: DbSession) -> list[dict[str, object]]:
+    from app.follow_up import get_due_follow_ups
+
+    due = get_due_follow_ups(db)
+    return [{
+        "application_id": app.id,
+        "job_id": job.id,
+        "company": job.company,
+        "title": job.title,
+        "follow_up_number": num,
+    } for app, job, num in due]
+
+
+@api.post("/api/follow-ups/run")
+def run_due_follow_ups(db: DbSession) -> dict[str, object]:
+    from app.follow_up import process_due_follow_ups
+    from app.profile import verified_profile
+
+    profile = verified_profile(db)
+    tasks = process_due_follow_ups(db, profile)
+    return {
+        "processed": len(tasks),
+        "tasks": [{"id": t.id, "title": t.title, "reason_code": t.reason_code} for t in tasks],
+    }
 
 
 app.include_router(api)
