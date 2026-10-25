@@ -110,13 +110,13 @@ class EvidenceLedger:
 
         records: list[SubmissionEvidenceRecord] = []
         for job_id, company, title, platform, url, updated_at in submitted_jobs:
-            # Query submission proof in pipeline_events
+            # Query submission proof in pipeline_events (prioritizing concrete submission receipts)
             cur.execute(
                 """
                 SELECT payload_json, created_at
                 FROM pipeline_events
                 WHERE job_id = ? AND to_stage = 'submitted' AND payload_json IS NOT NULL
-                ORDER BY created_at DESC
+                ORDER BY CASE WHEN payload_json LIKE '%"receipt"%' THEN 0 ELSE 1 END, created_at DESC
                 LIMIT 1
                 """,
                 (job_id,),
