@@ -95,7 +95,7 @@ def test_answer_vault_key_aliases_broad_coverage():
         assert res.value == "Immediate"
 
     # Resolves via French / language aliases
-    for k in ("french_proficiency", "bilingual_french", "language_proficiency"):
+    for k in ("french_proficiency", "bilingual_french", "french_level"):
         res = vault.resolve(FieldRequest(key=k))
         assert res.status == ResolutionStatus.RESOLVED
         assert res.value == "Bilingual"

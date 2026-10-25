@@ -89,11 +89,27 @@ class MatchResult:
         return self.matched[0] if self.matched else None
 
 
+_SYNONYM_STEMS = {
+    "bilingual": "biling",
+    "bilingue": "biling",
+    "professional": "profess",
+    "professionnel": "profess",
+    "professionnelle": "profess",
+    "authorized": "authoriz",
+    "autorise": "authoriz",
+    "autorisee": "authoriz",
+    "permanent": "perman",
+    "immediate": "immediat",
+    "relocate": "relocat",
+    "relocation": "relocat",
+}
+
+
 def score_option(answer: str, option: OptionRecord) -> int:
     """Compute 4-tier match score between a candidate answer and an option record:
     100: Exact normalized text or value match
     92: Boolean equivalence (e.g. Yes/Oui/Agree, No/Non/Decline)
-    84: Token Jaccard similarity >= 0.80
+    84: Token Jaccard similarity >= 0.80 or cross-lingual synonym stem overlap
     70: Substring containment (minimum length >= 3)
     0: No match or disabled
     """
@@ -114,13 +130,18 @@ def score_option(answer: str, option: OptionRecord) -> int:
     ):
         return 92
 
-    # 3. Token similarity
+    # 3. Token similarity & cross-lingual synonym stems
     answer_tokens = set(normalized_answer.split())
     label_tokens = set(label.split())
     if answer_tokens and label_tokens:
         union = answer_tokens | label_tokens
         intersection = answer_tokens & label_tokens
         if union and (len(intersection) / len(union) >= 0.65):
+            return 84
+        stem_ans = {_SYNONYM_STEMS.get(w, w) for w in answer_tokens if len(w) > 2}
+        stem_lbl = {_SYNONYM_STEMS.get(w, w) for w in label_tokens if len(w) > 2}
+        stem_inter = stem_ans & stem_lbl
+        if len(stem_inter) >= 2 or (len(stem_inter) >= 1 and any(s in _SYNONYM_STEMS.values() for s in stem_inter)):
             return 84
 
     # 4. Substring containment
@@ -771,7 +792,8 @@ def classify_question(question_text: str) -> dict[str, Any] | None:
     matches: list[tuple[int, int, dict[str, Any]]] = []
     for index, item in enumerate(QUESTION_CATALOG):
         for pattern in item["patterns"]:
-            match = re.search(pattern, normalized, flags=re.IGNORECASE)
+            norm_pattern = normalize_text(pattern)
+            match = re.search(pattern, normalized, flags=re.IGNORECASE) or re.search(norm_pattern, normalized, flags=re.IGNORECASE)
             if match:
                 matches.append((len(match.group(0)), -index, item))
 

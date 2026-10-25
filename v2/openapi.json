@@ -4172,6 +4172,35 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "VaultSimulateIn": {
+        "properties": {
+          "control_type": {
+            "default": "text",
+            "title": "Control Type",
+            "type": "string"
+          },
+          "options": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "question": {
+            "default": "",
+            "title": "Question",
+            "type": "string"
+          },
+          "scope": {
+            "default": "global",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "title": "VaultSimulateIn",
+        "type": "object"
       }
     }
   },
@@ -6721,6 +6750,46 @@
           }
         },
         "summary": "Get Vault Catalog"
+      }
+    },
+    "/api/vault/simulate": {
+      "post": {
+        "operationId": "simulate_vault_matching_api_vault_simulate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VaultSimulateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Simulate Vault Matching Api Vault Simulate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Simulate Vault Matching"
       }
     }
   }

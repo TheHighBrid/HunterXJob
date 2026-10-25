@@ -516,6 +516,117 @@ def get_dashboard_html() -> str:
         </div>
       </div>
 
+      <!-- INTERACTIVE ANSWER SIMULATOR & TESTING STUDIO -->
+      <div class="rounded-2xl border border-brand-500/30 bg-slate-900/70 p-5 space-y-4 shadow-xl shadow-brand-950/20">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-brand-500 animate-pulse"></span>
+              <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                Interactive Answer Simulator & 4-Tier Match Studio
+              </h3>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-brand-500/20 text-brand-300 border border-brand-500/30">JOBTOMATIK ENGINE</span>
+            </div>
+            <p class="text-xs text-slate-400 mt-1">Test real ATS screening questions, evaluate canonical category classifications, and simulate 4-tier option resolution in real time.</p>
+          </div>
+          <button onclick="clearSimulator()" class="px-2.5 py-1 text-xs text-slate-400 hover:text-slate-200 bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700/60 self-start sm:self-auto transition-colors">
+            Reset Studio
+          </button>
+        </div>
+
+        <!-- Quick Presets -->
+        <div class="space-y-1.5">
+          <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Quick Real-World ATS Presets:</div>
+          <div class="flex flex-wrap gap-1.5 text-xs">
+            <button onclick="loadSimPreset('work_auth')" class="px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-slate-700 transition-colors flex items-center gap-1.5">
+              <span>🇨🇦</span> <span>Canada Work Authorization</span>
+            </button>
+            <button onclick="loadSimPreset('french')" class="px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-slate-700 transition-colors flex items-center gap-1.5">
+              <span>🗣️</span> <span>French Proficiency</span>
+            </button>
+            <button onclick="loadSimPreset('salary')" class="px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-slate-700 transition-colors flex items-center gap-1.5">
+              <span>💰</span> <span>Target Compensation</span>
+            </button>
+            <button onclick="loadSimPreset('weekend')" class="px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-slate-700 transition-colors flex items-center gap-1.5">
+              <span>⏰</span> <span>Weekend Availability</span>
+            </button>
+            <button onclick="loadSimPreset('recording')" class="px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-slate-700 transition-colors flex items-center gap-1.5">
+              <span>🎥</span> <span>Interview Recording Consent</span>
+            </button>
+            <button onclick="loadSimPreset('remote')" class="px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-slate-700 transition-colors flex items-center gap-1.5">
+              <span>💻</span> <span>Dedicated Remote Office</span>
+            </button>
+            <button onclick="loadSimPreset('sql')" class="px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-slate-700 transition-colors flex items-center gap-1.5">
+              <span>📊</span> <span>SQL Proficiency</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Simulator Inputs -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          <div class="space-y-1.5">
+            <label class="block text-[11px] font-semibold text-slate-300">Screening Question Text / Form Label</label>
+            <textarea id="sim-question-input" rows="3" placeholder="Paste or type question label (e.g. 'Are you legally eligible to work in Canada with no restrictions?')" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-200 focus:outline-none focus:border-brand-500 font-sans text-xs leading-relaxed placeholder-slate-600"></textarea>
+          </div>
+          <div class="space-y-1.5">
+            <label class="block text-[11px] font-semibold text-slate-300">Options / Choices <span class="text-slate-500 font-normal">(one per line, optional for freeform fields)</span></label>
+            <textarea id="sim-options-input" rows="3" placeholder="Yes, I am a Canadian citizen or Permanent Resident&#10;No, I will require sponsorship in the future" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-200 focus:outline-none focus:border-brand-500 font-mono text-[11px] leading-relaxed placeholder-slate-600"></textarea>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between pt-1">
+          <div class="text-[11px] text-slate-500">
+            Simulates live classification, alias resolution, and 4-tier option matching without modifying application state.
+          </div>
+          <button onclick="runVaultSimulation()" id="btn-run-sim" class="px-4 py-2 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md shadow-brand-500/20 transition-all flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span>Simulate Match & Resolution</span>
+          </button>
+        </div>
+
+        <!-- Simulation Result Output Box (Collapsible/Dynamic) -->
+        <div id="sim-result-box" class="hidden rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-3">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+            <div class="flex items-center gap-2">
+              <span id="sim-status-badge" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">RESOLVED</span>
+              <span id="sim-key-badge" class="font-mono text-xs text-brand-400 font-semibold bg-brand-500/10 px-2 py-0.5 rounded border border-brand-500/20">key</span>
+              <span id="sim-source-badge" class="text-[10px] text-slate-400 font-mono bg-slate-800 px-1.5 py-0.5 rounded">source</span>
+            </div>
+            <div class="text-xs text-slate-400 flex items-center gap-2">
+              <span>Confidence:</span>
+              <span id="sim-confidence-val" class="font-bold text-white">100%</span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            <div class="space-y-1">
+              <div class="text-[11px] text-slate-400 font-medium">Vault Resolved Value:</div>
+              <div id="sim-stored-value" class="p-2.5 rounded-lg bg-slate-900 border border-slate-800 font-mono text-emerald-400 text-xs">--</div>
+            </div>
+            <div class="space-y-1">
+              <div class="text-[11px] text-slate-400 font-medium">4-Tier Matched Option:</div>
+              <div id="sim-matched-option" class="p-2.5 rounded-lg bg-slate-900 border border-slate-800 font-mono text-white text-xs flex items-center justify-between">
+                <span>--</span>
+                <span id="sim-tier-badge" class="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-300">Tier 1</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-3 rounded-lg bg-slate-900/60 border border-slate-800 text-xs text-slate-300 flex items-start gap-2">
+            <svg class="w-4 h-4 text-brand-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <div id="sim-explanation-text" class="leading-relaxed">--</div>
+          </div>
+
+          <div id="sim-add-policy-action" class="hidden pt-1 flex items-center justify-between">
+            <div class="text-xs text-amber-400/90 font-medium">No policy answer found for this question pattern.</div>
+            <button onclick="prefillAddFromSim()" class="px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold shadow-sm transition-colors flex items-center gap-1.5">
+              <span>+ Store Answer Policy</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+
       <!-- Stored Answer Policies (Answer Vault) -->
       <div class="rounded-2xl border border-slate-800 bg-slate-900/50 p-5 space-y-4">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -2152,6 +2263,160 @@ def get_dashboard_html() -> str:
       } catch (e) {
         toast(e.message, 'error');
       }
+    }
+
+    const SIM_PRESETS = {
+      work_auth: {
+        question: "Are you legally eligible to work in Canada with no restrictions (e.g. Citizen, PR, Open Work Permit)?",
+        options: [
+          "Yes, I am a Canadian citizen or Permanent Resident",
+          "Yes, I have an active work permit",
+          "No, I require visa sponsorship"
+        ]
+      },
+      french: {
+        question: "Quel est votre niveau de compétence en français (oral et écrit)?",
+        options: [
+          "Bilingue / Avancé (Capacité professionnelle complète)",
+          "Intermédiaire",
+          "Débutant",
+          "Aucun"
+        ]
+      },
+      salary: {
+        question: "What is your desired annual base salary expectation (CAD)?",
+        options: []
+      },
+      weekend: {
+        question: "Are you open to occasional weekend shifts or on-call rotations when necessary?",
+        options: [
+          "Yes, available as required",
+          "No, standard weekday business hours only"
+        ]
+      },
+      recording: {
+        question: "Do you consent to having video interviews recorded for hiring evaluation purposes?",
+        options: [
+          "Yes, I consent to interview recording",
+          "Opt out / Do not record"
+        ]
+      },
+      remote: {
+        question: "Do you have a dedicated, quiet, and secure home office workspace for remote work?",
+        options: [
+          "Yes",
+          "No"
+        ]
+      },
+      sql: {
+        question: "Which statement best describes your practical SQL experience?",
+        options: [
+          "I independently write multi-table joins, CTEs, and window functions for analytics",
+          "I run basic SELECT and WHERE queries",
+          "I do not use SQL"
+        ]
+      }
+    };
+
+    function loadSimPreset(key) {
+      const p = SIM_PRESETS[key];
+      if (!p) return;
+      document.getElementById('sim-question-input').value = p.question;
+      document.getElementById('sim-options-input').value = (p.options || []).join('\n');
+      runVaultSimulation();
+    }
+
+    function clearSimulator() {
+      document.getElementById('sim-question-input').value = '';
+      document.getElementById('sim-options-input').value = '';
+      document.getElementById('sim-result-box')?.classList.add('hidden');
+    }
+
+    let lastSimResult = null;
+
+    async function runVaultSimulation() {
+      const question = document.getElementById('sim-question-input')?.value.trim();
+      if (!question) {
+        toast('Please enter a screening question to simulate', 'warn');
+        return;
+      }
+      const rawOptions = document.getElementById('sim-options-input')?.value || '';
+      const options = rawOptions.split('\n').map(o => o.trim()).filter(Boolean);
+
+      const btn = document.getElementById('btn-run-sim');
+      if (btn) btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/vault/simulate', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ question, options })
+        });
+        if (!res.ok) throw new Error('Simulation failed: ' + res.statusText);
+        const data = await res.json();
+        lastSimResult = data;
+        renderSimulationResult(data);
+      } catch (e) {
+        toast(e.message, 'error');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    function renderSimulationResult(data) {
+      const box = document.getElementById('sim-result-box');
+      if (!box) return;
+      box.classList.remove('hidden');
+
+      const statusBadge = document.getElementById('sim-status-badge');
+      if (data.status === 'resolved') {
+        statusBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+        statusBadge.textContent = 'RESOLVED';
+      } else if (data.status === 'review') {
+        statusBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30';
+        statusBadge.textContent = 'REVIEW REQUIRED';
+      } else {
+        statusBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30';
+        statusBadge.textContent = 'MISSING ANSWER';
+      }
+
+      document.getElementById('sim-key-badge').textContent = data.canonical_key || data.resolved_key || 'unmapped';
+      document.getElementById('sim-source-badge').textContent = data.source ? `source: ${data.source}` : 'no source';
+      document.getElementById('sim-confidence-val').textContent = `${Math.round((data.confidence || 0) * 100)}%`;
+
+      document.getElementById('sim-stored-value').textContent = data.stored_value !== null ? String(data.stored_value) : '(None)';
+
+      const optEl = document.getElementById('sim-matched-option');
+      const tierBadge = document.getElementById('sim-tier-badge');
+      if (data.matched_option) {
+        optEl.firstElementChild.textContent = data.matched_option;
+        tierBadge.textContent = data.tier || 'Matched';
+        tierBadge.classList.remove('hidden');
+      } else {
+        optEl.firstElementChild.textContent = data.options_provided > 0 ? '(No high-confidence match)' : '(Freeform / text field)';
+        tierBadge.classList.add('hidden');
+      }
+
+      document.getElementById('sim-explanation-text').textContent = data.explanation;
+
+      const addAction = document.getElementById('sim-add-policy-action');
+      if (data.status === 'missing') {
+        addAction.classList.remove('hidden');
+      } else {
+        addAction.classList.add('hidden');
+      }
+    }
+
+    function prefillAddFromSim() {
+      if (!lastSimResult) return;
+      const key = lastSimResult.canonical_key || lastSimResult.resolved_key;
+      const addForm = document.getElementById('add-answer-form');
+      if (addForm && addForm.classList.contains('hidden')) {
+        toggleAddAnswerForm();
+      }
+      if (key) document.getElementById('new-ans-key').value = key;
+      document.getElementById('new-ans-note').value = `Simulated from: ${lastSimResult.question.slice(0, 80)}`;
+      document.getElementById('new-ans-value').focus();
     }
 
     async function loadOps() {

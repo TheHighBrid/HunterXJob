@@ -124,7 +124,10 @@ _KEY_ALIASES = {
     "bilingual": "language_french",
     "french_proficiency": "language_french",
     "bilingual_french": "language_french",
-    "language_proficiency": "language_french",
+    "french_level": "language_french",
+    "french": "language_french",
+    "languages": "language_proficiency",
+    "spoken_languages": "language_proficiency",
 
     # Legal declarations
     "disclaimer_and_consent": "terms_consent",

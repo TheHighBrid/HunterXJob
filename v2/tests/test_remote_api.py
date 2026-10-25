@@ -394,6 +394,7 @@ MUTATING_ROUTES = {
     ("PUT", "/api/resume-facts"),
     ("POST", "/api/answers"),
     ("DELETE", "/api/answers/{answer_id}"),
+    ("POST", "/api/vault/simulate"),
     ("POST", "/api/discovery/run"),
     ("POST", "/api/scoring/run"),
     ("POST", "/api/applications/{application_id}/generate"),
@@ -564,3 +565,35 @@ def test_manual_liveness_check_records_evidence_without_closing(env, monkeypatch
     assert body["liveness"] == "suspect"
     assert body["liveness_detail"]["checks"][0]["trigger"] == "manual"
     assert body["liveness_detail"]["checks"][0]["action"] == "suspect"
+
+
+def test_vault_simulate_endpoint(env):
+    with env["Session"]() as db:
+        load_example_profile(db)
+    client = env["client"]
+
+    # 1. Exact / boolean fallback matching
+    res = client.post("/api/vault/simulate", headers=AUTH, json={
+        "question": "Are you legally eligible to work in Canada without restrictions?",
+        "options": ["Yes, I am a Canadian citizen/PR", "No, I need sponsorship"],
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "resolved"
+    assert data["canonical_key"] == "work_authorization_ca"
+    assert data["stored_value"] == "Yes"
+    assert data["matched_option"] == "Yes, I am a Canadian citizen/PR"
+    assert "Tier 2" in data["tier"]
+
+    # 2. Empty question safely returns missing
+    empty_res = client.post("/api/vault/simulate", headers=AUTH, json={"question": ""})
+    assert empty_res.status_code == 200
+    assert empty_res.json()["status"] == "missing"
+
+    # 3. Missing / unanswerable question
+    unmapped = client.post("/api/vault/simulate", headers=AUTH, json={
+        "question": "Have you worked with proprietary quantum cryptography libraries in production?",
+        "options": ["Yes", "No"],
+    })
+    assert unmapped.status_code == 200
+    assert unmapped.json()["status"] == "missing"

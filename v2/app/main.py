@@ -99,6 +99,13 @@ class AnswerIn(BaseModel):
     note: str = ""
 
 
+class VaultSimulateIn(BaseModel):
+    question: str = ""
+    options: list[str] = []
+    control_type: str = "text"
+    scope: str = "global"
+
+
 class InboxEmailIn(BaseModel):
     sender: str
     recipient: str = ""
@@ -178,6 +185,97 @@ def delete_answer(answer_id: str, db: DbSession) -> dict[str, object]:
     db.delete(row)
     db.commit()
     return {"deleted": True, "id": answer_id, "key": row.key}
+
+
+@api.post("/api/vault/simulate")
+def simulate_vault_matching(payload: VaultSimulateIn, db: DbSession) -> dict[str, object]:
+    from app.answer_vault import FieldRequest, ResolutionStatus
+    from app.form_engine import _normalize_option, _score_best_option
+    from app.greenhouse_form import shared_answer_key
+    from app.question_catalog import classify_question as catalog_classify
+    from app.vault_store import load_vault
+
+    question = (payload.question or "").strip()
+    if not question:
+        return {
+            "question": "",
+            "canonical_key": None,
+            "status": "missing",
+            "stored_value": None,
+            "matched_option": None,
+            "tier": None,
+            "confidence": 0.0,
+            "explanation": "No question provided.",
+        }
+
+    canonical_key = shared_answer_key(question)
+    if not canonical_key:
+        cat_match = catalog_classify(question)
+        if cat_match:
+            canonical_key = cat_match.get("canonical_key")
+    vault = load_vault(db)
+
+    # First try resolving via canonical key, then fallback to normalized question slug
+    req_key = canonical_key or question.lower().replace(" ", "_")
+    resolved = vault.resolve(FieldRequest(key=req_key))
+    if resolved.status != ResolutionStatus.RESOLVED and canonical_key:
+        resolved = vault.resolve(FieldRequest(key=canonical_key))
+
+    # Evaluate options if provided
+    options = [str(opt).strip() for opt in payload.options if str(opt).strip()]
+    matched_option = None
+    matched_tier = None
+    confidence = 1.0 if resolved.status == ResolutionStatus.RESOLVED else 0.0
+
+    if resolved.status == ResolutionStatus.RESOLVED and options:
+        lookup = {_normalize_option(opt): opt for opt in options}
+        exact = lookup.get(_normalize_option(resolved.value))
+        if exact is not None:
+            matched_option = exact
+            matched_tier = "Tier 1: Exact Normalized Match"
+            confidence = 1.0
+        else:
+            best = _score_best_option(resolved.value, options)
+            if best is not None:
+                matched_option = best
+                matched_tier = "Tier 2/3/4: Boolean Equivalence & Token Overlap"
+                confidence = 0.95
+            else:
+                confidence = 0.0
+
+    if resolved.status == ResolutionStatus.RESOLVED:
+        if options and not matched_option:
+            status = "review"
+            explanation = (
+                f"Resolved value '{resolved.value}' from key '{req_key}', but none of the "
+                f"{len(options)} options matched with high confidence (would route to human review)."
+            )
+        else:
+            status = "resolved"
+            explanation = f"Matched '{resolved.value}' from key '{req_key}' (source: {resolved.source.value})."
+            if matched_option:
+                explanation += f" Selected option '{matched_option}' via {matched_tier}."
+    else:
+        status = "missing"
+        explanation = (
+            f"Question was categorized as '{canonical_key}', but no answer is stored in the vault or verified profile."
+            if canonical_key
+            else "No canonical question pattern matched this text. Would route to human review."
+        )
+
+    return {
+        "question": question,
+        "canonical_key": canonical_key,
+        "resolved_key": req_key,
+        "status": status,
+        "stored_value": resolved.value if resolved.status == ResolutionStatus.RESOLVED else None,
+        "source": resolved.source.value if resolved.status == ResolutionStatus.RESOLVED else None,
+        "options_provided": len(options),
+        "matched_option": matched_option,
+        "tier": matched_tier,
+        "confidence": confidence,
+        "explanation": explanation,
+    }
 
 
 @api.post("/api/discovery/run")
