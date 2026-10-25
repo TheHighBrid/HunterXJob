@@ -215,9 +215,11 @@ def _blocker_detail(plan: FillPlan) -> str:
     return "\n".join(lines)
 
 
-def preview_form(db: Session, form: RealForm) -> tuple[FillPlan, dict[str, object]]:
+def preview_form(db: Session, form: RealForm, application: Application | None = None) -> tuple[FillPlan, dict[str, object]]:
     """Plan a real form against the vault without changing any state."""
     vault = load_vault(db, form.vault_scopes)
+    if application is not None:
+        vault = _with_materials(db, application, vault)
     plan = plan_fill(form.controls, vault)
     return plan, form.summary()
 

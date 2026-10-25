@@ -127,3 +127,30 @@ def test_export_system_diagnostics(client_env):
     assert "certification_dossier_summary" in data
     assert data["posture"]["live_submission_locked"] is True
 
+
+def test_answers_crud_endpoints(client_env):
+    # Create answer
+    res = client_env.post("/api/answers", json={
+        "key": "custom_question_123",
+        "value": "Yes, extensive experience",
+        "scope": "global",
+        "note": "Unit test answer",
+    }, headers=HEADERS)
+    assert res.status_code == 200
+    ans_id = res.json()["id"]
+
+    # List answers
+    res_list = client_env.get("/api/answers", headers=HEADERS)
+    assert res_list.status_code == 200
+    items = res_list.json()
+    assert any(a["id"] == ans_id and a["key"] == "custom_question_123" for a in items)
+
+    # Delete answer
+    res_del = client_env.delete(f"/api/answers/{ans_id}", headers=HEADERS)
+    assert res_del.status_code == 200
+    assert res_del.json()["deleted"] is True
+
+    # Check not found
+    res_del2 = client_env.delete(f"/api/answers/{ans_id}", headers=HEADERS)
+    assert res_del2.status_code == 404
+

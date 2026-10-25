@@ -56,7 +56,7 @@ from app.flags import KILL_SWITCH, FlagChangeRefused, check_api_flag_change, set
 from app.greenhouse_form import FormFetchError
 from app.job_liveness import CheckContext, check_job
 from app.job_views import job_detail, list_jobs
-from app.models import FeatureFlag, Job, ReviewTask, iso_utc
+from app.models import Application, FeatureFlag, Job, ReviewTask, iso_utc
 from app.pipeline import preview_form
 from app.real_forms import LiveFormProvider
 from app.reports import summary
@@ -168,7 +168,8 @@ def job_form(job_id: str, db: DbSession, current: CurrentSettings) -> dict[str, 
         form = LiveFormProvider(current).fetch(row)
     except FormFetchError as exc:
         raise HTTPException(502 if exc.reason_code == "form_fetch_failed" else 409, {"reason": exc.reason_code, "detail": exc.detail}) from exc
-    plan, form_summary = preview_form(db, form)
+    app = db.execute(select(Application).where(Application.job_id == job_id)).scalar_one_or_none()
+    plan, form_summary = preview_form(db, form, application=app)
     return {
         "form": form_summary,
         "ready": plan.ready,

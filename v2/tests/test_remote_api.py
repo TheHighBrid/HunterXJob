@@ -393,6 +393,7 @@ def test_reject_and_resolve(env):
 MUTATING_ROUTES = {
     ("PUT", "/api/resume-facts"),
     ("POST", "/api/answers"),
+    ("DELETE", "/api/answers/{answer_id}"),
     ("POST", "/api/discovery/run"),
     ("POST", "/api/scoring/run"),
     ("POST", "/api/applications/{application_id}/generate"),
@@ -469,6 +470,7 @@ def test_no_route_can_unlock_live_submission_or_record_a_submission(env, monkeyp
             "job_id": [ready.id, blocked.id, review_job.id],
             "material_id": list(db.execute(select(ApplicationMaterial.id)).scalars()),
             "fact_id": list(db.execute(select(ProfileFact.id)).scalars())[:3],
+            "answer_id": ["dummy_answer_id"],
         }
     client = TestClient(main.app, client=("203.0.113.9", 50000), raise_server_exceptions=False)
     for method, path in sorted(MUTATING_ROUTES):

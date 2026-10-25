@@ -23,7 +23,7 @@ from app.flags import ensure_flags, snapshot
 from app.material_store import MaterialsError
 from app.material_workflow import generate_for_application
 from app.materials_api import router as materials_router
-from app.models import Application, PipelineEvent, ReviewTask
+from app.models import AnswerPolicy, Application, PipelineEvent, ReviewTask
 from app.pipeline import approve_application, execute_apply, score_pending_jobs
 from app.remote_api import router as remote_router
 from app.resume_facts import RESUME_FACTS_PATH, read_resume_facts
@@ -144,10 +144,40 @@ def save_resume_facts(payload: ResumeFactsIn) -> dict[str, object]:
     return {"saved": True, "characters": len(payload.text.strip())}
 
 
+@api.get("/api/answers")
+def list_answers(db: DbSession, scope: str | None = None) -> list[dict[str, object]]:
+    query = select(AnswerPolicy).order_by(AnswerPolicy.key.asc())
+    if scope:
+        query = query.where(AnswerPolicy.scope == scope)
+    rows = db.execute(query).scalars().all()
+    return [{
+        "id": r.id,
+        "key": r.key,
+        "value": r.value,
+        "source": r.source,
+        "scope": r.scope,
+        "confidence": r.confidence,
+        "sensitive": r.sensitive,
+        "note": r.note,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+        "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+    } for r in rows]
+
+
 @api.post("/api/answers")
 def save_answer(payload: AnswerIn, db: DbSession) -> dict[str, object]:
     row = upsert_answer(db, **payload.model_dump())
     return {"id": row.id, "key": row.key, "scope": row.scope, "source": row.source}
+
+
+@api.delete("/api/answers/{answer_id}")
+def delete_answer(answer_id: str, db: DbSession) -> dict[str, object]:
+    row = db.get(AnswerPolicy, answer_id)
+    if row is None:
+        raise HTTPException(404, "answer not found")
+    db.delete(row)
+    db.commit()
+    return {"deleted": True, "id": answer_id, "key": row.key}
 
 
 @api.post("/api/discovery/run")

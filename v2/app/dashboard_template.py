@@ -516,6 +516,56 @@ def get_dashboard_html() -> str:
         </div>
       </div>
 
+      <!-- Stored Answer Policies (Answer Vault) -->
+      <div class="rounded-2xl border border-slate-800 bg-slate-900/50 p-5 space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="text-sm font-bold text-white">Configured Answer Policies</h3>
+              <span id="answers-count-badge" class="px-2 py-0.5 rounded bg-brand-500/20 text-brand-300 font-bold text-[10px]">0 Policies</span>
+            </div>
+            <p class="text-xs text-slate-400 mt-0.5">Stored policies automatically satisfy ATS screening questions</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="text" id="answer-vault-search" oninput="filterAnswersVault()" placeholder="Filter keys or answers..." class="bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-lg px-2.5 py-1.5 w-44 focus:outline-none focus:border-brand-500 placeholder-slate-600">
+            <button onclick="toggleAddAnswerForm()" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white flex items-center gap-1 shadow-sm transition-colors">
+              <span>+ Add Policy</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Add Policy Form (Collapsible) -->
+        <div id="add-answer-form" class="hidden p-3.5 rounded-xl bg-slate-950 border border-brand-500/40 space-y-3">
+          <div class="text-xs font-bold text-white">Add New Vault Answer Policy</div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-400 mb-1">Key / Question ID</label>
+              <input type="text" id="new-ans-key" placeholder="e.g. availability_date or question_id" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-brand-500 font-mono text-[11px]">
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-400 mb-1">Value / Answer</label>
+              <input type="text" id="new-ans-value" placeholder="e.g. Immediate / 2 weeks" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-brand-500">
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-400 mb-1">Scope</label>
+              <input type="text" id="new-ans-scope" value="global" placeholder="global or employer" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-brand-500 font-mono text-[11px]">
+            </div>
+          </div>
+          <div class="flex items-center justify-between pt-1">
+            <input type="text" id="new-ans-note" placeholder="Optional policy note (e.g. Verified from resume)" class="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-400 text-xs w-2/3 focus:outline-none focus:border-brand-500">
+            <div class="flex items-center gap-2">
+              <button onclick="toggleAddAnswerForm()" class="px-2.5 py-1 text-xs text-slate-400 hover:text-slate-200">Cancel</button>
+              <button onclick="submitNewAnswer()" class="px-3 py-1 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold shadow-sm">Save to Vault</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Answers List -->
+        <div id="answers-vault-list" class="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+          <div class="text-xs text-slate-500">Loading stored answer policies...</div>
+        </div>
+      </div>
+
       <!-- Question Catalog Browser -->
       <div class="rounded-2xl border border-slate-800 bg-slate-900/50 p-5 space-y-4">
         <div class="flex items-center justify-between">
@@ -895,7 +945,10 @@ def get_dashboard_html() -> str:
       if (tab === 'pipeline') renderPipeline();
       if (tab === 'review') loadReviewTasks();
       if (tab === 'certification') loadCertification();
-      if (tab === 'vault') loadVault();
+      if (tab === 'vault') {
+        loadVault();
+        loadAnswersVault();
+      }
       if (tab === 'ops') loadOps();
     }
 
@@ -2002,6 +2055,102 @@ def get_dashboard_html() -> str:
         `).join('');
       } catch (e) {
         console.error('Failed loading vault:', e);
+      }
+    }
+
+    let cachedAnswers = [];
+
+    async function loadAnswersVault() {
+      try {
+        const res = await fetch('/api/answers', { headers: authHeaders() });
+        if (!res.ok) return;
+        cachedAnswers = await res.json();
+        const badge = document.getElementById('answers-count-badge');
+        if (badge) badge.textContent = `${cachedAnswers.length} Policies`;
+        renderAnswersVault();
+      } catch (e) {
+        console.error('Failed loading answer policies:', e);
+      }
+    }
+
+    function renderAnswersVault() {
+      const container = document.getElementById('answers-vault-list');
+      if (!container) return;
+      const q = (document.getElementById('answer-vault-search')?.value || '').toLowerCase();
+      let list = cachedAnswers;
+      if (q) {
+        list = list.filter(a => (a.key || '').toLowerCase().includes(q) || (a.value || '').toLowerCase().includes(q) || (a.scope || '').toLowerCase().includes(q));
+      }
+      if (!list.length) {
+        container.innerHTML = `<div class="p-4 rounded-xl bg-slate-950 border border-slate-800 text-center text-slate-500 text-xs">No stored answer policies found. Answers saved via Form Inspector or added manually will appear here.</div>`;
+        return;
+      }
+      container.innerHTML = list.map(a => `
+        <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 transition-colors flex items-start justify-between gap-3 text-xs">
+          <div class="space-y-1 flex-1">
+            <div class="flex items-center gap-2">
+              <span class="font-mono font-bold text-slate-200 text-xs">${escapeHtml(a.key)}</span>
+              <span class="px-1.5 py-0.2 rounded text-[10px] font-mono ${a.scope === 'global' ? 'bg-slate-800 text-slate-400' : 'bg-brand-500/10 text-brand-400 border border-brand-500/30'}">${escapeHtml(a.scope)}</span>
+              <span class="px-1.5 py-0.2 rounded text-[10px] font-mono bg-slate-800/80 text-slate-400">${escapeHtml(a.source)}</span>
+            </div>
+            <div class="text-[11px] text-emerald-400 font-medium">Value: ${escapeHtml(a.value)}</div>
+            ${a.note ? `<div class="text-[10px] text-slate-500 font-mono italic">${escapeHtml(a.note)}</div>` : ''}
+          </div>
+          <button onclick="deleteAnswerPolicy('${a.id}', '${escapeHtml(a.key)}')" class="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors" title="Delete policy">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          </button>
+        </div>
+      `).join('');
+    }
+
+    function filterAnswersVault() {
+      renderAnswersVault();
+    }
+
+    function toggleAddAnswerForm() {
+      const el = document.getElementById('add-answer-form');
+      if (el) el.classList.toggle('hidden');
+    }
+
+    async function submitNewAnswer() {
+      const key = document.getElementById('new-ans-key')?.value.trim();
+      const value = document.getElementById('new-ans-value')?.value.trim();
+      const scope = document.getElementById('new-ans-scope')?.value.trim() || 'global';
+      const note = document.getElementById('new-ans-note')?.value.trim() || '';
+
+      if (!key || !value) {
+        toast('Please specify both key and answer value', 'warn');
+        return;
+      }
+      toast('Saving policy to vault...', 'info');
+      try {
+        const res = await fetch('/api/answers', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ key, value, scope, note, source: 'user', confidence: 1.0 })
+        });
+        if (!res.ok) throw new Error('Failed to save answer policy');
+        toast(`Saved policy for ${key}!`, 'success');
+        document.getElementById('new-ans-key').value = '';
+        document.getElementById('new-ans-value').value = '';
+        document.getElementById('new-ans-note').value = '';
+        toggleAddAnswerForm();
+        await loadAnswersVault();
+        revalidateReviewTasks();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+
+    async function deleteAnswerPolicy(id, key) {
+      if (!confirm(`Delete answer policy for '${key}'?`)) return;
+      try {
+        const res = await fetch(`/api/answers/${id}`, { method: 'DELETE', headers: authHeaders() });
+        if (!res.ok) throw new Error('Failed to delete answer policy');
+        toast(`Deleted policy for ${key}`, 'info');
+        loadAnswersVault();
+      } catch (e) {
+        toast(e.message, 'error');
       }
     }
 
