@@ -25,6 +25,9 @@ from app import __version__
 from app.api_schemas import (
     AuthCheckOut,
     BackupsOut,
+    BatchReviewResultOut,
+    BatchTaskIdsIn,
+    ClaimsVerificationOut,
     CycleOut,
     FlagIn,
     FlagOut,
@@ -34,6 +37,7 @@ from app.api_schemas import (
     KillSwitchIn,
     KillSwitchOut,
     NoteIn,
+    RevalidateReviewResultOut,
     ReviewActionOut,
     ReviewResolveIn,
     ReviewTaskDetailOut,
@@ -234,6 +238,130 @@ def resolve_review(task_id: str, db: DbSession, payload: ReviewResolveIn | None 
         return resolve_task(db, task_id, (payload or ReviewResolveIn()).resolution)
     except ReviewActionError as exc:
         raise _refused(exc) from exc
+
+
+@router.post("/api/review-tasks/batch-approve", response_model=BatchReviewResultOut, tags=["remote"])
+def batch_approve_reviews(
+    db: DbSession,
+    current: CurrentSettings,
+    payload: BatchTaskIdsIn | None = None,
+) -> dict[str, object]:
+    """Batch approve review tasks. Never applies or submits."""
+    task_ids = (payload.task_ids if payload else []) or []
+    results: list[dict[str, object]] = []
+    succeeded = 0
+    failed = 0
+
+    for tid in task_ids:
+        try:
+            res = approve_task(db, current, tid)
+            results.append({"task_id": tid, "ok": True, "result": res})
+            succeeded += 1
+        except ReviewActionError as exc:
+            results.append({"task_id": tid, "ok": False, "error": exc.detail, "status_code": exc.status_code})
+            failed += 1
+        except Exception as exc:
+            results.append({"task_id": tid, "ok": False, "error": str(exc), "status_code": 400})
+            failed += 1
+
+    return {
+        "total": len(task_ids),
+        "succeeded": succeeded,
+        "failed": failed,
+        "results": results,
+    }
+
+
+@router.post("/api/review-tasks/batch-resolve", response_model=BatchReviewResultOut, tags=["remote"])
+def batch_resolve_reviews(
+    db: DbSession,
+    payload: BatchTaskIdsIn | None = None,
+) -> dict[str, object]:
+    """Batch resolve review tasks."""
+    task_ids = (payload.task_ids if payload else []) or []
+    results: list[dict[str, object]] = []
+    succeeded = 0
+    failed = 0
+
+    for tid in task_ids:
+        try:
+            res = resolve_task(db, tid, "resolved")
+            results.append({"task_id": tid, "ok": True, "result": res})
+            succeeded += 1
+        except ReviewActionError as exc:
+            results.append({"task_id": tid, "ok": False, "error": exc.detail, "status_code": exc.status_code})
+            failed += 1
+        except Exception as exc:
+            results.append({"task_id": tid, "ok": False, "error": str(exc), "status_code": 400})
+            failed += 1
+
+    return {
+        "total": len(task_ids),
+        "succeeded": succeeded,
+        "failed": failed,
+        "results": results,
+    }
+
+
+@router.post("/api/review-tasks/batch-reject", response_model=BatchReviewResultOut, tags=["remote"])
+def batch_reject_reviews(
+    db: DbSession,
+    payload: BatchTaskIdsIn | None = None,
+) -> dict[str, object]:
+    """Batch reject review tasks."""
+    task_ids = (payload.task_ids if payload else []) or []
+    results: list[dict[str, object]] = []
+    succeeded = 0
+    failed = 0
+
+    for tid in task_ids:
+        try:
+            res = reject_task(db, tid)
+            results.append({"task_id": tid, "ok": True, "result": res})
+            succeeded += 1
+        except ReviewActionError as exc:
+            results.append({"task_id": tid, "ok": False, "error": exc.detail, "status_code": exc.status_code})
+            failed += 1
+        except Exception as exc:
+            results.append({"task_id": tid, "ok": False, "error": str(exc), "status_code": 400})
+            failed += 1
+
+    return {
+        "total": len(task_ids),
+        "succeeded": succeeded,
+        "failed": failed,
+        "results": results,
+    }
+
+
+@router.post("/api/review-tasks/revalidate", response_model=RevalidateReviewResultOut, tags=["remote"])
+def revalidate_reviews(
+    db: DbSession,
+    current: CurrentSettings,
+    payload: BatchTaskIdsIn | None = None,
+) -> dict[str, object]:
+    """Re-evaluate review tasks against candidate profile facts and answer vault."""
+    from app.manual_review_policy_revalidation import revalidate_open_tasks
+
+    task_ids = payload.task_ids if payload and payload.task_ids else None
+    return revalidate_open_tasks(db, settings=current, task_ids=task_ids)
+
+
+@router.get("/api/jobs/{job_id}/claims-verification", response_model=ClaimsVerificationOut, tags=["remote"])
+def get_job_claims_verification(
+    job_id: str,
+    db: DbSession,
+    current: CurrentSettings,
+) -> dict[str, object]:
+    """Inspects all claims generated for this job and validates against candidate truth facts."""
+    from app.autonomous_material_verification import verify_job_materials_claims
+
+    job = db.get(Job, job_id)
+    if job is None:
+        raise HTTPException(404, "Job not found")
+
+    artifact_dir = getattr(current, "artifact_dir", None) or "/tmp/hunterx_autonomous"
+    return verify_job_materials_claims(db, job, artifact_dir=artifact_dir)
 
 
 # --------------------------------------------------------------------- scheduler

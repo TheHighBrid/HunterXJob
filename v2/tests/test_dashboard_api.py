@@ -41,6 +41,10 @@ def test_dashboard_renders_html(client_env):
     assert "Evidence Ledger" in response.text
     assert "Knowledge Book" in response.text
     assert "ATS Platform Adapters & Health Matrix" in response.text
+    assert "Truth Guard Claims Inspector" in response.text
+    assert "Re-evaluate Against Vault" in response.text
+    assert "Batch Approve" in response.text
+    assert "select-all-tasks" in response.text
 
 
 def test_certification_dossier_endpoint(client_env):

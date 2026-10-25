@@ -554,6 +554,42 @@ class ReviewResolveIn(BaseModel):
     resolution: Literal["resolved", "dismissed"] = "resolved"
 
 
+class BatchTaskIdsIn(BaseModel):
+    task_ids: list[str] = Field(default_factory=list)
+
+
+class BatchReviewResultOut(Out):
+    total: int
+    succeeded: int
+    failed: int
+    results: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class RevalidateReviewResultOut(Out):
+    examined: int
+    resolved: int
+    retained: int
+    promoted_to_ready: int
+    details: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ClaimsVerificationOut(Out):
+    job_id: str
+    company: str
+    title: str
+    status: str
+    truth_grounded: bool
+    claims_total: int
+    verified_count: int
+    unsupported_count: int
+    verified_claims: list[dict[str, Any]] = Field(default_factory=list)
+    unsupported_claims: list[dict[str, Any]] = Field(default_factory=list)
+    resume_artifact: dict[str, Any] = Field(default_factory=dict)
+    material_hash: str
+    policy_version: str
+    profile_facts_grounding_rate: float
+
+
 # ---------------------------------------------------------------------- reports
 
 

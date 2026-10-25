@@ -192,6 +192,51 @@
         "title": "BackupsOut",
         "type": "object"
       },
+      "BatchReviewResultOut": {
+        "properties": {
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "results": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "succeeded": {
+            "title": "Succeeded",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "failed",
+          "results",
+          "succeeded",
+          "total"
+        ],
+        "title": "BatchReviewResultOut",
+        "type": "object"
+      },
+      "BatchTaskIdsIn": {
+        "properties": {
+          "task_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Task Ids",
+            "type": "array"
+          }
+        },
+        "title": "BatchTaskIdsIn",
+        "type": "object"
+      },
       "BlockedFieldOut": {
         "properties": {
           "key": {
@@ -245,6 +290,93 @@
           "section"
         ],
         "title": "BlockedFieldOut",
+        "type": "object"
+      },
+      "ClaimsVerificationOut": {
+        "properties": {
+          "claims_total": {
+            "title": "Claims Total",
+            "type": "integer"
+          },
+          "company": {
+            "title": "Company",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "material_hash": {
+            "title": "Material Hash",
+            "type": "string"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "profile_facts_grounding_rate": {
+            "title": "Profile Facts Grounding Rate",
+            "type": "number"
+          },
+          "resume_artifact": {
+            "additionalProperties": true,
+            "title": "Resume Artifact",
+            "type": "object"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "truth_grounded": {
+            "title": "Truth Grounded",
+            "type": "boolean"
+          },
+          "unsupported_claims": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Unsupported Claims",
+            "type": "array"
+          },
+          "unsupported_count": {
+            "title": "Unsupported Count",
+            "type": "integer"
+          },
+          "verified_claims": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Verified Claims",
+            "type": "array"
+          },
+          "verified_count": {
+            "title": "Verified Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "claims_total",
+          "company",
+          "job_id",
+          "material_hash",
+          "policy_version",
+          "profile_facts_grounding_rate",
+          "resume_artifact",
+          "status",
+          "title",
+          "truth_grounded",
+          "unsupported_claims",
+          "unsupported_count",
+          "verified_claims",
+          "verified_count"
+        ],
+        "title": "ClaimsVerificationOut",
         "type": "object"
       },
       "CycleOut": {
@@ -2667,6 +2799,43 @@
         "title": "ResumeFactsIn",
         "type": "object"
       },
+      "RevalidateReviewResultOut": {
+        "properties": {
+          "details": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Details",
+            "type": "array"
+          },
+          "examined": {
+            "title": "Examined",
+            "type": "integer"
+          },
+          "promoted_to_ready": {
+            "title": "Promoted To Ready",
+            "type": "integer"
+          },
+          "resolved": {
+            "title": "Resolved",
+            "type": "integer"
+          },
+          "retained": {
+            "title": "Retained",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "details",
+          "examined",
+          "promoted_to_ready",
+          "resolved",
+          "retained"
+        ],
+        "title": "RevalidateReviewResultOut",
+        "type": "object"
+      },
       "ReviewActionOut": {
         "properties": {
           "action": {
@@ -4835,6 +5004,49 @@
         ]
       }
     },
+    "/api/jobs/{job_id}/claims-verification": {
+      "get": {
+        "description": "Inspects all claims generated for this job and validates against candidate truth facts.",
+        "operationId": "get_job_claims_verification_api_jobs__job_id__claims_verification_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimsVerificationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Job Claims Verification",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
     "/api/jobs/{job_id}/form": {
       "get": {
         "description": "Fetch the job's real application form (read-only) and plan it against the vault.\n\nNo state changes, no evidence, nothing submitted. Values for sensitive or\nlegal fields are redacted in the response.",
@@ -5691,6 +5903,202 @@
           }
         },
         "summary": "Review Tasks",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/review-tasks/batch-approve": {
+      "post": {
+        "description": "Batch approve review tasks. Never applies or submits.",
+        "operationId": "batch_approve_reviews_api_review_tasks_batch_approve_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/BatchTaskIdsIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchReviewResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Batch Approve Reviews",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/review-tasks/batch-reject": {
+      "post": {
+        "description": "Batch reject review tasks.",
+        "operationId": "batch_reject_reviews_api_review_tasks_batch_reject_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/BatchTaskIdsIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchReviewResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Batch Reject Reviews",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/review-tasks/batch-resolve": {
+      "post": {
+        "description": "Batch resolve review tasks.",
+        "operationId": "batch_resolve_reviews_api_review_tasks_batch_resolve_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/BatchTaskIdsIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchReviewResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Batch Resolve Reviews",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
+    "/api/review-tasks/revalidate": {
+      "post": {
+        "description": "Re-evaluate review tasks against candidate profile facts and answer vault.",
+        "operationId": "revalidate_reviews_api_review_tasks_revalidate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/BatchTaskIdsIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevalidateReviewResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revalidate Reviews",
         "tags": [
           "remote"
         ]

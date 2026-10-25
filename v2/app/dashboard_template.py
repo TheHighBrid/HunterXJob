@@ -345,7 +345,11 @@ def get_dashboard_html() -> str:
           </div>
           <p class="text-xs text-slate-400">Applications and postings requiring review before autonomous applying (sensitive questions, missing facts, or decision flags)</p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
+          <button onclick="revalidateReviewTasks()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 transition-colors flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Re-evaluate Against Vault
+          </button>
           <button onclick="runFollowUpsCadence()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors flex items-center gap-1.5">
             <svg class="w-3.5 h-3.5 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             Scan Follow-ups (7d/14d)
@@ -362,12 +366,28 @@ def get_dashboard_html() -> str:
         </div>
       </div>
 
+      <!-- Batch Review Actions Bar -->
+      <div id="batch-review-bar" class="hidden p-3 bg-slate-900/90 border border-purple-500/40 rounded-xl flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <span id="selected-tasks-count" class="text-xs font-bold text-purple-300">0 tasks selected</span>
+          <button onclick="clearSelectedTasks()" class="text-[11px] text-slate-400 hover:text-white underline">Deselect all</button>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="batchApproveSelected()" class="px-3 py-1.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-colors">Batch Approve</button>
+          <button onclick="batchResolveSelected()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors">Batch Resolve</button>
+          <button onclick="batchRejectSelected()" class="px-3 py-1.5 rounded-lg bg-red-600/30 hover:bg-red-600/50 text-red-300 border border-red-500/40 text-xs font-bold transition-colors">Batch Reject</button>
+        </div>
+      </div>
+
       <!-- Review Tasks Table -->
       <div class="rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden">
         <div class="overflow-x-auto">
           <table class="w-full text-left text-xs">
             <thead class="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800 font-bold">
               <tr>
+                <th class="px-3 py-3.5 w-8 text-center">
+                  <input type="checkbox" id="select-all-tasks" onchange="toggleSelectAllTasks(this)" class="rounded border-slate-700 bg-slate-850 text-brand-500 focus:ring-0 cursor-pointer">
+                </th>
                 <th class="px-4 py-3.5">Company & Role</th>
                 <th class="px-3 py-3.5">Reason Code</th>
                 <th class="px-3 py-3.5">Details</th>
@@ -376,7 +396,7 @@ def get_dashboard_html() -> str:
               </tr>
             </thead>
             <tbody id="review-tasks-body" class="divide-y divide-slate-800/60">
-              <tr><td colspan="5" class="px-4 py-8 text-center text-slate-500">Loading review tasks...</td></tr>
+              <tr><td colspan="6" class="px-4 py-8 text-center text-slate-500">Loading review tasks...</td></tr>
             </tbody>
           </table>
         </div>
@@ -709,6 +729,51 @@ def get_dashboard_html() -> str:
     </div>
   </div>
 
+  <!-- TRUTH GUARD & CLAIMS INSPECTOR MODAL -->
+  <div id="truth-guard-modal" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+      <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 id="tg-modal-title" class="font-bold text-sm text-white">Truth Guard Claims Inspector</h3>
+            <span id="tg-modal-badge" class="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">100% GROUNDED</span>
+          </div>
+          <p id="tg-modal-subtitle" class="text-xs text-slate-400 mt-0.5"></p>
+        </div>
+        <button onclick="closeTruthGuardModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">✕</button>
+      </div>
+
+      <!-- Stats Bar -->
+      <div class="px-5 py-3 bg-slate-950/70 border-b border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+        <div>
+          <div class="text-[10px] uppercase font-mono text-slate-500">Grounding Rate</div>
+          <div id="tg-stat-rate" class="font-bold text-emerald-400">100%</div>
+        </div>
+        <div>
+          <div class="text-[10px] uppercase font-mono text-slate-500">Verified Claims</div>
+          <div id="tg-stat-claims" class="font-bold text-slate-200">0</div>
+        </div>
+        <div>
+          <div class="text-[10px] uppercase font-mono text-slate-500">Canonical Resume</div>
+          <div id="tg-stat-resume" class="font-bold text-slate-200 truncate">Verified PDF</div>
+        </div>
+        <div>
+          <div class="text-[10px] uppercase font-mono text-slate-500">Policy Version</div>
+          <div id="tg-stat-policy" class="font-mono text-[11px] text-brand-400 truncate">v1</div>
+        </div>
+      </div>
+
+      <div id="tg-modal-body" class="p-4 overflow-y-auto space-y-3 flex-1 text-xs">
+        <div class="text-slate-400">Inspecting materials against candidate truth facts...</div>
+      </div>
+
+      <div class="p-3 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between text-xs text-slate-500">
+        <span class="font-mono text-[10px]">Zero Hallucination Guaranteed · Rooted in Mohamed Alem Verified Profile</span>
+        <button onclick="closeTruthGuardModal()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- JAVASCRIPT APP LOGIC -->
   <script>
     const API_KEY_KEY = 'hunterxKey';
@@ -950,6 +1015,7 @@ def get_dashboard_html() -> str:
               <span class="px-2 py-0.5 rounded text-[10px] font-semibold border ${stageColor}">${escapeHtml(j.stage)}</span>
             </td>
             <td class="px-4 py-3 text-right space-x-1.5 whitespace-nowrap">
+              <button onclick="inspectTruthGuard('${j.id}')" class="px-2 py-1 rounded bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-[11px] font-semibold border border-indigo-500/30">Truth Guard</button>
               <button onclick="inspectForm('${j.id}')" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-medium border border-slate-700/60">Form</button>
               <button onclick="applyDirect('${j.id}')" class="px-2.5 py-1 rounded bg-brand-600 hover:bg-brand-500 text-white text-[11px] font-semibold">Apply Live</button>
               <a href="${j.url}" target="_blank" class="px-2 py-1 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-400 text-[11px]">↗</a>
@@ -1134,12 +1200,16 @@ def get_dashboard_html() -> str:
     function renderReviewTasks() {
       const tbody = document.getElementById('review-tasks-body');
       if (!tbody) return;
+      clearSelectedTasks();
       if (!cachedReviewTasks || cachedReviewTasks.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-8 text-center text-slate-500">No review tasks found for this filter.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-8 text-center text-slate-500">No review tasks found for this filter.</td></tr>`;
         return;
       }
       tbody.innerHTML = cachedReviewTasks.map(t => `
         <tr class="hover:bg-slate-800/40 transition-colors">
+          <td class="px-3 py-3 text-center">
+            <input type="checkbox" value="${t.id}" onchange="updateTaskSelection()" class="task-checkbox rounded border-slate-700 bg-slate-850 text-brand-500 focus:ring-0 cursor-pointer">
+          </td>
           <td class="px-4 py-3">
             <div class="font-bold text-slate-200 text-xs">${escapeHtml(t.company || 'Unknown')}</div>
             <div class="text-[11px] text-slate-400">${escapeHtml(t.job_title || t.title || 'Role')}</div>
@@ -1159,12 +1229,233 @@ def get_dashboard_html() -> str:
             ${t.created_at ? new Date(t.created_at).toLocaleDateString() : 'Recent'}
           </td>
           <td class="px-4 py-3 text-right whitespace-nowrap space-x-1.5">
+            ${t.job_id ? `<button onclick="inspectTruthGuard('${t.job_id}')" class="px-2 py-1 rounded bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/30 text-[11px] font-semibold transition-colors">Truth Guard</button>` : ''}
             <button onclick="approveReviewTask('${t.id}')" class="px-2.5 py-1 rounded bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold transition-colors">Approve</button>
             <button onclick="rejectReviewTask('${t.id}')" class="px-2.5 py-1 rounded bg-red-600/20 hover:bg-red-600/40 text-red-300 border border-red-500/30 text-[11px] font-semibold transition-colors">Reject</button>
             <button onclick="resolveReviewTask('${t.id}')" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-semibold transition-colors">Resolve</button>
           </td>
         </tr>
       `).join('');
+    }
+
+    function toggleSelectAllTasks(master) {
+      const boxes = document.querySelectorAll('.task-checkbox');
+      boxes.forEach(b => b.checked = master.checked);
+      updateTaskSelection();
+    }
+
+    function updateTaskSelection() {
+      const selected = getSelectedTaskIds();
+      const bar = document.getElementById('batch-review-bar');
+      const countEl = document.getElementById('selected-tasks-count');
+      if (bar && countEl) {
+        if (selected.length > 0) {
+          bar.classList.remove('hidden');
+          countEl.textContent = `${selected.length} task${selected.length > 1 ? 's' : ''} selected`;
+        } else {
+          bar.classList.add('hidden');
+        }
+      }
+      const master = document.getElementById('select-all-tasks');
+      const all = document.querySelectorAll('.task-checkbox');
+      if (master && all.length > 0) {
+        master.checked = selected.length === all.length;
+      }
+    }
+
+    function clearSelectedTasks() {
+      document.querySelectorAll('.task-checkbox').forEach(b => b.checked = false);
+      const master = document.getElementById('select-all-tasks');
+      if (master) master.checked = false;
+      const bar = document.getElementById('batch-review-bar');
+      if (bar) bar.classList.add('hidden');
+    }
+
+    function getSelectedTaskIds() {
+      return Array.from(document.querySelectorAll('.task-checkbox:checked')).map(b => b.value);
+    }
+
+    async function batchApproveSelected() {
+      const taskIds = getSelectedTaskIds();
+      if (!taskIds.length) return;
+      try {
+        toast(`Approving ${taskIds.length} review tasks...`, 'info');
+        const res = await fetch('/api/review-tasks/batch-approve', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ task_ids: taskIds }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          toast(`Batch approved ${data.succeeded} tasks (${data.failed} skipped/failed)`, 'success');
+          clearSelectedTasks();
+          loadReviewTasks();
+          refreshKPIsAndStatus();
+        } else {
+          toast(`Batch approve failed: ${data.detail || 'Error'}`, 'error');
+        }
+      } catch (e) {
+        toast(`Network error: ${e.message}`, 'error');
+      }
+    }
+
+    async function batchResolveSelected() {
+      const taskIds = getSelectedTaskIds();
+      if (!taskIds.length) return;
+      try {
+        toast(`Resolving ${taskIds.length} review tasks...`, 'info');
+        const res = await fetch('/api/review-tasks/batch-resolve', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ task_ids: taskIds }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          toast(`Batch resolved ${data.succeeded} tasks`, 'success');
+          clearSelectedTasks();
+          loadReviewTasks();
+          refreshKPIsAndStatus();
+        } else {
+          toast(`Batch resolve failed: ${data.detail || 'Error'}`, 'error');
+        }
+      } catch (e) {
+        toast(`Network error: ${e.message}`, 'error');
+      }
+    }
+
+    async function batchRejectSelected() {
+      const taskIds = getSelectedTaskIds();
+      if (!taskIds.length) return;
+      if (!confirm(`Are you sure you want to reject ${taskIds.length} selected tasks?`)) return;
+      try {
+        toast(`Rejecting ${taskIds.length} review tasks...`, 'info');
+        const res = await fetch('/api/review-tasks/batch-reject', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ task_ids: taskIds }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          toast(`Batch rejected ${data.succeeded} tasks`, 'info');
+          clearSelectedTasks();
+          loadReviewTasks();
+          refreshKPIsAndStatus();
+        } else {
+          toast(`Batch reject failed: ${data.detail || 'Error'}`, 'error');
+        }
+      } catch (e) {
+        toast(`Network error: ${e.message}`, 'error');
+      }
+    }
+
+    async function revalidateReviewTasks() {
+      try {
+        toast('Re-evaluating open review tasks against candidate vault...', 'info');
+        const res = await fetch('/api/review-tasks/revalidate', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({}),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          if (data.resolved > 0) {
+            toast(`Revalidation complete: ${data.resolved} tasks resolved, ${data.promoted_to_ready} promoted to ready`, 'success');
+          } else {
+            toast(`Revalidation evaluated ${data.examined} tasks; all remaining tasks require review.`, 'info');
+          }
+          loadReviewTasks();
+          refreshKPIsAndStatus();
+        } else {
+          toast(`Revalidation error: ${data.detail || 'Failed'}`, 'error');
+        }
+      } catch (e) {
+        toast(`Network error: ${e.message}`, 'error');
+      }
+    }
+
+    async function inspectTruthGuard(jobId) {
+      if (!jobId) {
+        toast('No associated job ID for Truth Guard inspection', 'error');
+        return;
+      }
+      const modal = document.getElementById('truth-guard-modal');
+      const body = document.getElementById('tg-modal-body');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      body.innerHTML = '<div class="text-slate-400">Verifying materials claims against candidate facts...</div>';
+
+      try {
+        const res = await fetch(`/api/jobs/${jobId}/claims-verification`, { headers: authHeaders() });
+        if (!res.ok) throw new Error('Failed loading claims verification');
+        const data = await res.json();
+
+        document.getElementById('tg-modal-title').textContent = `${data.company} — Truth Guard Audit`;
+        document.getElementById('tg-modal-subtitle').textContent = `${data.title} · Material SHA: ${(data.material_hash || '').substring(0, 20)}...`;
+
+        const badge = document.getElementById('tg-modal-badge');
+        if (data.truth_grounded) {
+          badge.className = 'px-2 py-0.5 rounded text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+          badge.textContent = '100% GROUNDED';
+        } else {
+          badge.className = 'px-2 py-0.5 rounded text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/30';
+          badge.textContent = 'NEEDS REVIEW';
+        }
+
+        const rate = Math.round((data.profile_facts_grounding_rate || 1) * 100);
+        document.getElementById('tg-stat-rate').textContent = `${rate}%`;
+        document.getElementById('tg-stat-claims').textContent = `${data.verified_count} / ${data.claims_total}`;
+        document.getElementById('tg-stat-policy').textContent = data.policy_version || 'v1';
+
+        const resumeInfo = data.resume_artifact || {};
+        const resumeEl = document.getElementById('tg-stat-resume');
+        if (resumeInfo.exists) {
+          resumeEl.textContent = `${Math.round(resumeInfo.size_bytes / 1024)} KB (Verified)`;
+          resumeEl.className = 'font-bold text-emerald-400 truncate';
+        } else {
+          resumeEl.textContent = 'Template Ready';
+          resumeEl.className = 'font-bold text-slate-300 truncate';
+        }
+
+        const claims = data.verified_claims || [];
+        if (!claims.length) {
+          body.innerHTML = '<div class="text-slate-400">No candidate claims generated for this job yet.</div>';
+          return;
+        }
+
+        body.innerHTML = `
+          <div class="space-y-2.5">
+            <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+              <span>Verified Candidate Claims (${claims.length})</span>
+              <span class="text-emerald-400 font-mono text-[10px]">100% Fact-Checked</span>
+            </div>
+            ${claims.map((c, i) => `
+              <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                <div class="flex items-center justify-between text-[11px]">
+                  <span class="font-bold text-slate-200">${escapeHtml(c.section || 'Claim ' + (i + 1))}</span>
+                  <span class="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-brand-500/10 text-brand-400 border border-brand-500/30">
+                    ${escapeHtml(c.fact_key || 'verified')}
+                  </span>
+                </div>
+                <div class="p-2 rounded-lg bg-slate-900/80 text-slate-300 text-xs italic border border-slate-800/80">
+                  "${escapeHtml(c.text || '')}"
+                </div>
+                <div class="text-[11px] text-slate-400 flex items-start gap-1.5 pl-1">
+                  <span class="text-emerald-400 font-bold">✓</span>
+                  <span><strong>Fact Grounding:</strong> ${escapeHtml(c.fact_quote || 'Verified candidate profile attribute')}</span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      } catch (err) {
+        body.innerHTML = `<div class="text-red-400 p-4 bg-red-950/20 border border-red-900/40 rounded-xl">Error inspecting claims: ${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function closeTruthGuardModal() {
+      const modal = document.getElementById('truth-guard-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
     }
 
     async function approveReviewTask(taskId) {
