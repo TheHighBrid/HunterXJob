@@ -8,6 +8,7 @@ import { Badge } from "@/components/Badge";
 import { Banner } from "@/components/Banner";
 import { Card, Muted, Row } from "@/components/Card";
 import { LockBanner } from "@/components/LockBanner";
+import { PlanBadge } from "@/components/PlanBadge";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { StatCard } from "@/components/StatCard";
@@ -107,6 +108,7 @@ export default function DashboardScreen() {
       >
         {error ? <Banner tone="danger" message={`Showing the last data: ${error}`} /> : null}
         <LockBanner compact />
+        <PlanBadge onUpgradePress={() => router.push("/settings")} />
 
         <Card
           title="Kill switch"

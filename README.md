@@ -24,6 +24,22 @@ It discovers live job postings, evaluates match scores against your verified pro
 
 ---
 
+## Multi-Platform & Mobile Release (v1.0.0)
+
+HunterXJob is officially available as an Android APK release, with web dashboard operations and planned native releases across iOS, macOS, and Windows.
+
+* **Android Native App (`releases/HunterXJob-v1.0.0.apk`)**: Standalone, installable APK package (`com.hunterxjob.app` v1.0.0, SHA-256 verified) ready for direct install and Google Play Store rollout.
+* **Monetization & Tiers**:
+  * **Free Hunter Tier**: Multi-board job search, fit scoring, form inspection, and up to **2 applications filled per day** with manual human verification. Full unattended autonomy is locked.
+  * **HunterX Pro (Unlimited)**: Unlimited daily applications, continuous background scheduler, full autonomous looping, automated submissions, and priority ATS queueing.
+* **Cross-Platform Roadmap**:
+  1. 📱 **Android**: v1.0.0 APK released; Google Play Store release in progress.
+  2. 🍎 **iOS**: TestFlight & App Store release via Expo iOS framework.
+  3. 💻 **macOS Native**: Desktop operations client for Apple Silicon / Intel Macs.
+  4. 🪟 **Windows Native**: Windows client for desktop background job hunting.
+
+---
+
 ## Current State & Achievements (October 2026)
 
 * **Phases 1–6 & Recovery Gates 1–2 Complete**: Full autonomous pipeline verified across **528 passing automated tests** (`v2/tests/`).
