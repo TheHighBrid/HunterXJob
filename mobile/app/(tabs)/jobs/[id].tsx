@@ -14,6 +14,7 @@ import { ErrorView, LoadingView } from "@/components/StatusViews";
 import { linkedLabel, livenessBadgeStatus, sourceLabel } from "@/discovery";
 import { useApiResource } from "@/hooks/useApiResource";
 import { confirmAsync } from "@/lib/confirm";
+import { useSubscription, MAX_DAILY_FREE_APPLICATIONS } from "@/store/subscription";
 import { matchScoreColor, stageColor, useTheme } from "@/theme";
 import { formatDateTime, formatScore, humanize } from "@/utils/format";
 
@@ -198,6 +199,39 @@ function DescriptionCard({ description }: { description: string | null | undefin
   );
 }
 
+function QuotaCard() {
+  const theme = useTheme();
+  const router = useRouter();
+  const plan = useSubscription((s) => s.plan);
+  const remaining = useSubscription((s) => s.remainingToday());
+  const isPro = plan === "pro";
+
+  if (isPro) return null;
+
+  return (
+    <Card
+      title="Daily Free Tier Quota"
+      right={
+        <Badge
+          label={remaining > 0 ? `${remaining} remaining` : "Daily limit reached"}
+          color={remaining > 0 ? theme.info : theme.warning}
+        />
+      }
+    >
+      <Muted>
+        Free accounts can fill up to {MAX_DAILY_FREE_APPLICATIONS} applications per day.
+        Upgrade to HunterX Pro for unlimited applications, full autonomous looping, and background scheduling.
+      </Muted>
+      {remaining === 0 && (
+        <PrimaryButton
+          title="Upgrade to HunterX Pro ›"
+          onPress={() => router.push("/settings")}
+        />
+      )}
+    </Card>
+  );
+}
+
 function useDiscoveryActions(id: string, refresh: () => Promise<void>) {
   async function checkLiveness() {
     await api.checkLiveness(id);
@@ -251,6 +285,7 @@ export default function JobDetailScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.primary} />}
       >
         {error ? <Banner tone="danger" message={error} /> : null}
+        <QuotaCard />
         <JobHeader job={job} />
         <LinkedPostingsCard job={job} onUnlink={unlinkDuplicate} />
         <ScoreCard job={job} />

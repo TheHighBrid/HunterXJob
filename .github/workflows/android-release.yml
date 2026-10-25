@@ -1,0 +1,67 @@
+name: Android Release Build & Publish
+
+on:
+  release:
+    types: [published, created]
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to attach APK to (e.g. v1.00.0)'
+        required: false
+        default: 'v1.00.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-attach-apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Prebuild Android project
+        run: npx expo prebuild -p android --no-install
+
+      - name: Build Android Release APK
+        working-directory: mobile/android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Stage APK outputs
+        run: |
+          mkdir -p ../apk-out
+          cp android/app/build/outputs/apk/release/app-release.apk ../apk-out/HunterXJob-v1.0.0.apk
+          cd ../apk-out
+          sha256sum HunterXJob-v1.0.0.apk > HunterXJob-v1.0.0.apk.sha256
+          ls -lh
+
+      - name: Attach the APK to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          RELEASE_TAG="${{ github.event.release.tag_name || github.event.inputs.release_tag || github.ref_name || 'v1.00.0' }}"
+          gh release upload "$RELEASE_TAG" ../apk-out/* --clobber

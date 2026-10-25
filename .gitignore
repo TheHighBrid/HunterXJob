@@ -38,6 +38,10 @@ mobile/android/app/build/
 mobile/android/build/
 mobile/android/local.properties
 *.hprof
+*.apk
+*.aab
+releases/*.apk
+releases/*.aab
 
 # OS
 .DS_Store
