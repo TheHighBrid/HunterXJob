@@ -771,6 +771,14 @@
       },
       "FormFieldOut": {
         "properties": {
+          "choices": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
           "key": {
             "title": "Key",
             "type": "string"
@@ -813,9 +821,18 @@
           },
           "value": {
             "title": "Value"
+          },
+          "vault_keys": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Vault Keys",
+            "type": "array"
           }
         },
         "required": [
+          "choices",
           "key",
           "label",
           "legal",
@@ -826,7 +843,8 @@
           "sensitive",
           "status",
           "type",
-          "value"
+          "value",
+          "vault_keys"
         ],
         "title": "FormFieldOut",
         "type": "object"

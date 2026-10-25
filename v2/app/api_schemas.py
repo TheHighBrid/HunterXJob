@@ -376,6 +376,8 @@ class FormFieldOut(Out):
     sensitive: bool
     legal: bool
     options: int
+    choices: list[str] = []
+    vault_keys: list[str] = []
     status: str
     reason: str
     value: Any = None

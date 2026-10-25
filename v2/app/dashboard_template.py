@@ -659,22 +659,65 @@ def get_dashboard_html() -> str:
 
   </main>
 
-  <!-- FORM INSPECTION MODAL -->
-  <div id="form-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden items-center justify-center p-4">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
-      <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+  <!-- FORM INSPECTION & QUESTION SOLVER MODAL -->
+  <div id="form-modal" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full max-h-[88vh] flex flex-col overflow-hidden shadow-2xl">
+      <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/40">
         <div>
-          <h3 id="modal-title" class="font-bold text-sm text-white">Form Requirements</h3>
-          <p id="modal-company" class="text-xs text-slate-400"></p>
+          <div class="flex items-center gap-2">
+            <h3 id="modal-title" class="font-bold text-sm text-white">Application Form</h3>
+            <span id="modal-readiness-pill" class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300">Checking...</span>
+          </div>
+          <div class="flex items-center gap-2 mt-0.5">
+            <p id="modal-company" class="text-xs text-slate-400"></p>
+            <a id="modal-source-link" href="#" target="_blank" class="text-[10px] text-brand-400 hover:underline">View Source ↗</a>
+          </div>
         </div>
-        <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">✕</button>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors">✕</button>
       </div>
+
+      <!-- Quick Metrics Bar -->
+      <div id="modal-stats-bar" class="px-4 py-2 bg-slate-950/60 border-b border-slate-800 flex items-center justify-between text-xs text-slate-400">
+        <span id="modal-status-note">Detected fields</span>
+        <div class="flex items-center gap-3 text-[11px]">
+          <span id="modal-stat-required" class="text-slate-300 font-medium">0 Required</span>
+          <span id="modal-stat-review" class="text-amber-400 font-medium">0 Need Attention</span>
+          <span id="modal-stat-fill" class="text-emerald-400 font-medium">0 Grounded</span>
+        </div>
+      </div>
+
       <div id="modal-body" class="p-4 overflow-y-auto space-y-3 flex-1 text-xs">
         <div class="text-slate-400">Fetching form fields...</div>
       </div>
-      <div class="p-3 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between">
-        <span id="modal-status-note" class="text-[11px] text-slate-500"></span>
+
+      <div class="p-3 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between text-xs">
+        <span class="text-slate-500 text-[11px]">Saving answers persists directly to the immutable Answer Vault</span>
         <button onclick="closeModal()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- REVIEW TASK DETAIL MODAL -->
+  <div id="task-detail-modal" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full max-h-[88vh] flex flex-col overflow-hidden shadow-2xl">
+      <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/40">
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 id="td-modal-company" class="font-bold text-sm text-white">Review Task</h3>
+            <span id="td-modal-status-badge" class="px-2 py-0.5 rounded text-[10px] font-bold"></span>
+          </div>
+          <p id="td-modal-role" class="text-xs text-slate-400 mt-0.5"></p>
+        </div>
+        <button onclick="closeTaskDetailModal()" class="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors">✕</button>
+      </div>
+
+      <div id="td-modal-body" class="p-4 overflow-y-auto space-y-3 flex-1 text-xs">
+        <div class="text-slate-400">Loading task context...</div>
+      </div>
+
+      <div class="p-3 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between text-xs">
+        <button onclick="closeTaskDetailModal()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200">Close</button>
+        <div id="td-modal-actions" class="flex items-center gap-2"></div>
       </div>
     </div>
   </div>
@@ -1040,32 +1083,304 @@ def get_dashboard_html() -> str:
       const body = document.getElementById('modal-body');
       modal.classList.remove('hidden');
       modal.classList.add('flex');
-      body.innerHTML = '<div class="text-slate-400">Loading form controls and resolved answers...</div>';
+      body.innerHTML = '<div class="text-slate-400 flex items-center gap-2"><div class="w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"></div> Fetching form fields and matching against candidate vault...</div>';
 
       try {
         const res = await fetch(`/api/jobs/${jobId}/form`, { headers: authHeaders() });
         if (!res.ok) throw new Error('Form not available for inspection');
         const data = await res.json();
-        document.getElementById('modal-title').textContent = data.title || 'Application Form';
-        document.getElementById('modal-company').textContent = (data.company || '') + ' (' + (data.platform || '') + ')';
-        document.getElementById('modal-status-note').textContent = `${(data.controls || []).length} form fields detected`;
 
-        body.innerHTML = (data.controls || []).map(c => `
-          <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-            <div class="flex items-center justify-between">
-              <span class="font-bold text-slate-200">${escapeHtml(c.label || c.key)}</span>
-              <span class="text-[10px] px-1.5 py-0.5 rounded ${c.required ? 'bg-red-500/20 text-red-300 font-bold' : 'bg-slate-800 text-slate-400'}">${c.required ? 'REQUIRED' : 'OPTIONAL'}</span>
+        const formMeta = data.form || {};
+        document.getElementById('modal-title').textContent = formMeta.title || 'Application Form';
+        document.getElementById('modal-company').textContent = `${formMeta.company_name || formMeta.metadata?.company_name || 'Employer'} · ${formMeta.platform || 'Custom ATS'}`;
+
+        const sourceLink = document.getElementById('modal-source-link');
+        if (formMeta.url) {
+          sourceLink.href = formMeta.url;
+          sourceLink.classList.remove('hidden');
+        } else {
+          sourceLink.classList.add('hidden');
+        }
+
+        const pill = document.getElementById('modal-readiness-pill');
+        if (data.ready) {
+          pill.className = 'px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+          pill.textContent = '✓ READY FOR SUBMISSION';
+        } else {
+          pill.className = 'px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30';
+          pill.textContent = '⚠️ REQUIRES INPUT';
+        }
+
+        const fields = data.fields || [];
+        const requiredCount = fields.filter(f => f.required).length;
+        const reviewCount = fields.filter(f => f.status === 'review').length;
+        const fillCount = fields.filter(f => f.status === 'fill').length;
+
+        document.getElementById('modal-status-note').textContent = `${fields.length} form fields detected`;
+        document.getElementById('modal-stat-required').textContent = `${requiredCount} Required`;
+        document.getElementById('modal-stat-review').textContent = `${reviewCount} Need Attention`;
+        document.getElementById('modal-stat-fill').textContent = `${fillCount} Grounded`;
+
+        // Render blocker banner if not ready
+        let blockerBanner = '';
+        if (!data.ready && (data.blockers || []).length > 0) {
+          blockerBanner = `
+            <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 mb-3">
+              <div class="font-bold flex items-center gap-1.5 text-xs">
+                <span>⚠️ Form is Blocked</span>
+                <span class="text-[10px] font-mono px-1.5 py-0.5 bg-amber-500/20 rounded">${(data.blockers || []).join(', ')}</span>
+              </div>
+              <p class="text-[11px] text-amber-200/80 mt-1">Answer the highlighted questions below and click <strong>"Save to Vault & Recheck"</strong> to unblock this application.</p>
             </div>
-            <div class="text-[11px] text-slate-400 font-mono">${escapeHtml(c.key)} · ${escapeHtml(c.control_type)}</div>
-          </div>
-        `).join('') || '<div class="text-slate-500">No form controls returned.</div>';
+          `;
+        } else if (data.ready) {
+          blockerBanner = `
+            <div class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 mb-3">
+              <div class="font-bold flex items-center gap-1.5 text-xs">
+                <span>✓ All Form Fields Grounded and Ready</span>
+              </div>
+              <p class="text-[11px] text-emerald-200/80 mt-1">Every required field has a verified answer in the Candidate Vault. This job is eligible for autonomous execution.</p>
+            </div>
+          `;
+        }
+
+        // Sort fields so 'review' items appear first
+        const sortedFields = [...fields].sort((a, b) => {
+          if (a.status === 'review' && b.status !== 'review') return -1;
+          if (a.status !== 'review' && b.status === 'review') return 1;
+          if (a.required && !b.required) return -1;
+          if (!a.required && b.required) return 1;
+          return 0;
+        });
+
+        body.innerHTML = blockerBanner + sortedFields.map(f => {
+          const isReview = f.status === 'review';
+          const isFill = f.status === 'fill';
+          const vaultKey = (f.vault_keys && f.vault_keys.length > 0) ? f.vault_keys[0] : f.key;
+
+          let cardBorder = isReview ? 'border-amber-500/50 bg-amber-950/15 ring-1 ring-amber-500/20' :
+                           isFill ? 'border-emerald-500/30 bg-slate-950' : 'border-slate-800 bg-slate-950/40 opacity-75';
+
+          let inputWidget = '';
+          if (isReview) {
+            if (f.choices && f.choices.length > 0) {
+              inputWidget = `
+                <div class="mt-2 space-y-1.5">
+                  <label class="block text-[11px] font-semibold text-slate-300">Choose Option:</label>
+                  <select id="field-input-${f.key}" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-brand-500">
+                    <option value="">-- Select an option --</option>
+                    ${f.choices.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
+                  </select>
+                </div>
+              `;
+            } else if (f.type === 'textarea') {
+              inputWidget = `
+                <div class="mt-2 space-y-1.5">
+                  <label class="block text-[11px] font-semibold text-slate-300">Answer Description:</label>
+                  <textarea id="field-input-${f.key}" rows="2" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-brand-500" placeholder="Type candidate answer..."></textarea>
+                </div>
+              `;
+            } else if (f.type === 'checkbox') {
+              inputWidget = `
+                <div class="mt-2 flex items-center gap-2">
+                  <input type="checkbox" id="field-input-${f.key}" class="rounded border-slate-700 bg-slate-800 text-brand-500">
+                  <label for="field-input-${f.key}" class="text-xs text-slate-300">Acknowledge / Agree / Yes</label>
+                </div>
+              `;
+            } else {
+              inputWidget = `
+                <div class="mt-2 space-y-1.5">
+                  <label class="block text-[11px] font-semibold text-slate-300">Enter Value:</label>
+                  <input type="${f.type === 'email' ? 'email' : 'text'}" id="field-input-${f.key}" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-brand-500" placeholder="Type candidate answer...">
+                </div>
+              `;
+            }
+
+            inputWidget += `
+              <div class="flex items-center justify-between pt-2">
+                <span class="text-[10px] text-slate-500 font-mono">Vault Key: ${escapeHtml(vaultKey)}</span>
+                <button onclick="saveFieldAnswer('${jobId}', '${escapeHtml(vaultKey)}', '${escapeHtml(f.key)}', ${Boolean(f.sensitive)})" class="px-3 py-1 rounded-lg bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs transition-colors flex items-center gap-1 shadow-sm">
+                  <span>💾 Save to Vault & Recheck</span>
+                </button>
+              </div>
+            `;
+          }
+
+          let fillWidget = '';
+          if (isFill) {
+            fillWidget = `
+              <div class="mt-1 text-[11px] text-emerald-400 font-mono bg-emerald-950/20 px-2.5 py-1.5 rounded border border-emerald-900/40">
+                Grounded Value: ${escapeHtml(String(f.value || '[Set in Vault]'))}
+              </div>
+            `;
+          }
+
+          return `
+            <div class="p-3.5 rounded-xl border ${cardBorder} space-y-1.5 transition-all">
+              <div class="flex items-start justify-between gap-2">
+                <div>
+                  <div class="font-bold text-slate-200 text-xs">${escapeHtml(f.label || f.key)}</div>
+                  <div class="text-[10px] text-slate-400 font-mono mt-0.5">${escapeHtml(f.key)} · ${escapeHtml(f.type)} · ${escapeHtml(f.section)}</div>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <span class="text-[10px] px-1.5 py-0.5 rounded ${f.required ? 'bg-red-500/20 text-red-300 font-bold' : 'bg-slate-800 text-slate-400'}">${f.required ? 'REQUIRED' : 'OPTIONAL'}</span>
+                  ${isReview ? '<span class="text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">⚠️ REVIEW</span>' : ''}
+                  ${isFill ? '<span class="text-[10px] px-1.5 py-0.5 rounded font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">✓ GROUNDED</span>' : ''}
+                  ${f.status === 'skip' ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-500">SKIPPED</span>' : ''}
+                </div>
+              </div>
+              ${isReview ? `<div class="text-[11px] text-amber-300/90 font-medium">⚠️ ${escapeHtml(f.reason || 'Missing answer in candidate profile')}</div>` : ''}
+              ${fillWidget}
+              ${inputWidget}
+            </div>
+          `;
+        }).join('') || '<div class="text-slate-500">No form controls returned.</div>';
+
       } catch (err) {
-        body.innerHTML = `<div class="text-amber-400">Notice: ${escapeHtml(err.message)}</div>`;
+        body.innerHTML = `<div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs">Error inspecting form: ${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    async function saveFieldAnswer(jobId, vaultKey, fieldKey, sensitive = false) {
+      const inputEl = document.getElementById(`field-input-${fieldKey}`);
+      if (!inputEl) return;
+      let val = '';
+      if (inputEl.type === 'checkbox') {
+        val = inputEl.checked ? 'true' : 'false';
+      } else {
+        val = inputEl.value.trim();
+      }
+      if (!val) {
+        toast('Please enter or select an answer first', 'warn');
+        return;
+      }
+      toast('Saving answer to vault...', 'info');
+      try {
+        const res = await fetch('/api/answers', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({
+            key: vaultKey,
+            value: val,
+            source: 'user',
+            scope: 'global',
+            confidence: 1.0,
+            sensitive: Boolean(sensitive),
+            note: `Configured via Form Inspector for ${jobId}`
+          })
+        });
+        if (!res.ok) throw new Error('Failed to save answer');
+        toast(`Saved answer for ${vaultKey}!`, 'success');
+        await inspectForm(jobId);
+        loadReviewTasks();
+      } catch (e) {
+        toast(e.message, 'error');
       }
     }
 
     function closeModal() {
       const modal = document.getElementById('form-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    async function openTaskDetail(taskId) {
+      const modal = document.getElementById('task-detail-modal');
+      const body = document.getElementById('td-modal-body');
+      const footerActions = document.getElementById('td-modal-actions');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      body.innerHTML = '<div class="text-slate-400 flex items-center gap-2"><div class="w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"></div> Loading review task details...</div>';
+      footerActions.innerHTML = '';
+
+      try {
+        const res = await fetch(`/api/review-tasks/${taskId}`, { headers: authHeaders() });
+        if (!res.ok) throw new Error('Failed to load review task details');
+        const task = await res.json();
+
+        document.getElementById('td-modal-company').textContent = task.company || 'Unknown Company';
+        document.getElementById('td-modal-role').textContent = task.job_title || task.title || 'Role Review';
+
+        const statusBadge = document.getElementById('td-modal-status-badge');
+        statusBadge.textContent = (task.status || 'OPEN').toUpperCase();
+        statusBadge.className = `px-2 py-0.5 rounded text-[10px] font-bold ${
+          task.status === 'open' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
+          task.status === 'resolved' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
+          'bg-slate-800 text-slate-400'
+        }`;
+
+        let blockedFieldsHtml = '';
+        if (task.blocked_fields && task.blocked_fields.length > 0) {
+          blockedFieldsHtml = `
+            <div class="space-y-2">
+              <div class="text-xs font-bold text-amber-400 uppercase tracking-wider">Blocked Fields & Questions</div>
+              <div class="space-y-2">
+                ${task.blocked_fields.map(bf => `
+                  <div class="p-3 rounded-xl bg-slate-950 border border-amber-500/30 space-y-1.5">
+                    <div class="flex items-center justify-between">
+                      <span class="font-bold text-slate-200">${escapeHtml(bf.label || bf.key)}</span>
+                      <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">${escapeHtml(bf.reason || 'blocked')}</span>
+                    </div>
+                    <div class="text-[10px] text-slate-400 font-mono">Key: ${escapeHtml(bf.key)}</div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `;
+        }
+
+        body.innerHTML = `
+          <!-- Task Header Details -->
+          <div class="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="font-mono text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-bold">${escapeHtml(task.reason_code || 'review')}</span>
+              <span class="text-[10px] text-slate-500">${task.created_at ? new Date(task.created_at).toLocaleString() : ''}</span>
+            </div>
+            <div class="text-xs text-slate-200 font-medium">${escapeHtml(task.detail || 'Review needed')}</div>
+            ${task.url ? `<a href="${escapeHtml(task.url)}" target="_blank" class="inline-flex items-center gap-1 text-xs text-brand-400 hover:underline">Open Official Job Posting &rarr;</a>` : ''}
+          </div>
+
+          <!-- Approve Effect Banner -->
+          ${task.approve_effect ? `
+            <div class="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs space-y-1">
+              <div class="font-bold flex items-center gap-1.5">
+                <span>ℹ️ Approve Action Effect:</span>
+              </div>
+              <p class="text-[11px] text-indigo-200/80">${escapeHtml(task.approve_effect)}</p>
+            </div>
+          ` : ''}
+
+          ${blockedFieldsHtml}
+
+          <!-- Job Stage Context -->
+          ${task.job ? `
+            <div class="p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-xs space-y-1">
+              <div class="font-bold text-slate-300">Opportunity Snapshot</div>
+              <div class="text-[11px] text-slate-400 grid grid-cols-2 gap-2 mt-1">
+                <div>Location: <span class="text-slate-200">${escapeHtml(task.job.location || 'Remote/Not specified')}</span></div>
+                <div>Match Score: <span class="text-emerald-400 font-bold">${task.job.score || 'N/A'}%</span></div>
+                <div>Stage: <span class="text-slate-200 font-mono">${escapeHtml(task.job.stage || 'unknown')}</span></div>
+                <div>ATS Platform: <span class="text-slate-200 font-mono">${escapeHtml(task.job.platform || 'ats')}</span></div>
+              </div>
+            </div>
+          ` : ''}
+        `;
+
+        // Footer buttons
+        footerActions.innerHTML = `
+          ${task.job_id ? `<button onclick="closeTaskDetailModal(); inspectForm('${task.job_id}')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold transition-colors">Inspect Form</button>` : ''}
+          ${task.actions && task.actions.includes('reject') ? `<button onclick="rejectReviewTask('${task.id}'); closeTaskDetailModal();" class="px-2.5 py-1.5 rounded-lg bg-red-600/20 hover:bg-red-600/40 text-red-300 border border-red-500/30 text-xs font-semibold transition-colors">Reject</button>` : ''}
+          ${task.actions && task.actions.includes('resolve') ? `<button onclick="resolveReviewTask('${task.id}'); closeTaskDetailModal();" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition-colors">Resolve</button>` : ''}
+          ${task.actions && task.actions.includes('approve') ? `<button onclick="approveReviewTask('${task.id}'); closeTaskDetailModal();" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors shadow-sm">Approve</button>` : ''}
+        `;
+
+      } catch (err) {
+        body.innerHTML = `<div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs">Error: ${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function closeTaskDetailModal() {
+      const modal = document.getElementById('task-detail-modal');
       modal.classList.add('hidden');
       modal.classList.remove('flex');
     }
@@ -1216,10 +1531,13 @@ def get_dashboard_html() -> str:
           <td class="px-3 py-3 text-center">
             <input type="checkbox" value="${t.id}" onchange="updateTaskSelection()" class="task-checkbox rounded border-slate-700 bg-slate-850 text-brand-500 focus:ring-0 cursor-pointer">
           </td>
-          <td class="px-4 py-3">
-            <div class="font-bold text-slate-200 text-xs">${escapeHtml(t.company || 'Unknown')}</div>
+          <td class="px-4 py-3 cursor-pointer" onclick="openTaskDetail('${t.id}')">
+            <div class="font-bold text-slate-200 text-xs hover:text-brand-400 transition-colors flex items-center gap-1.5">
+              <span>${escapeHtml(t.company || 'Unknown')}</span>
+              <span class="text-[9px] px-1 py-0.2 rounded bg-slate-800 text-slate-400 font-mono">inspect</span>
+            </div>
             <div class="text-[11px] text-slate-400">${escapeHtml(t.job_title || t.title || 'Role')}</div>
-            ${t.url ? `<a href="${escapeHtml(t.url)}" target="_blank" class="text-[10px] text-brand-400 hover:underline inline-flex items-center gap-1 mt-0.5">External Posting &rarr;</a>` : ''}
+            ${t.url ? `<a href="${escapeHtml(t.url)}" target="_blank" onclick="event.stopPropagation()" class="text-[10px] text-brand-400 hover:underline inline-flex items-center gap-1 mt-0.5">External Posting &rarr;</a>` : ''}
           </td>
           <td class="px-3 py-3 font-mono">
             <span class="px-2 py-0.5 rounded text-[10px] font-bold ${
@@ -1228,13 +1546,14 @@ def get_dashboard_html() -> str:
               'bg-slate-800 text-slate-300'
             }">${escapeHtml(t.reason_code || 'review')}</span>
           </td>
-          <td class="px-3 py-3 text-slate-300 text-[11px] max-w-xs truncate" title="${escapeHtml(t.detail || '')}">
+          <td class="px-3 py-3 text-slate-300 text-[11px] max-w-xs truncate cursor-pointer" onclick="openTaskDetail('${t.id}')" title="${escapeHtml(t.detail || '')}">
             ${escapeHtml(t.detail || 'Review needed')}
           </td>
           <td class="px-3 py-3 text-slate-500 text-[10px] whitespace-nowrap">
             ${t.created_at ? new Date(t.created_at).toLocaleDateString() : 'Recent'}
           </td>
           <td class="px-4 py-3 text-right whitespace-nowrap space-x-1.5">
+            <button onclick="openTaskDetail('${t.id}')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-semibold transition-colors">Details</button>
             ${t.job_id ? `<button onclick="inspectTruthGuard('${t.job_id}')" class="px-2 py-1 rounded bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/30 text-[11px] font-semibold transition-colors">Truth Guard</button>` : ''}
             <button onclick="approveReviewTask('${t.id}')" class="px-2.5 py-1 rounded bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold transition-colors">Approve</button>
             <button onclick="rejectReviewTask('${t.id}')" class="px-2.5 py-1 rounded bg-red-600/20 hover:bg-red-600/40 text-red-300 border border-red-500/30 text-[11px] font-semibold transition-colors">Reject</button>
