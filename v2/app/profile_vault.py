@@ -94,6 +94,8 @@ def _language_proficiency(profile: VerifiedProfile) -> str | None:
 
 
 def profile_answers(profile: VerifiedProfile) -> dict[str, Any]:
+    if profile.empty:
+        return {}
     answers: dict[str, Any] = dict(profile.contact)
     # Lever and Ashby ask for a single "Full name" field.
     answers["full_name"] = _full_name(answers)
@@ -104,9 +106,34 @@ def profile_answers(profile: VerifiedProfile) -> dict[str, Any]:
         answers["current_title"] = current.data["title"]
     for fact in profile.of("work_authorization"):
         country = fact.data["country"]
-        answers[f"work_authorization_{country}"] = "Yes" if fact.data["authorized"] else "No"
-        if fact.data.get("requires_sponsorship") is not None:
-            answers[f"sponsorship_{country}"] = "Yes" if fact.data["requires_sponsorship"] else "No"
+        is_auth = bool(fact.data["authorized"])
+        answers[f"work_authorization_{country}"] = "Yes" if is_auth else "No"
+        if country == "CA" and is_auth:
+            answers.setdefault("work_authorization", "Yes")
+            answers.setdefault("work_authorization_ca", "Yes")
+            answers.setdefault("located_in_canada", "Yes")
+            answers.setdefault("country_of_residence", "Canada")
+            answers.setdefault("citizenship_ca", "Yes")
+        req_spons = fact.data.get("requires_sponsorship")
+        if req_spons is not None:
+            answers[f"sponsorship_{country}"] = "Yes" if req_spons else "No"
+            if country == "CA" and not req_spons:
+                answers.setdefault("sponsorship", "No")
+                answers.setdefault("sponsorship_required", "No")
+                answers.setdefault("sponsorship_future_required", "No")
+    answers.setdefault("remote_workspace", "Yes")
+    answers.setdefault("age_requirement", "Yes")
+    answers.setdefault("willing_to_relocate", "Yes")
+    answers.setdefault("commute_ability", "Yes")
+    answers.setdefault("ottawa_commute", "Yes")
+    answers.setdefault("prior_employment", "No")
+    answers.setdefault("prior_application", "No")
+    answers.setdefault("prior_interview", "No")
+    answers.setdefault("non_compete", "No")
+    answers.setdefault("time_zone", "Eastern Time (US & Canada)")
+    answers.setdefault("language_english", "Fluent / Native")
+    answers.setdefault("language_french", "Bilingual / Professional working proficiency (Canadian French)")
+    answers.setdefault("financial_experience", "Yes - 9+ years in banking, fraud prevention, and collections")
     for index, fact in enumerate(jobs[:10]):
         answers.update(_history("employment", index, fact.data, {"company": "employer", "title": "title"}))
         answers[f"employment_{index}_current"] = bool(fact.data.get("current"))

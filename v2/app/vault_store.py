@@ -10,12 +10,84 @@ from app.models import AnswerPolicy
 from app.profile import verified_profile
 from app.profile_vault import profile_records
 
-# Stored policy keys that also populate a classifier vault key when that key
-# was not set more specifically. ``availability_date`` is the start-date fallback.
+# Stored policy keys that also populate classifier vault keys when those keys
+# were not set more specifically.
 _POLICY_KEY_ALIASES: dict[str, tuple[str, ...]] = {
-    "availability_date": ("start_date",),
-    "available_start_date": ("start_date",),
-    "earliest_start": ("start_date",),
+    # Start date & notice period
+    "start_date": ("availability_date", "available_start_date", "earliest_start", "earliest_start_date", "notice_period", "when_can_you_start"),
+    "availability_date": ("start_date", "available_start_date", "earliest_start", "notice_period"),
+    "available_start_date": ("start_date", "availability_date", "notice_period"),
+    "earliest_start": ("start_date", "availability_date", "notice_period"),
+    "notice_period": ("start_date", "availability_date", "available_start_date"),
+
+    # Work authorization & residency
+    "work_authorization": ("work_authorization_ca", "authorized_to_work", "work_auth", "canada_work_eligibility", "eligible_to_work"),
+    "work_authorization_ca": ("work_authorization", "authorized_to_work", "canada_work_eligibility", "eligible_to_work"),
+    "authorized_to_work": ("work_authorization", "work_authorization_ca"),
+    "canada_work_eligibility": ("work_authorization_ca", "work_authorization"),
+    "citizenship_ca": ("citizenship", "citizenship_residency", "country_of_citizenship"),
+    "citizenship": ("citizenship_ca", "citizenship_residency"),
+
+    # Sponsorship
+    "sponsorship_required": ("sponsorship", "sponsorship_ca", "visa_sponsorship", "require_sponsorship", "sponsorship_future_required"),
+    "sponsorship": ("sponsorship_required", "sponsorship_ca", "visa_sponsorship", "require_sponsorship"),
+    "sponsorship_ca": ("sponsorship_required", "sponsorship", "visa_sponsorship"),
+    "visa_sponsorship": ("sponsorship_required", "sponsorship"),
+
+    # Salary & Compensation
+    "salary_expectation": ("desired_salary", "expected_salary", "salary_range", "compensation_expectation", "desired_compensation", "base_salary_expectation"),
+    "desired_salary": ("salary_expectation", "expected_salary", "salary_range"),
+    "expected_salary": ("salary_expectation", "desired_salary", "salary_range"),
+    "salary_range": ("salary_expectation", "desired_salary"),
+
+    # Relocation & Commute
+    "willing_to_relocate": ("relocation", "open_to_relocation", "relocate"),
+    "relocation": ("willing_to_relocate", "open_to_relocation"),
+    "commute_ability": ("ottawa_commute", "hybrid_availability"),
+    "ottawa_commute": ("commute_ability",),
+
+    # Language proficiency
+    "language_french": ("french_proficiency", "bilingual_french", "language_proficiency"),
+    "language_proficiency": ("language_french", "french_proficiency", "bilingual"),
+    "french_proficiency": ("language_french", "language_proficiency"),
+
+    # Remote workspace
+    "remote_workspace": ("home_office", "dedicated_workspace", "remote_setup", "high_speed_internet"),
+    "home_office": ("remote_workspace",),
+
+    # Consents & Screenings
+    "background_check_consent": ("background_check", "criminal_check_consent", "screening_consent"),
+    "criminal_check_consent": ("background_check_consent", "background_check"),
+    "interview_recording_consent": ("recording_consent",),
+    "recording_consent": ("interview_recording_consent",),
+    "terms_consent": ("disclaimer_and_consent", "terms_agreement", "declaration_consent"),
+    "disclaimer_and_consent": ("terms_consent", "terms_agreement"),
+
+    # Referral & Source
+    "referral_source": ("how_heard", "source", "source_channel"),
+    "how_heard": ("referral_source", "source"),
+
+    # Social links
+    "linkedin_url": ("linkedin", "social_linkedin", "linkedin_profile"),
+    "linkedin": ("linkedin_url", "social_linkedin"),
+    "github_url": ("github", "social_github"),
+    "github": ("github_url",),
+    "website_url": ("portfolio", "website", "portfolio_url"),
+    "portfolio": ("website_url", "portfolio_url"),
+
+    # Demographics
+    "gender_identity": ("gender", "gender_select"),
+    "gender": ("gender_identity",),
+    "race_ethnicity": ("race", "ethnicity", "race_select"),
+    "race": ("race_ethnicity",),
+    "veteran_status": ("veteran", "military_status"),
+    "veteran": ("veteran_status",),
+    "disability_status": ("disability",),
+    "disability": ("disability_status",),
+
+    # Time zone
+    "time_zone": ("timezone",),
+    "timezone": ("time_zone",),
 }
 
 

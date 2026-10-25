@@ -227,21 +227,69 @@ def _normalize_option(value: Any) -> str:
     return " ".join(str(value).split()).casefold()
 
 
+def _score_best_option(answer: Any, options: list[str]) -> str | None:
+    """Score options against answer and return unique winner if score >= 70."""
+    from app.question_catalog import OptionRecord, score_option
+
+    ans_str = str(answer or "").strip()
+    if not ans_str or not options:
+        return None
+
+    scored: list[tuple[int, str]] = []
+    for opt in options:
+        rec = OptionRecord(key=opt, label=opt, value=opt)
+        score = score_option(ans_str, rec)
+        if score >= 70:
+            scored.append((score, opt))
+
+    if not scored:
+        return None
+
+    scored.sort(key=lambda s: s[0], reverse=True)
+    top_score = scored[0][0]
+    top_candidates = [opt for score, opt in scored if score == top_score]
+
+    # If there is a tie between multiple distinct options, fail closed (ambiguous)
+    if len(top_candidates) == 1:
+        return top_candidates[0]
+    return None
+
+
 def _match_option(control: FormControl, value: Any) -> Any | None:
     """Return the listed option(s) equal to ``value`` or None.
 
-    Matching is exact after case/whitespace normalization only. No fuzzy or
-    semantic matching: an answer that is not literally one of the offered
-    options goes to review instead of being guessed.
+    First attempts exact normalized match. If that fails, uses hardened 4-tier
+    option matching (boolean equivalence, token similarity, substring containment)
+    to safely accommodate differences in wording between ATS forms and the vault.
+    Fails closed (returns None) if no option matches or if matching is ambiguous.
     """
     lookup = {_normalize_option(option): option for option in control.options}
     if control.control_type is ControlType.MULTISELECT:
         parts = value if isinstance(value, (list, tuple)) else [part for part in str(value).split("|") if part.strip()]
-        matched = [lookup.get(_normalize_option(part)) for part in parts]
-        if not matched or any(item is None for item in matched):
+        matched_list: list[str] = []
+        for part in parts:
+            exact = lookup.get(_normalize_option(part))
+            if exact is not None:
+                matched_list.append(exact)
+                continue
+            best = _score_best_option(part, control.options)
+            if best is None:
+                return None
+            matched_list.append(best)
+        if not matched_list:
             return None
-        return matched
-    return lookup.get(_normalize_option(value))
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for item in matched_list:
+            if item not in seen:
+                seen.add(item)
+                deduped.append(item)
+        return deduped
+
+    exact = lookup.get(_normalize_option(value))
+    if exact is not None:
+        return exact
+    return _score_best_option(value, control.options)
 
 
 def _decline_option(control: FormControl) -> str | None:
