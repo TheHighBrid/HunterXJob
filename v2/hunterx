@@ -202,7 +202,7 @@ PY
       2) echo "API auth         WARN (${auth_detail})" ;;
       *) echo "API auth         FAIL (${auth_detail}; run ./hunterx api-key and set API_KEY in .env)"; failures=$((failures+1)) ;;
     esac
-    env_mode="$(stat -c %a .env 2>/dev/null || echo unknown)"
+    env_mode="$(stat -c %a .env 2>/dev/null || stat -f %Lp .env 2>/dev/null || echo unknown)"
     case "$env_mode" in
       600|400) echo "Secrets file     OK (.env mode ${env_mode})" ;;
       *) echo "Secrets file     WARN (.env mode ${env_mode}; run chmod 600 .env)" ;;

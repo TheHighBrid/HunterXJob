@@ -195,6 +195,15 @@ def get_dashboard_html() -> str:
               </button>
             </div>
 
+            <!-- Unattended Policy Posture -->
+            <div class="flex items-center justify-between p-3 rounded-xl bg-slate-950/70 border border-slate-800/80">
+              <div>
+                <div class="text-xs font-semibold text-white">Unattended Policy Posture</div>
+                <div id="unattended-reason-text" class="text-[11px] text-slate-400">Evaluating...</div>
+              </div>
+              <span id="badge-unattended-allowed" class="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-700 bg-slate-800 text-slate-300">--</span>
+            </div>
+
             <!-- Headed Browser Inspection -->
             <div class="flex items-center justify-between p-3 rounded-xl bg-slate-950/70 border border-slate-800/80">
               <div>
@@ -796,9 +805,10 @@ def get_dashboard_html() -> str:
 
     async function refreshKPIsAndStatus() {
       try {
-        const [sumRes, autoRes] = await Promise.all([
+        const [sumRes, autoRes, healthRes] = await Promise.all([
           fetch('/api/reports/summary', { headers: authHeaders() }),
-          fetch('/api/autonomous/status', { headers: authHeaders() })
+          fetch('/api/autonomous/status', { headers: authHeaders() }),
+          fetch('/api/health', { headers: authHeaders() })
         ]);
         if (sumRes.ok) {
           const sum = await sumRes.json();
@@ -837,6 +847,23 @@ def get_dashboard_html() -> str:
           } else {
             liveBtn.textContent = 'DRY-RUN';
             liveBtn.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700';
+          }
+        }
+        if (healthRes && healthRes.ok) {
+          const health = await healthRes.json();
+          const unReasonEl = document.getElementById('unattended-reason-text');
+          const unBadgeEl = document.getElementById('badge-unattended-allowed');
+          if (unReasonEl && health.unattended_reason) {
+            unReasonEl.textContent = `${health.unattended_reason} (${health.submissions_today || 0} applied today)`;
+          }
+          if (unBadgeEl) {
+            if (health.unattended_allowed) {
+              unBadgeEl.textContent = 'ALLOWED';
+              unBadgeEl.className = 'px-2 py-0.5 rounded text-[10px] font-bold border border-emerald-500/40 bg-emerald-500/10 text-emerald-400';
+            } else {
+              unBadgeEl.textContent = 'HOLD';
+              unBadgeEl.className = 'px-2 py-0.5 rounded text-[10px] font-bold border border-amber-500/40 bg-amber-500/10 text-amber-400';
+            }
           }
         }
         document.getElementById('last-cycle-ts').textContent = 'Last update: ' + new Date().toLocaleTimeString();
