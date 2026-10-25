@@ -84,3 +84,28 @@ def test_follow_ups_due_endpoint(client_env):
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
+
+
+def test_job_artifacts_endpoints(client_env, tmp_path):
+    from pathlib import Path
+    from app.config import Settings, get_settings
+
+    # Create dummy artifact directory for job-123
+    job_dir = tmp_path / "job_test-123"
+    job_dir.mkdir(parents=True, exist_ok=True)
+    (job_dir / "post_submit.png").write_bytes(b"\x89PNG\r\n\x1a\nDummyPNG")
+
+    settings = Settings(_env_file=None, api_key=KEY, artifact_dir=str(tmp_path))
+    main.app.dependency_overrides[get_settings] = lambda: settings
+
+    # List artifacts
+    res = client_env.get("/api/jobs/test-123/artifacts", headers=HEADERS)
+    assert res.status_code == 200
+    data = res.json()
+    assert "artifacts" in data
+    assert any(a["name"] == "post_submit.png" for a in data["artifacts"])
+
+    # Fetch artifact file
+    res_file = client_env.get("/api/jobs/test-123/artifacts/post_submit.png", headers=HEADERS)
+    assert res_file.status_code == 200
+    assert res_file.headers.get("content-type") == "image/png"

@@ -94,6 +94,7 @@ class Settings(BaseSettings):
     # Directory for Playwright trace zips of browser verification sessions
     # (hashed into the dry-run evidence). Empty = no trace is written.
     browser_trace_dir: str = ""
+    artifact_dir: str = "/tmp/hunterx_autonomous"
 
     # Liveness / closed-listing detection. A posting is closed only after two
     # definitive "gone" answers at least ``liveness_confirm_minutes`` apart;

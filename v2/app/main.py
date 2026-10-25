@@ -381,6 +381,43 @@ def run_due_follow_ups(db: DbSession) -> dict[str, object]:
     }
 
 
+@api.get("/api/jobs/{job_id}/artifacts")
+def list_job_artifacts(job_id: str, current: CurrentSettings) -> dict[str, object]:
+    out_dir = Path(getattr(current, "artifact_dir", None) or "/tmp/hunterx_autonomous")
+    job_dir = out_dir / f"job_{job_id}"
+    files = []
+    if job_dir.is_dir():
+        for p in sorted(job_dir.glob("*")):
+            if p.is_file() and not p.name.startswith("."):
+                files.append({
+                    "name": p.name,
+                    "size_bytes": p.stat().st_size,
+                    "url": f"/api/jobs/{job_id}/artifacts/{p.name}",
+                })
+    return {"job_id": job_id, "artifacts": files}
+
+
+@api.get("/api/jobs/{job_id}/artifacts/{artifact_name}")
+def get_job_artifact(job_id: str, artifact_name: str, current: CurrentSettings):
+    from fastapi.responses import FileResponse
+
+    allowed = {"pre_submit.png", "post_submit.png", "tailored_resume.pdf"}
+    if artifact_name not in allowed:
+        raise HTTPException(400, "Invalid artifact name requested")
+
+    out_dir = Path(getattr(current, "artifact_dir", None) or "/tmp/hunterx_autonomous")
+    file_path = out_dir / f"job_{job_id}" / artifact_name
+    if not file_path.is_file():
+        raise HTTPException(404, f"Artifact '{artifact_name}' not found for job {job_id}")
+
+    media_types = {
+        "pre_submit.png": "image/png",
+        "post_submit.png": "image/png",
+        "tailored_resume.pdf": "application/pdf",
+    }
+    return FileResponse(file_path, media_type=media_types[artifact_name])
+
+
 app.include_router(api)
 app.include_router(remote_router)
 app.include_router(materials_router)

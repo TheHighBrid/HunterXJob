@@ -677,6 +677,29 @@ def get_dashboard_html() -> str:
     </div>
   </div>
 
+  <!-- ARTIFACT VIEWER MODAL -->
+  <div id="artifact-modal" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+      <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+        <div>
+          <h3 id="artifact-modal-title" class="font-bold text-sm text-white">Cryptographic Submission Receipt</h3>
+          <p id="artifact-modal-subtitle" class="text-xs text-slate-400 font-mono"></p>
+        </div>
+        <div class="flex items-center gap-2">
+          <a id="artifact-modal-raw-link" href="#" target="_blank" class="text-xs text-brand-400 hover:underline px-2.5 py-1 rounded bg-slate-800 border border-slate-700">Open Full Size ↗</a>
+          <button onclick="closeArtifactModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">✕</button>
+        </div>
+      </div>
+      <div class="p-4 overflow-y-auto flex-1 flex items-center justify-center bg-slate-950">
+        <img id="artifact-modal-img" src="" alt="Submission Proof" class="max-w-full max-h-[70vh] rounded-lg border border-slate-800 object-contain shadow-lg">
+      </div>
+      <div class="p-3 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between text-xs text-slate-500">
+        <span>Verified Playwright browser capture snapshot</span>
+        <button onclick="closeArtifactModal()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- JAVASCRIPT APP LOGIC -->
   <script>
     const API_KEY_KEY = 'hunterxKey';
@@ -990,7 +1013,7 @@ def get_dashboard_html() -> str:
         if (!res.ok) return;
         const dossier = await res.json();
         const listEl = document.getElementById('dossier-ledger-list');
-        const items = dossier.evidence_ledger || [];
+        const items = (dossier.evidence_ledger && dossier.evidence_ledger.records) ? dossier.evidence_ledger.records : (dossier.evidence_ledger || []);
 
         listEl.innerHTML = items.map((rec, idx) => `
           <div class="p-4 rounded-xl bg-slate-950 border border-slate-800/90 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:border-slate-700 transition-colors">
@@ -1001,16 +1024,31 @@ def get_dashboard_html() -> str:
                 <span class="text-[11px] px-2 py-0.2 rounded font-semibold bg-slate-800 text-slate-300">${escapeHtml(rec.company)}</span>
                 <span class="text-[10px] uppercase font-mono text-slate-500">${escapeHtml(rec.platform)}</span>
               </div>
-              <div class="text-[11px] text-slate-300 italic pl-7 line-clamp-1">"${escapeHtml(rec.receipt_text || '')}"</div>
+              <div class="text-[11px] text-slate-300 italic pl-7 line-clamp-1">"${escapeHtml(rec.receipt_snippet || rec.receipt_text || '')}"</div>
               <div class="text-[10px] text-slate-500 pl-7 font-mono flex items-center gap-2">
                 <span>SHA-256: ${escapeHtml((rec.receipt_sha256 || '').substring(0, 24))}...</span>
                 <span>·</span>
                 <span>${escapeHtml(rec.submitted_at || '')}</span>
               </div>
             </div>
-            <div class="flex items-center gap-2 self-end md:self-center">
-              <button onclick="copyHash('${rec.receipt_sha256}')" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-medium border border-slate-700">Copy Digest</button>
-              <a href="${rec.url}" target="_blank" class="px-2.5 py-1 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-400 text-[11px]">Posting ↗</a>
+            <div class="flex items-center gap-1.5 self-end md:self-center flex-wrap justify-end">
+              <button onclick="viewArtifactModal('${rec.job_id}', 'post_submit.png', '${escapeHtml(rec.company)} — Confirmation Receipt')" class="px-2.5 py-1 rounded bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-[11px] font-semibold transition-colors flex items-center gap-1">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                Receipt 🔍
+              </button>
+              <button onclick="viewArtifactModal('${rec.job_id}', 'pre_submit.png', '${escapeHtml(rec.company)} — Form Fill Snapshot')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-medium border border-slate-700 transition-colors">
+                Form
+              </button>
+              <a href="/api/jobs/${rec.job_id}/artifacts/tailored_resume.pdf" target="_blank" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-medium border border-slate-700 transition-colors flex items-center gap-1">
+                <svg class="w-3 h-3 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                PDF
+              </a>
+              <button onclick="copyHash('${rec.receipt_sha256}')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-[11px] font-mono border border-slate-700 transition-colors">
+                SHA
+              </button>
+              <a href="${rec.url}" target="_blank" class="px-2 py-1 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-[11px] transition-colors">
+                ↗
+              </a>
             </div>
           </div>
         `).join('');
@@ -1231,6 +1269,30 @@ def get_dashboard_html() -> str:
       } catch (e) {
         toast(`Error analyzing email: ${e.message}`, 'error');
       }
+    }
+
+    function viewArtifactModal(jobId, filename, title) {
+      const modal = document.getElementById('artifact-modal');
+      const img = document.getElementById('artifact-modal-img');
+      const rawLink = document.getElementById('artifact-modal-raw-link');
+      const modalTitle = document.getElementById('artifact-modal-title');
+      const modalSubtitle = document.getElementById('artifact-modal-subtitle');
+
+      const url = `/api/jobs/${jobId}/artifacts/${filename}`;
+      img.src = url;
+      rawLink.href = url;
+      modalTitle.textContent = title || 'Cryptographic Submission Receipt';
+      modalSubtitle.textContent = `Job #${jobId} · File: ${filename}`;
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeArtifactModal() {
+      const modal = document.getElementById('artifact-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      document.getElementById('artifact-modal-img').src = '';
     }
 
     function downloadDossier() {

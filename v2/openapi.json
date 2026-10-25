@@ -4705,6 +4705,93 @@
         ]
       }
     },
+    "/api/jobs/{job_id}/artifacts": {
+      "get": {
+        "operationId": "list_job_artifacts_api_jobs__job_id__artifacts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Job Artifacts Api Jobs  Job Id  Artifacts Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Job Artifacts"
+      }
+    },
+    "/api/jobs/{job_id}/artifacts/{artifact_name}": {
+      "get": {
+        "operationId": "get_job_artifact_api_jobs__job_id__artifacts__artifact_name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "artifact_name",
+            "required": true,
+            "schema": {
+              "title": "Artifact Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Job Artifact"
+      }
+    },
     "/api/jobs/{job_id}/check-liveness": {
       "post": {
         "description": "Ask the posting's public source whether it is still open (read-only GET).\n\nFollows the same conservative policy as scheduled checks: one \"gone\" answer\nonly marks the posting suspect; errors never close it.",
