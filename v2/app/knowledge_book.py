@@ -185,6 +185,29 @@ class KnowledgeBook:
         """Resolve a candidate answer for a classified catalog item."""
         key = item.get("canonical_key", "")
 
+        # 0. Check Master Answer Policy attachment if available
+        pol_item = item.get("policy_item")
+        if pol_item is not None:
+            if pol_item.mode == "auto" and pol_item.answer:
+                val = pol_item.answer
+                if options:
+                    matched = None
+                    for eq in pol_item.option_equivalents:
+                        matched = self._match_option(eq, options)
+                        if matched:
+                            break
+                    if not matched:
+                        matched = self._match_option(val, options)
+                    if not matched:
+                        for v in pol_item.answer_variants:
+                            matched = self._match_option(v, options)
+                            if matched:
+                                break
+                    val = matched or val
+                return val, f"catalog_policy:{pol_item.key}"
+            elif pol_item.mode in ("review", "skip"):
+                return None, f"catalog_policy_held:{pol_item.mode}"
+
         # 1. Sponsorship
         if key in ("sponsorship_required", "sponsorship_future_required"):
             val = "No"
@@ -254,7 +277,7 @@ class KnowledgeBook:
 
         # 7. Compensation
         if key == "salary_expectation":
-            desired = str(self.preferences.get("desired_salary", "") or "75000")
+            desired = str(self.preferences.get("desired_salary", "") or "60000")
             if options:
                 desired = self._match_option(desired, options) or desired
             return desired, f"catalog:{key}"
@@ -270,10 +293,16 @@ class KnowledgeBook:
             return val, f"catalog:{key}"
 
         # 8. Notice period / start date
-        if key == "notice_period":
-            avail = self.preferences.get("notice_period", "2 weeks")
+        if key in ("notice_period", "start_availability", "availability_date", "start_date"):
+            avail = self.preferences.get("notice_period") or self.preferences.get("start_availability") or "Immediately"
             if options:
-                avail = self._match_option(avail, options) or avail
+                matched_opt = self._match_option(avail, options)
+                if not matched_opt and "immediately" in str(avail).lower():
+                    for opt in options:
+                        if any(w in opt.lower() for w in ("immediately", "immediate", "asap", "0 weeks", "now")):
+                            matched_opt = opt
+                            break
+                avail = matched_opt or self._match_option("2 weeks", options) or avail
             return avail, f"catalog:{key}"
 
         # 9. Source / How heard
@@ -511,12 +540,20 @@ class KnowledgeBook:
 
         # 5. Salary expectation (only for open-ended text/number fields without custom choice options)
         if not options and re.search(r"salary|compensation|expected\s+rate|annual\s+salary", text, re.I):
-            desired = self.preferences.get("desired_salary", "") or "75000"
+            desired = self.preferences.get("desired_salary", "") or "60000"
             return desired, "preference_salary"
 
         # 6. Start date / availability
         if re.search(r"start\s+date|earliest\s+date|notice\s+period|availability", text, re.I):
-            avail = self.preferences.get("notice_period", "2 weeks")
+            avail = self.preferences.get("notice_period") or self.preferences.get("start_availability") or "Immediately"
+            if options:
+                matched_opt = self._match_option(avail, options)
+                if not matched_opt and "immediately" in str(avail).lower():
+                    for opt in options:
+                        if any(w in opt.lower() for w in ("immediately", "immediate", "asap", "0 weeks", "now")):
+                            matched_opt = opt
+                            break
+                avail = matched_opt or self._match_option("2 weeks", options) or avail
             return avail, "preference_start_date"
 
         # 7. Experience descriptions & narrative questions
@@ -721,6 +758,14 @@ class KnowledgeBook:
         if res.matched:
             return res.matched[0].label
 
+        # Number / currency formatting equivalence (e.g. 60000 vs 60,000 or $60,000 CAD)
+        norm_digits = re.sub(r"[^\d]", "", target_str)
+        if norm_digits and len(norm_digits) >= 2:
+            for opt in options:
+                opt_digits = re.sub(r"[^\d]", "", opt)
+                if opt_digits == norm_digits:
+                    return opt
+
         # Fallbacks for boolean/consent variations
         target_norm = normalize_text(target_str)
         if target_norm in ("yes", "y", "true", "1", "agree", "authorized"):
@@ -748,6 +793,17 @@ class KnowledgeBook:
         base = profile_answers(self.profile)
         contact = self.get_contact_answers()
         base.update(contact)
+
+        # Incorporate master answer policy auto defaults
+        try:
+            from app.answer_policy_compiler import load_master_policy
+            policy = load_master_policy()
+            for p_item in policy.items_list:
+                if p_item.mode == "auto" and p_item.answer and p_item.key not in base:
+                    base[p_item.key] = p_item.answer
+        except Exception:
+            pass
+
         base.update(self.custom_answers)
         return base
 

@@ -1,0 +1,50 @@
+verified: false
+contact:
+  first_name: Mohamed
+  last_name: Alem
+  email: mohamed@melato.ca
+  phone: +1 343 324 7677
+  location: Ottawa, ON
+  linkedin_url: https://www.linkedin.com/in/mohamedalem
+  website_url: https://melato.ca
+summary: Bilingual French-English banking and payments professional with approximately 7 years of experience in
+  fraud, disputes, collections, account portfolios and financial operations. Founder and operator of MELATO.
+work_authorization:
+- country: CA
+  authorized: true
+  requires_sponsorship: false
+  status: Citizen
+- country: US
+  authorized: true
+  requires_sponsorship: null
+  status: ''
+skills:
+- name: Excel
+  level: Good
+- name: Salesforce
+  level: Intermediate
+- name: NetSuite
+  level: Very good
+- name: Google Ad Manager
+  level: Very good
+- name: Fraud analysis
+  level: ''
+- name: Disputes
+  level: ''
+- name: Collections
+  level: ''
+- name: Portfolio management
+  level: ''
+- name: Customer escalation
+  level: ''
+- name: Team coaching
+  level: ''
+- name: Financial operations
+  level: ''
+- name: Bilingual customer communication
+  level: ''
+languages:
+- name: French
+  proficiency: Native
+- name: English
+  proficiency: Fluent

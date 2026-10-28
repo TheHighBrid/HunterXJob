@@ -282,6 +282,7 @@ case "$cmd" in
   openapi) shift; py_cli openapi "$@" ;;
   profile) shift; py_cli profile "$@" ;;
   materials) shift; py_cli materials "$@" ;;
+  vault) shift; py_cli vault "$@" ;;
   stop) stop_app ;;
   restart) stop_app; start_app ;;
   status) status_app ;;

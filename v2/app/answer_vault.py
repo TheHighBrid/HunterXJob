@@ -219,6 +219,10 @@ class AnswerVault:
     def has(self, key: str) -> bool:
         return _canonical_key(key) in self._records
 
+    def get(self, key: str) -> AnswerRecord | None:
+        """Return the raw AnswerRecord for a canonical key, or None."""
+        return self._records.get(_canonical_key(key))
+
     def resolve(self, request: FieldRequest) -> ResolvedAnswer:
         key = _canonical_key(request.key)
         record = self._records.get(key)

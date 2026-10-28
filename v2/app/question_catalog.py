@@ -800,4 +800,27 @@ def classify_question(question_text: str) -> dict[str, Any] | None:
     if matches:
         _, _, best_item = max(matches, key=lambda value: (value[0], value[1]))
         return best_item
+
+    # Fallback to compiled Master Answer Policy (140+ question families including French)
+    try:
+        from app.answer_policy_compiler import load_master_policy
+        policy = load_master_policy()
+        pol_item, score = policy.find_match(question_text)
+        if pol_item is not None and score >= 70.0:
+            return {
+                "canonical_key": pol_item.key,
+                "label": pol_item.key.replace("_", " ").title(),
+                "category": pol_item.category,
+                "sensitivity": "legal" if pol_item.sensitive else "standard",
+                "description": pol_item.notes or pol_item.key,
+                "patterns": pol_item.questions,
+                "setup_group": pol_item.category.title(),
+                "suggested_answers": [pol_item.answer] + pol_item.answer_variants[:3],
+                "fallback_suggestions": pol_item.answer_variants,
+                "default_mode": pol_item.mode,
+                "policy_item": pol_item,
+            }
+    except Exception as exc:
+        logger.debug("Master policy classification fallback error: %s", exc)
+
     return None

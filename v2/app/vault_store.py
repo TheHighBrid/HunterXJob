@@ -88,6 +88,32 @@ _POLICY_KEY_ALIASES: dict[str, tuple[str, ...]] = {
     # Time zone
     "time_zone": ("timezone",),
     "timezone": ("time_zone",),
+
+    # Employment & MELATO
+    "currently_employed_any": ("currently_employed", "employed", "current_employment_status"),
+    "currently_employed": ("currently_employed_any",),
+    "currently_employed_elsewhere": ("employed_elsewhere", "other_employment"),
+    "current_company": ("company", "employer"),
+    "current_role": ("current_title", "title", "position"),
+    "current_title": ("current_role", "title"),
+
+    # Location & Commute
+    "onsite_or_hybrid_local": ("ottawa_commute", "commute_ability", "local_commute"),
+    "onsite_or_hybrid_nonlocal": ("relocation", "nonlocal_commute"),
+    "work_arrangement_local": ("work_arrangement", "work_model"),
+    "work_arrangement_nonlocal": ("remote_only",),
+    "postal_code": ("zip_code", "postal", "postalcode"),
+
+    # Languages & Bilingual
+    "bilingual_status": ("bilingual", "bilingual_french", "language_proficiency"),
+    "native_language": ("first_language", "language_french"),
+    "english_proficiency": ("language_english", "english"),
+
+    # Skills & Qualifications
+    "excel_skill": ("excel", "ms_excel"),
+    "salesforce_skill": ("salesforce", "sfdc"),
+    "netsuite_skill": ("netsuite", "oracle_netsuite"),
+    "google_ad_manager_skill": ("google_ad_manager", "gam"),
 }
 
 
@@ -160,3 +186,73 @@ def upsert_answer(
     db.commit()
     db.refresh(row)
     return row
+
+
+def seed_answer_vault_from_policy(
+    db: Session,
+    *,
+    force: bool = False,
+    include_master_policy: bool = True,
+) -> dict[str, int]:
+    """Seed the Answer Vault database from user seed JSON and master answer policy.
+
+    Safe, idempotent upsert:
+    - 1. Direct user-authorized seed records from HunterXJob_Vault_Seed_POST_api_answers.json
+    - 2. Canonical auto-answers from HunterXJob_Master_Answer_Policy_v3.yaml
+    """
+    from app.answer_policy_compiler import get_seed_records, load_master_policy
+
+    seeded_json = 0
+    seeded_policy = 0
+
+    # 1. Seed direct user records from JSON
+    seed_records = get_seed_records()
+    for entry in seed_records:
+        k = entry.get("key")
+        val = entry.get("value")
+        if not k or val is None:
+            continue
+        scope = entry.get("scope", "global")
+        # Check existing
+        existing = db.execute(
+            select(AnswerPolicy).where(AnswerPolicy.key == k, AnswerPolicy.scope == scope)
+        ).scalar_one_or_none()
+        if existing is None or force:
+            upsert_answer(
+                db,
+                key=k,
+                value=str(val),
+                source=entry.get("source", "user"),
+                scope=scope,
+                confidence=float(entry.get("confidence", 1.0)),
+                sensitive=bool(entry.get("sensitive", False)),
+                note=str(entry.get("note", "seeded from answers vault")),
+            )
+            seeded_json += 1
+
+    # 2. Seed canonical auto-answers from master policy
+    if include_master_policy:
+        try:
+            policy = load_master_policy()
+            for item in policy.items_list:
+                if item.mode != "auto" or not item.answer:
+                    continue
+                existing = db.execute(
+                    select(AnswerPolicy).where(AnswerPolicy.key == item.key, AnswerPolicy.scope == "global")
+                ).scalar_one_or_none()
+                if existing is None or force:
+                    upsert_answer(
+                        db,
+                        key=item.key,
+                        value=item.answer,
+                        source="policy",
+                        scope="global",
+                        confidence=1.0,
+                        sensitive=item.sensitive,
+                        note=item.notes or f"master policy v{policy.schema_version}: {item.category}",
+                    )
+                    seeded_policy += 1
+        except Exception as exc:
+            logger.warning("Could not load master policy for seeding: %s", exc)
+
+    return {"json_seeded": seeded_json, "policy_seeded": seeded_policy, "total": seeded_json + seeded_policy}

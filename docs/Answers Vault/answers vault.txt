@@ -1,0 +1,4229 @@
+HUNTERXJOB CANDIDATE ANSWER POLICY
+POLICY DEFAULTS
+yaml
+policy_defaults:
+  provenance: user_provided
+  confidence: 1.0
+  scope: global
+  allow_autofill: true
+  unknown_behavior: ask_each_time
+  sensitive_unknown_behavior: skip_if_optional_else_ask
+  never_infer:
+    - criminal_history
+    - disability
+    - medical_information
+    - sexual_orientation
+    - ethnicity
+    - indigenous_identity
+    - veteran_status
+    - marital_status
+    - security_clearance
+    - SIN
+    - government_employment
+    - conflicts_of_interest
+
+
+───
+
+STAGE 1: CORE CONFIRMED POLICIES
+1. SALARY EXPECTATION
+Canonical key:salary_expectation
+Canonical question:
+ What are your salary expectations?
+Question fallbacks / matching phrases:
+• What is your expected salary?
+• What salary are you looking for?
+• What are your compensation expectations?
+• What is your desired salary?
+• What base salary are you seeking?
+• What salary range are you targeting?
+• What are your pay expectations?
+• What compensation are you looking for?
+• What annual salary would you accept?
+• What is your desired compensation?
+• What are your prétentions salariales?
+• Desired annual salary
+• Expected annual compensation
+Primary answer:
+text
+60000 CAD
+
+Equivalent format fallbacks:
+• 60000
+• 60,000
+• 60 000
+• 60K
+• 60k
+• 60.000
+• $60,000
+• $60,000 CAD
+• CAD 60,000
+• CAD 60000
+• 60000 CAD/year
+• $60K CAD
+Strategic salary alternatives, NOT formatting fallbacks:
+• 70000
+• 85000
+• 95000
+• 107000
+These should live under:
+yaml
+salary_strategy:
+  primary: 60000
+  currency: CAD
+  alternatives:
+    - 70000
+    - 85000
+    - 95000
+    - 107000
+
+Do not randomly substitute one of the higher amounts merely because 60000 does not match a form control.
+
+───
+
+2. START DATE / AVAILABILITY
+Canonical key:start_date
+Canonical question:
+ When are you available to start?
+Question fallbacks:
+• What is your earliest start date?
+• When could you start?
+• When can you begin?
+• What is your availability date?
+• How soon can you start?
+• Are you available immediately?
+• What is your notice period?
+• When would you be able to join us?
+• Earliest possible start date
+• Date available to begin employment
+Primary answer:
+text
+Immediately
+
+Answer fallbacks:
+• Available immediately
+• Immediately available
+• As soon as possible
+• ASAP
+• I can start immediately
+• Ready to start immediately
+• Available now
+Secondary timing fallback:
+• Within 2 weeks
+• In 2 weeks
+• Two weeks
+• 2 weeks
+• Within two weeks
+• Available within two weeks
+yaml
+rule:
+  prefer: immediately
+  fallback_when_immediate_not_available_as_option: within_2_weeks
+
+
+───
+
+3. CURRENT EMPLOYMENT STATUS
+This should not be represented by one universal Yes/No because several employer questions mean different things.
+A. Are you currently employed?
+Answer:
+• Yes, self-employed
+• Self-employed
+• Yes
+• Currently self-employed
+• I currently run my own business
+B. Are you currently working?
+Answer:
+• Yes
+• Yes, I am self-employed
+• Currently working
+C. Are you unemployed?
+Answer:
+• No
+D. Are you currently employed by another company/employer?
+Answer:
+• No
+• No, I am self-employed
+• I operate my own business
+E. Current employer / company
+Answer:
+• Melato
+• Melato Brand
+• MELATO
+• Self-employed at Melato
+F. Current role/title
+Answer:
+• Founder
+• Founder & Owner
+• Founder / Operator
+• Creative Director
+• Designer & Creative Director
+• Founder & Creative Director
+Explanation when free text is available:
+text
+I am self-employed and currently run my own apparel brand, Melato.
+
+
+───
+
+4. RELOCATION / WORK ARRANGEMENT / GEOGRAPHY
+Relocation
+Canonical question:
+ Are you willing to relocate?
+Answer:
+• No
+• Not open to relocation
+• No relocation
+• I am not looking to relocate
+Ottawa / Gatineau roles
+For jobs located in the Ottawa-Gatineau area:
+yaml
+acceptable_work_modes:
+  - onsite
+  - hybrid
+  - remote
+
+Questions:
+• Are you comfortable working onsite? → Yes
+• Are you comfortable working hybrid? → Yes
+• Are you comfortable working remotely? → Yes
+• Are you able to commute to the office? → Yes, if Ottawa/Gatineau
+• Are you within commuting distance? → Yes, if Ottawa/Gatineau
+Outside Ottawa/Gatineau
+yaml
+acceptable_work_modes:
+  - remote
+
+• Relocate → No
+• Regular onsite outside Ottawa/Gatineau → No
+• Hybrid outside Ottawa/Gatineau → No unless effectively local
+• Remote within Canada → Yes
+Current search geography
+yaml
+job_market_priority:
+  1:
+    market: Ottawa-Gatineau
+    modes: [onsite, hybrid, remote]
+    enabled: true
+
+  2:
+    market: Canada
+    modes: [remote]
+    enabled: true
+
+  3:
+    market: United States
+    enabled: false
+
+  4:
+    market: International
+    enabled: false
+
+United States and international jobs are currently OFF.
+
+───
+
+5. BACKGROUND CHECK CONSENT
+Canonical key:background_check_consent
+Canonical question:
+ Do you consent to a background check?
+Question fallbacks:
+• Are you willing to undergo a background check?
+• Do you agree to a background screening?
+• Are you comfortable completing a pre-employment background check?
+• Do you authorize a background check?
+• Do you consent to employment screening?
+• Are you willing to complete a criminal background check?
+• Can we conduct a background check?
+• Will you consent to background verification?
+Answer:
+text
+Yes
+
+Answer fallbacks:
+• I agree
+• I consent
+• Yes, I consent
+• Yes, I agree
+• Agreed
+• Consent
+• I authorize it
+• I am willing to undergo a background check
+• I consent to the background screening
+
+───
+
+6. WORK AUTHORIZATION
+Canada
+Canonical question:
+ Are you legally authorized to work in Canada?
+Answer:
+• Yes
+• Yes, I am legally authorized to work in Canada
+• Authorized
+• Legally authorized
+• Yes, without sponsorship
+Canadian sponsorship
+Question: Will you require employer sponsorship now or in the future?
+Answer:
+• No
+• No sponsorship required
+• I do not require sponsorship
+• I will not require employer sponsorship
+United States
+Canonical question:
+ Are you authorized to work in the United States?
+Answer:
+• Yes
+• Yes, I am authorized to work in the United States
+• Authorized to work in the US
+• Yes, without sponsorship
+Important distinction:
+yaml
+us_work_authorization: true
+us_job_search_enabled: false
+
+Work authorization and job-search targeting are two different things.
+Do not search for US jobs simply because US authorization is true.
+
+───
+
+7. HOW DID YOU HEAR ABOUT US?
+This should be a context-aware policy, not a blindly fixed answer.
+Canonical key:referral_source
+Questions:
+• How did you hear about us?
+• Where did you hear about this position?
+• How did you find this job?
+• Where did you find this opportunity?
+• How did you learn about this role?
+• What brought this opportunity to your attention?
+• Referral source
+• Source of application
+Preferred/default answer
+text
+Company website
+
+Available answer mappings
+• Company website
+• Company careers page
+• Job board
+• Indeed
+• LinkedIn
+• Social media
+• A friend
+• Referral
+• Advertisement
+• Online advertisement
+• AI assistant
+• AI chat model
+• Research
+• Google
+• Search engine
+• Other
+Selection logic
+yaml
+if:
+  source_is_company_site: "Company website"
+  source_is_indeed: "Indeed"
+  source_is_linkedin: "LinkedIn"
+  source_is_generic_job_board: "Job board"
+  source_is_social_media: "Social media"
+  source_is_google: "Google"
+  source_is_ai_research: "Other"
+  source_unknown: "Company website"
+
+Never claim "friend referral" unless that was actually the source.
+
+───
+
+8. USER-PROVIDED ANSWER: NO, QUESTION NOT YET IDENTIFIED
+Current value:
+yaml
+answer: "No"
+status: incomplete
+autofill: false
+
+Do not attach this No to a random question.
+The actual question needs to be identified first.
+
+───
+
+9. LANGUAGES
+Primary language
+French
+• French
+• Français
+• Native French
+• French, native
+• French is my first language
+English
+Fluent
+• Fluent English
+• English fluency
+• Professional English
+• Fully fluent in English
+Bilingual
+Answer:
+• Yes
+• Bilingual
+• Fully bilingual
+• English and French
+• French and English
+• Bilingual French/English
+• Bilingual English/French
+Preferred application/work language
+No strong preference.
+If forced to choose:
+text
+English
+
+Fallbacks:
+• English preferred
+• English
+• Anglais
+
+───
+
+10. LOCATION
+Canonical answer:
+text
+Ottawa, ON
+
+Question variants:
+• Where are you located?
+• Current city
+• Current location
+• City of residence
+• Where do you currently live?
+• What city are you based in?
+• Current address city
+• Municipality
+Answer fallbacks:
+• Ottawa, ON
+• Ottawa, Ontario
+• Ottawa
+• Ottawa, Ontario, Canada
+Postal code
+Only provide if mandatory:
+text
+K1K 4G8
+
+Rule:
+yaml
+location:
+  default: "Ottawa, ON"
+  provide_postal_code_only_if_required: true
+  postal_code: "K1K 4G8"
+
+
+───
+
+STAGE 2: EXTENDED APPLICATION QUESTIONS
+WHY DO YOU WANT TO WORK HERE / WHY US?
+Mode:dynamic_answer
+Question variants:
+• Why us?
+• Why our company?
+• Why do you want to work here?
+• Why are you interested in joining us?
+• Why this organization?
+• What interests you about our company?
+• Why are you interested in this opportunity?
+Rule:
+Never reuse a generic fixed answer.
+Generate from:
+1. actual company
+2. actual role
+3. job description
+4. candidate experience
+5. genuine alignment
+No invented admiration, products, customers, achievements, or company knowledge.
+
+───
+
+FRIEND / FAMILY MEMBER WORKS HERE
+Questions:
+• Do you have a family member who works here?
+• Do you know anyone employed by us?
+• Do you have friends or relatives working here?
+• Are you related to any employee?
+• Do you have a personal relationship with an employee?
+yaml
+mode: ask_each_time
+autofill: false
+
+
+───
+
+FINANCIAL INTEREST / SHARES
+Questions:
+• Do you own shares in the company?
+• Do you hold a financial interest in this organization?
+• Do you own company stock?
+• Do you have any financial interest in the employer?
+yaml
+mode: ask_each_time
+autofill: false
+
+
+───
+
+PREVIOUS EMPLOYMENT WITH COMPANY
+Questions:
+• Have you worked for us before?
+• Are you a former employee?
+• Have you previously been employed here?
+• Have you ever worked for this company?
+• Are you an ex-employee?
+yaml
+mode: ask_each_time
+
+
+───
+
+CURRENT EMPLOYEE
+Questions:
+• Are you currently employed by us?
+• Are you a current employee?
+• Do you currently work here?
+• Are you applying internally?
+yaml
+mode: ask_each_time
+
+
+───
+
+BOARD / EXECUTIVE RELATIONSHIP
+Questions:
+• Have you or someone you know served on our board?
+• Are you related to an executive?
+• Do you have a relationship with a director or officer?
+• Have you served on the board of directors?
+yaml
+mode: ask_each_time
+
+
+───
+
+PREVIOUS APPLICATIONS
+Questions:
+• Have you applied here before?
+• Have you previously submitted an application?
+• Have you interviewed with us before?
+• Have you previously been considered for employment?
+yaml
+mode: ask_each_time
+
+
+───
+
+PREVIOUS REJECTION
+Questions:
+• Have you previously been denied employment here?
+• Have you had an application rejected by us?
+• Have you previously been unsuccessful in an application?
+yaml
+mode: ask_each_time
+
+
+───
+
+VOLUNTARY SELF-IDENTIFICATION
+The following should never be inferred.
+LGBTQ+ identity
+Sexual orientation
+Ethnicity
+Race
+Minority status
+Indigenous identity
+Disability status
+Veteran status
+Gender identity
+Marital status
+Question fallbacks should be recognized, but no personal identity should be fabricated.
+yaml
+mode: skip_if_optional_else_ask
+allow_autofill: false
+
+If HunterXJob later receives an explicit user preference such as Prefer not to answer, that can become a confirmed policy.
+
+───
+
+ORGANIZATION MEMBERSHIP
+Questions:
+• Are you a member of any professional organization?
+• Are you affiliated with an organization?
+• Do you belong to an association?
+• Do you hold memberships relevant to this role?
+yaml
+mode: ask_each_time
+
+
+───
+
+CRIMINAL HISTORY
+Questions:
+• Have you ever been convicted of a crime?
+• Do you have a criminal record?
+• Have you ever been convicted of an offence?
+• Are you a convicted felon?
+• Do you have any criminal convictions?
+yaml
+mode: ask_each_time
+sensitivity: legal
+autofill: false
+
+Important: background-check consent = Yes does not imply anything about criminal-history answers.
+
+───
+
+DRIVER'S LICENCE
+Questions:
+• Do you hold a valid driver's licence?
+• Do you have a driver's license?
+• Do you possess a valid driving licence?
+• Do you have a valid Ontario driver's licence?
+yaml
+mode: ask_each_time
+
+
+───
+
+COMMUTE
+For Ottawa/Gatineau jobs:
+Answer: Yes
+Fallbacks:
+• Yes
+• I can commute
+• Able to commute
+• I can reliably commute
+• Yes, within Ottawa/Gatineau
+For positions outside the Ottawa/Gatineau commuting area:
+yaml
+answer: remote_only
+
+
+───
+
+VEHICLE OWNERSHIP
+Questions:
+• Do you own a vehicle?
+• Do you have access to a car?
+• Do you have reliable transportation?
+yaml
+mode: ask_each_time
+
+Do not confuse having reliable transportation with owning a car.
+
+───
+
+CANADIAN WORK AUTHORIZATION
+Questions:
+• Are you allowed to work in Canada?
+• Are you legally eligible to work in Canada?
+• Are you authorized to work in Canada?
+• Can you legally work for any Canadian employer?
+Answer: Yes
+
+───
+
+TERMS AND CONDITIONS / LEGAL AGREEMENTS
+Questions:
+• Do you accept our terms?
+• Do you agree to the terms and conditions?
+• Do you accept the applicant declaration?
+• Do you agree to our privacy policy?
+• Do you certify that this information is accurate?
+yaml
+mode: ask_each_time
+autofill: false
+
+Do not blanket-accept unknown legal agreements.
+
+───
+
+CRIMINAL/BACKGROUND SCREENING CONSENT
+Answer: Yes
+See confirmed Policy #5.
+
+───
+
+GOVERNMENT SECURITY CLEARANCE
+Questions:
+• Do you currently hold a government security clearance?
+• What clearance level do you hold?
+• Do you hold Reliability Status?
+• Do you have Secret clearance?
+• Do you have Top Secret clearance?
+yaml
+mode: ask_each_time
+
+
+───
+
+GOVERNMENT EMPLOYEE
+Questions:
+• Are you currently a government employee?
+• Are you employed by the federal government?
+• Do you currently work for a government department?
+yaml
+mode: ask_each_time
+
+
+───
+
+ACCOMMODATION
+Questions:
+• Do you require accommodation?
+• Do you require workplace accommodation?
+• Will you need accommodation during the hiring process?
+• Do you require accessibility accommodations?
+yaml
+mode: skip_if_optional_else_ask
+sensitivity: sensitive
+
+
+───
+
+REMOTE WORKSPACE
+Questions:
+• Do you have a quiet workspace?
+• Do you have a safe private place to work?
+• Do you have a dedicated home office?
+• Do you have a private remote-work environment?
+yaml
+mode: ask_each_time
+
+
+───
+
+HIGH-SPEED INTERNET
+Questions:
+• Do you have reliable high-speed internet?
+• Do you have broadband internet?
+• Is your internet suitable for remote work?
+yaml
+mode: ask_each_time
+
+
+───
+
+COMPUTER
+Questions:
+• Do you have a computer?
+• Do you own a personal computer?
+• Do you have appropriate computer equipment for remote work?
+yaml
+mode: ask_each_time
+
+
+───
+
+CELLPHONE
+Questions:
+• Do you have a cellphone?
+• Do you own a smartphone?
+• Do you have a mobile phone?
+yaml
+mode: ask_each_time
+
+
+───
+
+ALLERGIES / MEDICAL INFORMATION
+Questions:
+• Do you have any allergies?
+• Do you have any medical restrictions?
+• Do you have any health conditions we should know about?
+yaml
+mode: skip_if_optional_else_ask
+sensitivity: medical
+autofill: false
+
+
+───
+
+CANADIAN CITIZENSHIP
+Questions:
+• Are you a Canadian citizen?
+• Do you hold Canadian citizenship?
+• What is your citizenship?
+Answer: Yes / Canadian
+Fallbacks:
+• Yes
+• Canadian
+• Canada
+• Canadian citizen
+• Citizen of Canada
+
+───
+
+UNITED STATES CITIZENSHIP
+Do not infer citizenship from US work authorization.
+yaml
+mode: ask_each_time
+
+
+───
+
+SIN / SOCIAL INSURANCE NUMBER
+Questions:
+• Do you have a valid SIN?
+• Do you have a Social Insurance Number?
+• Do you possess a valid Canadian SIN?
+yaml
+mode: ask_each_time
+sensitivity: legal
+
+Never store or submit the actual SIN number through a generic application-answer policy.
+
+───
+
+LEADERSHIP EXPERIENCE
+Questions:
+• Have you held a leadership position?
+• Do you have leadership experience?
+• Have you managed a business or team?
+• Have you held a position of responsibility?
+Answer: Yes
+Supporting context:
+text
+Founder/operator and Creative Director of Melato.
+
+Answer fallbacks:
+• Yes
+• Yes, I have leadership experience
+• Founder of Melato
+• Business owner
+• Founder and Creative Director
+• Self-employed business owner
+
+───
+
+EDUCATION / DEGREE / DIPLOMA
+Questions:
+• Do you have post-secondary education?
+• Do you hold a degree or diploma?
+• What is your highest level of education?
+• Do you have a college diploma?
+• Do you have relevant education?
+Answer: Yes
+Confirmed safe representation:
+text
+Post-secondary college diploma from La Cité, graduated in 2016.
+
+Program:
+text
+Computer Engineering Technology / Information Systems
+
+Do not automatically state the program duration until the final profile version resolves the 2-year versus 3-year wording.
+
+───
+
+CERTIFICATIONS
+Questions:
+• Do you have any certifications?
+• What professional certifications do you hold?
+• Do you have relevant certificates?
+yaml
+mode: ask_each_time
+
+
+───
+
+STUDENT STATUS
+Questions:
+• Are you currently a student?
+• Are you enrolled in school?
+• Are you currently studying?
+yaml
+mode: ask_each_time
+
+
+───
+
+FIRST 90 DAYS / VACATION RESTRICTIONS
+Questions:
+• Are you able to avoid vacation during your first 90 days?
+• Can you commit to no planned leave during training?
+• Are you available throughout the initial training period?
+yaml
+mode: ask_each_time
+
+
+───
+
+PLANNED VACATION
+Questions:
+• Do you have any upcoming vacation?
+• Do you have planned time off?
+• Do you have pre-booked leave?
+yaml
+mode: ask_each_time
+
+
+───
+
+SALES EXPERIENCE
+Questions:
+• Do you have sales experience?
+• Have you previously worked in sales?
+• How many years of sales experience do you have?
+yaml
+mode: ask_each_time
+
+Do not convert general customer-facing or business experience into a specific number of sales years unless supported by the résumé/profile.
+
+───
+
+LINKEDIN
+Questions:
+• LinkedIn
+• LinkedIn URL
+• LinkedIn profile
+• Please provide your LinkedIn profile
+yaml
+answer_source: candidate_profile.linkedin_url
+mode: profile_lookup
+
+Never invent the URL.
+
+───
+
+WEBSITE
+Questions:
+• Personal website
+• Website
+• Company website
+• Other website
+• Professional website
+Available confirmed website:
+text
+https://melato.ca
+
+Use only when a personal/business website is appropriate.
+
+───
+
+PORTFOLIO
+Questions:
+• Portfolio
+• Portfolio URL
+• Personal portfolio
+• Work samples
+• Professional portfolio
+yaml
+answer_source: candidate_profile.portfolio_url
+mode: profile_lookup
+
+Do not substitute Melato.ca automatically if the field specifically requires a professional portfolio and a dedicated portfolio URL exists.
+
+───
+
+STAGE 3: ADDITIONAL USEFUL POLICIES
+AGE REQUIREMENT
+Questions:
+• Are you 18 years of age or older?
+• Are you at least 18?
+• Have you reached the age of majority?
+• Are you legally old enough to work?
+Answer: Yes
+Fallbacks:
+• Yes
+• 18+
+• Over 18
+• I am over 18 years old
+
+───
+
+EMPLOYER SPONSORSHIP
+Questions:
+• Will you require sponsorship?
+• Do you require visa sponsorship?
+• Will you need sponsorship now or in the future?
+• Will the company need to sponsor you?
+Canada answer: No
+Fallbacks:
+• No
+• No sponsorship required
+• I do not require sponsorship
+• No employer sponsorship needed
+
+───
+
+CURRENT COMPANY
+Questions:
+• Current employer
+• Current company
+• Who do you currently work for?
+• Employer name
+Answer:
+text
+Melato
+
+
+───
+
+SELF-EMPLOYMENT
+Questions:
+• Are you self-employed?
+• Do you own a business?
+• Do you currently operate your own business?
+• Are you an entrepreneur?
+Answer: Yes
+Fallbacks:
+• Yes
+• Self-employed
+• Business owner
+• Founder of Melato
+• I operate my own business
+
+───
+
+FRENCH PROFICIENCY
+Questions:
+• Are you fluent in French?
+• What is your French proficiency?
+• Can you work professionally in French?
+• Êtes-vous bilingue?
+• Parlez-vous français?
+Answer: Native / Fluent
+Fallbacks:
+• Native
+• Native French speaker
+• Fluent
+• Fully fluent
+• Professional proficiency
+• French is my first language
+
+───
+
+ENGLISH PROFICIENCY
+Questions:
+• Are you fluent in English?
+• What is your English proficiency?
+• Can you work professionally in English?
+Answer: Fluent
+Fallbacks:
+• Fluent
+• Fully fluent
+• Professional proficiency
+• Full professional proficiency
+
+───
+
+BILINGUAL REQUIREMENT
+Questions:
+• Are you bilingual in English and French?
+• Can you communicate in both official languages?
+• Are you fully bilingual?
+• Bilingual French/English?
+Answer: Yes
+
+───
+
+FINANCIAL-CRIME INVESTIGATION EXPERIENCE
+Questions:
+• Do you have financial-crime investigation experience?
+• How many years of financial-crime investigation experience do you have?
+• Do you have experience investigating financial crime?
+• Do you have fraud/financial-crime investigative experience?
+Answer:
+text
+2 years
+
+Fallbacks:
+• 2
+• Two years
+• 2 years
+• Approximately 2 years
+
+───
+
+SEARCH ROUTING POLICY
+This belongs outside normal application answers.
+yaml
+search_policy:
+
+  local_priority:
+    geography:
+      - Ottawa
+      - Gatineau
+      - National Capital Region
+    allowed_work_modes:
+      - onsite
+      - hybrid
+      - remote
+    priority: highest
+
+  canada_remote:
+    geography: Canada
+    allowed_work_modes:
+      - remote
+    priority: high
+
+  united_states:
+    enabled: false
+
+  international:
+    enabled: false
+
+  relocation:
+    enabled: false
+
+
+───
+
+SAFETY / CONFIDENCE RULE
+HunterXJob should use:
+yaml
+confirmed_user_answer:
+  confidence: 1.0
+  allow_autofill: true
+
+derived_but_not_explicit:
+  confidence: 0.5
+  allow_autofill: false
+
+unknown:
+  confidence: 0.0
+  mode: ask_each_time
+
+protected_or_sensitive_unknown:
+  mode: skip_if_optional_else_ask
+  allow_autofill: false
+
+Questions should be recognized aggressively.
+Answers should be supplied conservatively.
+Recognizing a question is not permission to invent its answer.
+
+HUNTERXJOB CANDIDATE ANSWER POLICY PACK v2.0
+PURPOSE
+This policy system gives HunterXJob a durable understanding of:
+• who the candidate is
+• what the candidate is looking for
+• what answers are permanently known
+• what answers depend on the specific job
+• what answers can be derived from verified experience
+• what questions require fresh judgment
+• what sensitive questions should be skipped
+• how to handle differently worded versions of the same question
+• how to map an answer into text fields, radio buttons, dropdowns, checkboxes, numbers, dates and multi-selects
+• how to avoid inventing information
+• how to avoid giving logically contradictory answers
+The guiding principle is:
+Recognize aggressively. Answer conservatively. Never fabricate.
+
+───
+
+1. ANSWER POLICY ARCHITECTURE
+Every known application question should ideally contain:
+yaml
+canonical_key:
+category:
+sensitivity:
+
+question_patterns:
+question_aliases:
+
+answer_mode:
+answer_value:
+answer_label:
+
+answer_fallbacks:
+format_fallbacks:
+option_fallbacks:
+strategic_alternatives:
+
+scope:
+scope_value:
+
+source:
+confidence:
+allow_autofill:
+
+dependencies:
+conditions:
+negative_question_behavior:
+
+unknown_behavior:
+notes:
+
+
+───
+
+2. ANSWER MODES
+HunterXJob should support more than simple answer or skip.
+yaml
+answer_modes:
+
+  answer:
+    meaning: Use a verified fixed answer.
+
+  derive:
+    meaning: Calculate or compose the answer exclusively from verified facts.
+
+  contextual:
+    meaning: Answer depends on the job, company, location or application.
+
+  dynamic:
+    meaning: Generate a truthful narrative from verified facts and the job description.
+
+  decline:
+    meaning: Explicitly answer No / Decline when that is the user's policy.
+
+  skip:
+    meaning: Leave optional field unanswered.
+
+  skip_if_optional_else_review:
+    meaning: Skip optional field, request review only when mandatory.
+
+  ask_each_time:
+    meaning: No permanent answer exists.
+
+  profile_lookup:
+    meaning: Retrieve from verified candidate profile.
+
+  application_audit:
+    meaning: Determine answer from what actually occurred during this application.
+
+  conditional:
+    meaning: Answer only after another question establishes that this field applies.
+
+
+───
+
+3. FALLBACK TYPES
+Do not put every alternative into one fallback array.
+There are several fundamentally different fallback classes.
+Question aliases
+Different ways employers ask the same question.
+Example:
+yaml
+question_aliases:
+  - What salary are you looking for?
+  - What are your salary expectations?
+  - Desired compensation?
+
+Answer fallbacks
+Semantically identical answers.
+yaml
+answer_value: "Yes"
+
+answer_fallbacks:
+  - Yes
+  - I agree
+  - I consent
+
+Format fallbacks
+Same information represented differently.
+yaml
+answer_value: "60000 CAD"
+
+format_fallbacks:
+  - "60000"
+  - "60,000"
+  - "60 000"
+  - "$60,000"
+  - "60K"
+
+Option fallbacks
+Equivalent dropdown choices.
+yaml
+answer_value: "No"
+
+option_fallbacks:
+  - No
+  - No, I do not
+  - Not applicable
+
+Only use Not applicable when it genuinely means the same thing.
+Strategic alternatives
+Different legitimate choices approved by the candidate.
+yaml
+strategic_alternatives:
+  - 70000
+  - 85000
+  - 95000
+  - 107000
+
+These are not equivalent answers and should only be selected by salary strategy.
+Scope override
+A different answer that applies to one company, country or application.
+
+───
+
+4. POLICY PRECEDENCE
+When several answers could apply:
+text
+APPLICATION
+    ↓
+COMPANY
+    ↓
+PLATFORM
+    ↓
+COUNTRY
+    ↓
+JOB MARKET / LOCATION
+    ↓
+GLOBAL USER POLICY
+    ↓
+VERIFIED PROFILE FACT
+    ↓
+VERIFIED DERIVATION
+    ↓
+REVIEW
+
+More specific policy always wins.
+
+───
+
+5. CORE CONFIDENCE MODEL
+yaml
+confidence_rules:
+
+  explicitly_user_provided:
+    confidence: 1.00
+
+  verified_profile_fact:
+    confidence: 1.00
+
+  deterministic_derivation:
+    confidence: 0.95
+
+  contextual_rule:
+    confidence: 0.90
+
+  inferred:
+    confidence: 0.50
+    autofill: false
+
+  unknown:
+    confidence: 0.00
+    autofill: false
+
+For sensitive/legal questions, HunterXJob should require either:
+text
+explicit answer
+OR
+verified structured fact
+
+Never semantic guessing.
+
+───
+
+PART I
+IDENTITY AND CONTACT
+6. FULL NAME
+Possible questions:
+• Full name
+• Legal name
+• What is your full name?
+• First and last name
+• Candidate name
+• Applicant name
+• Name
+• Legal first name
+• Legal surname
+• Family name
+• Given name
+• Last name
+• Preferred name
+Policy
+Use verified profile fields.
+yaml
+mode: profile_lookup
+confidence: 1.0
+
+Never abbreviate or invent a middle name.
+
+───
+
+7. PREFERRED NAME
+Possible questions:
+• Preferred name
+• What should we call you?
+• Name you go by
+• Preferred first name
+• Chosen name
+Use profile value if explicitly stored.
+Otherwise use first name.
+Never change legal-name fields into preferred-name fields.
+
+───
+
+8. EMAIL
+Possible questions:
+• Email
+• Email address
+• Primary email
+• Contact email
+• Best email
+• Personal email
+yaml
+mode: profile_lookup
+
+Never use an automatically generated relay address unless specifically authorized.
+
+───
+
+9. PHONE NUMBER
+Questions:
+• Phone
+• Phone number
+• Mobile number
+• Cell phone
+• Primary telephone
+• Contact number
+• Best number to reach you
+Use verified profile number.
+Formatting can change:
+text
++1XXXXXXXXXX
+XXX-XXX-XXXX
+(XXX) XXX-XXXX
+XXX XXX XXXX
+
+The underlying digits must never change.
+
+───
+
+10. LOCATION
+Canonical answer:
+text
+Ottawa, ON
+
+Question aliases:
+• Where are you located?
+• Current location
+• City
+• Current city
+• City of residence
+• Where do you live?
+• Where are you based?
+• Residence
+• Municipality
+• Current geographic location
+• Home location
+Answer variants:
+text
+Ottawa, ON
+Ottawa, Ontario
+Ottawa
+Ottawa, Ontario, Canada
+
+
+───
+
+11. POSTAL CODE
+Use only when required.
+text
+K1K 4G8
+
+Format alternatives:
+text
+K1K4G8
+K1K 4G8
+
+Policy:
+yaml
+provide_if:
+  field_required: true
+otherwise:
+  skip: true
+
+
+───
+
+12. COUNTRY OF RESIDENCE
+Canonical answer:
+text
+Canada
+
+Fallbacks:
+• Canada
+• CA
+• CAN
+• Canadian resident
+Do not use Canadian citizen when the employer specifically asks for country of residence.
+
+───
+
+13. PROVINCE
+Canonical:
+text
+Ontario
+
+Fallbacks:
+text
+ON
+Ontario
+
+
+───
+
+14. TIME ZONE
+Canonical:
+text
+Eastern Time
+
+Possible options:
+• Eastern Time
+• ET
+• EST
+• EDT
+• America/Toronto
+Prefer Eastern Time unless the form explicitly uses IANA identifiers.
+
+───
+
+PART II
+WORK AUTHORIZATION
+15. CANADA WORK AUTHORIZATION
+Questions:
+• Are you legally authorized to work in Canada?
+• Can you legally work in Canada?
+• Do you have the right to work in Canada?
+• Are you eligible to work in Canada?
+• Are you authorized to work for any Canadian employer?
+• Do you currently have Canadian work authorization?
+• Can you work in Canada without restriction?
+Answer:
+text
+Yes
+
+Fallbacks:
+• Yes
+• Authorized
+• Legally authorized
+• Yes, legally authorized
+• I am authorized to work in Canada
+• Yes, without sponsorship
+
+───
+
+16. CANADIAN CITIZENSHIP
+Questions:
+• Are you a Canadian citizen?
+• Do you hold Canadian citizenship?
+• Citizenship
+• Country of citizenship
+• What is your nationality?
+Answer:
+text
+Canadian
+
+Option mappings:
+text
+Yes
+Canada
+Canadian
+Canadian Citizen
+Citizen of Canada
+
+
+───
+
+17. CANADA SPONSORSHIP
+Questions:
+• Do you require sponsorship?
+• Will you require sponsorship?
+• Do you need employer sponsorship?
+• Will you require immigration sponsorship now or later?
+• Do you require visa sponsorship in Canada?
+• Will you need a work permit sponsored by us?
+Answer:
+text
+No
+
+Fallbacks:
+• No
+• No sponsorship required
+• I do not require sponsorship
+• No employer sponsorship needed
+• I will not require sponsorship
+
+───
+
+18. UNITED STATES WORK AUTHORIZATION
+Confirmed policy:
+yaml
+authorized: true
+search_enabled: false
+
+Application answer if legitimately asked:
+text
+Yes
+
+Question aliases:
+• Are you legally authorized to work in the US?
+• Are you authorized to work in the United States?
+• Can you legally work in the USA?
+• Do you have US work authorization?
+• Are you eligible to work in the United States?
+Answer fallbacks:
+• Yes
+• Authorized
+• Legally authorized
+• Authorized to work in the United States
+Important:
+text
+US authorization ≠ US citizenship.
+US authorization ≠ US job search enabled.
+
+
+───
+
+19. US CITIZENSHIP
+Unknown.
+yaml
+mode: ask_each_time
+autofill: false
+
+Never derive citizenship from work authorization.
+
+───
+
+20. INTERNATIONAL WORK AUTHORIZATION
+Never reuse Canada or US authorization internationally.
+Questions mentioning:
+• UK
+• EU
+• Australia
+• UAE
+• France
+• Germany
+• another country
+must use country-specific authorization.
+If no verified authorization exists:
+yaml
+mode: review
+
+
+───
+
+PART III
+JOB SEARCH GEOGRAPHY
+21. MARKET PRIORITY
+yaml
+market_1:
+  location:
+    - Ottawa
+    - Gatineau
+    - National Capital Region
+  onsite: true
+  hybrid: true
+  remote: true
+  priority: highest
+
+market_2:
+  location: Canada
+  remote: true
+  onsite: false
+  hybrid: false
+  priority: high
+
+market_3:
+  location: United States
+  enabled: false
+
+market_4:
+  location: International
+  enabled: false
+
+Search policy and application-answer policy must remain separate.
+
+───
+
+22. RELOCATION
+Questions:
+• Are you willing to relocate?
+• Would you relocate?
+• Open to relocation?
+• Can you move for this role?
+• Willing to move?
+• Relocation willingness
+• Would you be willing to relocate to X?
+• Are you able to relocate?
+Answer:
+text
+No
+
+Fallbacks:
+• No
+• Not currently
+• Not open to relocating
+• I am not looking to relocate
+Do not select:
+text
+Maybe
+Open to discussion
+Yes
+
+unless specifically approved later.
+
+───
+
+23. OTTAWA / GATINEAU COMMUTE
+Questions:
+• Can you commute to Ottawa?
+• Can you work from our Ottawa office?
+• Are you within commuting distance?
+• Can you reliably commute?
+• Are you available onsite?
+• Can you attend the office?
+• Are you comfortable with hybrid work?
+• Can you work three days per week onsite?
+For Ottawa/Gatineau:
+text
+Yes
+
+Fallbacks:
+• Yes
+• Able to commute
+• I can commute
+• Within commuting distance
+• Yes, I can work onsite
+• Yes, I can work hybrid
+
+───
+
+24. COMMUTE OUTSIDE OTTAWA/GATINEAU
+If the role is elsewhere in Canada and not remote:
+text
+No
+
+unless specifically approved.
+
+───
+
+25. REMOTE WORK
+Questions:
+• Are you comfortable working remotely?
+• Can you work remotely?
+• Are you open to remote work?
+• Do you have experience working remotely?
+Work-arrangement preference:
+text
+Yes
+
+For jobs outside Ottawa/Gatineau, remote is required.
+
+───
+
+26. HYBRID WORK
+Ottawa/Gatineau:
+text
+Yes
+
+Elsewhere:
+text
+No
+
+unless the location is realistically commutable.
+
+───
+
+27. ONSITE WORK
+Ottawa/Gatineau:
+text
+Yes
+
+Elsewhere:
+text
+No
+
+
+───
+
+PART IV
+AVAILABILITY
+28. START DATE
+Canonical:
+text
+Immediately
+
+Question aliases:
+• When can you start?
+• Earliest start date
+• What is your availability?
+• When are you available?
+• When would you be able to join?
+• What date can you begin?
+• Available start date
+• Earliest availability
+• How soon can you start?
+• Notice period
+• When could you commence employment?
+Primary:
+text
+Immediately
+
+Fallbacks:
+• Available immediately
+• Immediately available
+• ASAP
+• As soon as possible
+• Available now
+• I can begin immediately
+• Ready to start immediately
+Secondary:
+text
+Within 2 weeks
+
+Fallbacks:
+• 2 weeks
+• Two weeks
+• In two weeks
+• Within two weeks
+• 14 days
+
+───
+
+29. NOTICE PERIOD
+Questions:
+• What is your notice period?
+• How much notice do you need?
+• Required notice before starting?
+Preferred answer:
+text
+No notice period / Available immediately
+
+Fallback:
+text
+Up to two weeks
+
+
+───
+
+30. FULL-TIME AVAILABILITY
+If asking generally whether available for full-time employment:
+yaml
+mode: ask_each_time
+
+Unless this is explicitly added as a permanent preference.
+
+───
+
+31. PART-TIME AVAILABILITY
+yaml
+mode: ask_each_time
+
+
+───
+
+32. CONTRACT WORK
+Questions:
+• Are you open to contract work?
+• Temporary employment?
+• Fixed-term contract?
+• Contract-to-hire?
+yaml
+mode: ask_each_time
+
+
+───
+
+33. SHIFT AVAILABILITY
+Keep separate:
+yaml
+day_shift: ask_each_time
+evening_shift: ask_each_time
+night_shift: ask_each_time
+weekend_shift: ask_each_time
+rotating_shift: ask_each_time
+
+Do not infer availability from past night-shift experience.
+Having done something before does not automatically mean wanting it now.
+
+───
+
+34. OVERTIME
+Questions:
+• Are you available for overtime?
+• Can you occasionally work additional hours?
+yaml
+mode: ask_each_time
+
+
+───
+
+35. ON-CALL
+yaml
+mode: ask_each_time
+
+
+───
+
+36. WEEKENDS / HOLIDAYS
+yaml
+mode: ask_each_time
+
+
+───
+
+PART V
+COMPENSATION
+37. MINIMUM SALARY
+Candidate minimum:
+yaml
+currency: CAD
+annual_minimum: 60000
+
+Canonical output:
+text
+60000 CAD
+
+Formatting:
+text
+60000
+60,000
+60 000
+60K
+60k
+$60,000
+$60K
+$60,000 CAD
+CAD 60,000
+60000 CAD
+
+
+───
+
+38. SALARY QUESTION ALIASES
+Recognize:
+• Salary expectation
+• Desired salary
+• Expected salary
+• Compensation expectation
+• Desired compensation
+• Expected compensation
+• Base salary expectation
+• Salary requirements
+• Pay expectation
+• What salary are you targeting?
+• What salary are you looking for?
+• What compensation would you accept?
+• What is your expected annual salary?
+• Minimum salary
+• Minimum compensation
+• Desired annual salary
+• Expected base
+• Salary range sought
+• Compensation range sought
+• What are your salary expectations?
+• What remuneration are you seeking?
+• Prétentions salariales
+• Salaire souhaité
+• Rémunération souhaitée
+
+───
+
+39. SALARY STRATEGY
+Approved salary anchors:
+yaml
+minimum: 60000
+
+approved_anchors:
+  - 60000
+  - 70000
+  - 85000
+  - 95000
+  - 107000
+
+These are not synonyms.
+Suggested strategy:
+yaml
+if employer_range_unknown:
+  use: 60000
+
+if employer_range_minimum_above_60000:
+  do_not_undercut_posted_range: true
+
+if dropdown_options:
+  choose_lowest_approved_option_at_or_above_60000: true
+
+if posted_salary_range_exists:
+  stay_inside_range: true
+
+if question_asks_minimum_acceptable:
+  use: 60000
+
+if question_asks_current_salary:
+  ask_each_time: true
+
+if question_asks_total_compensation:
+  ask_each_time: true
+
+if question_asks_hourly_rate:
+  ask_each_time: true
+
+Do not automatically convert $60,000 annual into hourly pay because required weekly hours may differ.
+
+───
+
+40. SALARY NEGOTIABILITY
+Questions:
+• Is salary negotiable?
+• Are you flexible on compensation?
+• Are your salary expectations flexible?
+Recommended policy:
+text
+Yes
+
+Possible answer:
+text
+Yes, depending on the overall compensation package and responsibilities.
+
+This should be approved by the candidate before permanent autofill.
+
+───
+
+PART VI
+EMPLOYMENT STATUS
+41. CURRENTLY EMPLOYED?
+Candidate operates Melato.
+Questions:
+• Are you currently employed?
+• Are you working?
+• What is your employment status?
+• Current employment status
+Answer:
+text
+Yes, self-employed
+
+Dropdown fallback:
+text
+Self-employed
+
+If unavailable:
+text
+Employed
+
+
+───
+
+42. SELF-EMPLOYED?
+Answer:
+text
+Yes
+
+Aliases:
+• Are you self-employed?
+• Do you own a business?
+• Are you an entrepreneur?
+• Do you currently operate a company?
+• Are you currently running your own business?
+
+───
+
+43. CURRENT COMPANY
+Answer:
+text
+Melato
+
+Fallbacks:
+• MELATO
+• Melato Brand
+• Self-employed / Melato
+
+───
+
+44. CURRENT ROLE
+Possible valid titles depending on field:
+text
+Founder
+Founder & Owner
+Founder / Operator
+Designer & Creative Director
+Founder & Creative Director
+
+Prefer title actually stored in the verified profile.
+
+───
+
+45. WHY ARE YOU LEAVING YOUR CURRENT ROLE?
+Because Melato is self-employment, this should be contextual.
+Never fabricate dissatisfaction.
+Possible dynamic framing:
+text
+I am looking to complement my entrepreneurial work with a strong professional opportunity where I can apply my banking, fraud, collections and operations experience.
+
+Only use after candidate approval.
+
+───
+
+PART VII
+EXPERIENCE
+46. TOTAL BANKING / PAYMENTS EXPERIENCE
+Verified general profile:
+text
+7 years
+
+Question aliases:
+• How many years of banking experience?
+• Years working in financial services?
+• Banking experience?
+• Financial-services experience?
+• Payments experience?
+Possible answer:
+text
+7 years
+
+Use only when the question genuinely covers the overall banking/payments background.
+
+───
+
+47. FRAUD EXPERIENCE
+Questions:
+• Do you have fraud experience?
+• Fraud investigation experience?
+• Fraud prevention experience?
+• Transaction fraud experience?
+• Fraud analyst experience?
+Answer:
+text
+Yes
+
+For exact number of years, derive only from verified employment chronology rather than guessing.
+
+───
+
+48. DISPUTES / CHARGEBACK EXPERIENCE
+Questions:
+• Dispute experience?
+• Chargeback experience?
+• Payment disputes?
+• Claims experience?
+• Card disputes?
+Answer:
+text
+Yes
+
+
+───
+
+49. COLLECTIONS EXPERIENCE
+Questions:
+• Collections experience?
+• Debt collection experience?
+• Credit and collections?
+• Delinquent account management?
+• Recovery experience?
+• Collection portfolio experience?
+Answer:
+text
+Yes
+
+
+───
+
+50. ACCOUNT PORTFOLIO EXPERIENCE
+Confirmed:
+text
+3+ years
+
+Questions:
+• Do you have portfolio management experience?
+• Have you managed large account portfolios?
+• How many years managing account portfolios?
+• Experience handling high-balance accounts?
+Answer variants:
+text
+Yes
+3+ years
+More than 3 years
+Over three years
+
+
+───
+
+51. LARGE BALANCE ACCOUNTS
+Answer:
+text
+Yes
+
+Can reference verified large-balance portfolio experience where relevant.
+
+───
+
+52. LEADERSHIP EXPERIENCE
+Answer:
+text
+Yes
+
+Evidence sources include verified supervisory and business-owner experience.
+Question aliases:
+• Leadership experience?
+• Have you supervised employees?
+• Have you coached others?
+• Have you led a team?
+• Management experience?
+• Team lead experience?
+• Supervisory experience?
+• Have you held a leadership position?
+Answer fallbacks:
+• Yes
+• Yes, I have leadership experience
+• Yes, I have supervisory experience
+• Team leadership and coaching experience
+
+───
+
+53. PEOPLE MANAGEMENT
+If question specifically asks number of direct reports:
+yaml
+mode: derive_from_verified_profile_or_review
+
+Do not translate "coached people" into "managed X direct reports" automatically.
+
+───
+
+54. ESCALATION EXPERIENCE
+Answer:
+text
+Yes
+
+Question variants:
+• Customer escalations
+• Complex escalations
+• High-risk escalations
+• Escalated cases
+• Complaint escalations
+
+───
+
+55. REPORT WRITING
+Answer:
+text
+Yes
+
+
+───
+
+56. COACHING / TRAINING
+Answer:
+text
+Yes
+
+Recognize:
+• Coaching
+• Mentoring
+• Training colleagues
+• Employee development
+• Shadowing
+• Performance feedback
+
+───
+
+57. HIGH-VALUE CLAIMS
+HunterXJob can reference verified experience handling claims above $10,000 when a question specifically asks about high-value claims or high-risk transactions.
+Do not turn $10,000+ claim experience into a general salary or portfolio number.
+
+───
+
+PART VIII
+EXPERIENCE-YEAR DERIVATION ENGINE
+For questions such as:
+How many years of X experience do you have?
+HunterXJob should not simply ask an LLM.
+It should calculate from verified dated experience.
+Example:
+yaml
+experience_calculation:
+
+  identify_skill: collections
+
+  find_verified_roles:
+    where skill_or_achievement_supports: collections
+
+  intervals:
+    - start_date
+    - end_date
+
+  merge_overlapping_intervals: true
+
+  calculate_total_months: true
+
+  convert_to_years: true
+
+  never_double_count_overlapping_jobs: true
+
+Then format according to available options:
+text
+3
+3 years
+3+ years
+More than 3 years
+2-5 years
+3 to 5 years
+
+Select the closest truthful option.
+Never round upward into a category the candidate does not qualify for.
+Example:
+text
+Verified = 2 years 9 months
+
+Allowed:
+2 years
+2+ years
+2-3 years
+1-3 years
+
+Not allowed:
+3+ years
+3-5 years
+5 years
+
+
+───
+
+PART IX
+SOFTWARE AND TOOLS
+58. EXCEL
+Known level:
+text
+Good
+
+Option mapping could include:
+text
+Intermediate
+Proficient
+Good
+Working proficiency
+
+Do not automatically select Expert or Advanced unless profile is updated.
+
+───
+
+59. SALESFORCE
+Known level:
+text
+Medium
+
+Dropdown mapping:
+text
+Intermediate
+Working knowledge
+Moderate proficiency
+
+
+───
+
+60. NETSUITE
+Known level:
+text
+Very good
+
+Possible mappings:
+text
+Advanced
+Highly proficient
+Very good
+
+
+───
+
+61. GOOGLE AD MANAGER
+Known level:
+text
+Very good
+
+Possible mappings:
+text
+Advanced
+Highly proficient
+Very good
+
+
+───
+
+62. UNKNOWN TECHNOLOGY QUESTIONS
+Example:
+• Do you know SAP?
+• Snowflake?
+• Tableau?
+• Power BI?
+• SQL?
+• Python?
+• AWS?
+• Azure?
+HunterXJob must look up the verified skills profile.
+If absent:
+yaml
+mode: review
+
+Never infer a technical skill from the job description.
+
+───
+
+PART X
+LANGUAGE
+63. FRENCH
+French is first language.
+Canonical:
+text
+Native / Fluent
+
+Fallbacks:
+• Native
+• Native French
+• Native speaker
+• Fluent
+• Fully fluent
+• French mother tongue
+• First language
+• Full professional proficiency
+
+───
+
+64. ENGLISH
+Canonical:
+text
+Fluent
+
+Fallbacks:
+• Fluent
+• Fully fluent
+• Professional proficiency
+• Full professional proficiency
+• Advanced
+
+───
+
+65. BILINGUAL
+Questions:
+• Are you bilingual?
+• English and French?
+• French and English?
+• Can you work in both official languages?
+• Bilingual English/French?
+• Bilingual French/English?
+• Can you serve customers in English and French?
+• Êtes-vous bilingue?
+Answer:
+text
+Yes
+
+Fallbacks:
+• Yes
+• Fully bilingual
+• English and French
+• French and English
+• Bilingual EN/FR
+• Bilingual FR/EN
+
+───
+
+66. LANGUAGE PREFERENCE
+No strong preference.
+If forced:
+text
+English
+
+Fallbacks:
+text
+English
+Anglais
+EN
+
+
+───
+
+PART XI
+EDUCATION
+67. POST-SECONDARY EDUCATION
+Answer:
+text
+Yes
+
+Verified profile representation:
+text
+2-year college education in Technique en Systèmes Informatiques.
+
+Use the exact institution, dates and credential only when verified in the candidate profile.
+
+───
+
+68. HIGHEST EDUCATION LEVEL
+Prefer structured profile value.
+Possible option mappings should be truthful:
+text
+College
+College diploma
+Post-secondary diploma
+2-year college diploma
+Technical diploma
+
+Do not select Bachelor’s Degree.
+
+───
+
+69. HIGH SCHOOL
+Verified education profile can include Lycée Moulay Ismaël where relevant.
+Normally do not send secondary-school details when post-secondary information satisfies the question.
+
+───
+
+70. GPA
+Unknown.
+yaml
+skip_if_optional_else_review: true
+
+Never calculate or fabricate GPA.
+
+───
+
+71. CERTIFICATIONS
+If verified certifications exist in the profile, use them.
+Otherwise:
+yaml
+mode: review
+
+Never convert employer training into an external certification.
+
+───
+
+72. CURRENT STUDENT?
+Unknown unless explicitly established.
+yaml
+mode: ask_each_time
+
+
+───
+
+PART XII
+BACKGROUND AND SCREENING
+73. BACKGROUND CHECK CONSENT
+Answer:
+text
+Yes
+
+Question aliases:
+• Consent to background check?
+• Agree to background screening?
+• Willing to undergo screening?
+• Authorize background check?
+• Pre-employment background verification?
+• Criminal background screening?
+• Employment background check?
+Fallbacks:
+• Yes
+• I agree
+• I consent
+• Yes, I consent
+• Authorized
+• I authorize the screening
+• I am willing to complete a background check
+
+───
+
+74. CRIMINAL HISTORY
+Do not derive from background-check consent.
+Questions:
+• Criminal conviction?
+• Criminal record?
+• Convicted of an offence?
+• Felony?
+• Pending criminal charges?
+• Convicted crime?
+yaml
+mode: ask_each_time
+sensitivity: legal
+autofill: false
+
+
+───
+
+75. CREDIT CHECK
+Consent to a credit check is different from background consent.
+yaml
+mode: ask_each_time
+
+
+───
+
+76. DRUG TEST
+yaml
+mode: ask_each_time
+
+
+───
+
+77. EMPLOYMENT VERIFICATION
+yaml
+mode: ask_each_time
+
+
+───
+
+78. EDUCATION VERIFICATION
+yaml
+mode: ask_each_time
+
+
+───
+
+79. REFERENCE CHECK
+yaml
+mode: ask_each_time
+
+Do not automatically authorize contacting a current employer.
+
+───
+
+80. GOVERNMENT SECURITY CLEARANCE
+Questions:
+• Reliability status?
+• Secret clearance?
+• Top Secret?
+• Government clearance?
+• Security clearance?
+• Enhanced reliability?
+Unknown unless candidate explicitly stores it.
+yaml
+mode: ask_each_time
+
+
+───
+
+81. ELIGIBLE TO OBTAIN CLEARANCE
+Different from already holding clearance.
+yaml
+mode: ask_each_time
+
+
+───
+
+82. GOVERNMENT EMPLOYEE
+yaml
+mode: ask_each_time
+
+
+───
+
+83. CONFLICT OF INTEREST
+Questions:
+• Conflict of interest?
+• Financial relationship?
+• Business relationship?
+• Competing employment?
+• Outside employment?
+• Potential conflict?
+Because candidate operates Melato:
+yaml
+mode: ask_each_time
+
+Never automatically answer No.
+
+───
+
+PART XIII
+COMPANY RELATIONSHIPS
+84. PREVIOUSLY WORKED FOR COMPANY
+Questions:
+• Have you worked here before?
+• Former employee?
+• Previously employed by us?
+• Previous contractor?
+• Former consultant?
+• Ex-employee?
+yaml
+scope: company
+mode: contextual
+
+HunterXJob should search verified employment history.
+If employer appears there:
+text
+Yes
+
+Otherwise:
+text
+No
+
+only when employer matching is high confidence.
+Ambiguous subsidiaries or renamed companies go to review.
+
+───
+
+85. CURRENT EMPLOYEE
+Determine using verified current employment history.
+Do not confuse "worked for before" with "currently employed by".
+
+───
+
+86. FRIEND OR RELATIVE WORKS HERE
+yaml
+mode: ask_each_time
+
+
+───
+
+87. RELATED TO EMPLOYEE
+yaml
+mode: ask_each_time
+
+
+───
+
+88. KNOW SOMEONE AT COMPANY
+yaml
+mode: ask_each_time
+
+
+───
+
+89. BOARD / EXECUTIVE RELATIONSHIP
+yaml
+mode: ask_each_time
+
+
+───
+
+90. SHARES / EQUITY OWNERSHIP
+yaml
+mode: ask_each_time
+
+
+───
+
+91. VENDOR / CLIENT RELATIONSHIP
+yaml
+mode: ask_each_time
+
+
+───
+
+92. PREVIOUS APPLICATION
+This may be derivable from HunterXJob's own application ledger.
+Questions:
+• Have you applied before?
+• Previously applied?
+• Previous application?
+• Have you interviewed before?
+Policy:
+yaml
+mode: application_audit
+
+If HunterXJob has verified application history:
+text
+Yes
+
+Otherwise review rather than assuming No.
+
+───
+
+PART XIV
+REFERENCES
+93. DO YOU HAVE PROFESSIONAL REFERENCES?
+Do not automatically expose reference information.
+yaml
+mode: ask_each_time
+
+
+───
+
+94. REFERENCE NAME / EMAIL / PHONE
+Only use explicitly approved stored references.
+Never invent.
+Never scrape old correspondence.
+Never substitute a manager without authorization.
+
+───
+
+PART XV
+TRANSPORTATION
+95. DRIVER'S LICENCE
+Unknown.
+Questions:
+• Valid driver's licence?
+• Ontario driver's licence?
+• Driver license?
+• Driving licence?
+yaml
+mode: ask_each_time
+
+
+───
+
+96. VEHICLE
+Unknown.
+yaml
+mode: ask_each_time
+
+
+───
+
+97. RELIABLE TRANSPORTATION
+Do not assume car ownership is required.
+For Ottawa/Gatineau:
+yaml
+mode: contextual
+
+Question specifically asking:
+Can you reliably commute to the office?
+Answer:
+text
+Yes
+
+Question asking:
+Do you own a vehicle?
+Review.
+These are not equivalent.
+
+───
+
+98. TRAVEL
+Questions:
+• Willing to travel?
+• Travel up to 10%?
+• 25%?
+• 50%?
+• Overnight travel?
+• International travel?
+yaml
+mode: ask_each_time
+
+Each travel percentage should be treated separately.
+
+───
+
+PART XVI
+REMOTE WORK SETUP
+99. COMPUTER
+Candidate has computer equipment.
+Questions:
+• Do you have a computer?
+• Personal computer?
+• Laptop?
+• Computer suitable for remote work?
+General answer:
+text
+Yes
+
+But if employer lists minimum hardware specifications, verify them separately.
+
+───
+
+100. CELLPHONE / SMARTPHONE
+General answer:
+text
+Yes
+
+Hardware requirements still need verification if specific.
+
+───
+
+101. HIGH-SPEED INTERNET
+Do not infer speed merely from internet access.
+yaml
+mode: ask_each_time
+
+
+───
+
+102. PRIVATE WORKSPACE
+yaml
+mode: ask_each_time
+
+
+───
+
+103. QUIET WORKSPACE
+yaml
+mode: ask_each_time
+
+
+───
+
+104. HEADSET
+yaml
+mode: ask_each_time
+
+
+───
+
+105. WEBCAM
+Can derive from verified hardware if stored.
+Otherwise review.
+
+───
+
+106. ETHERNET CONNECTION
+yaml
+mode: ask_each_time
+
+
+───
+
+PART XVII
+DEMOGRAPHICS AND VOLUNTARY DISCLOSURES
+These should never be inferred.
+107. GENDER
+yaml
+mode: skip_if_optional_else_review
+
+
+───
+
+108. SEXUAL ORIENTATION
+yaml
+mode: skip_if_optional_else_review
+
+
+───
+
+109. LGBTQ+ STATUS
+yaml
+mode: skip_if_optional_else_review
+
+
+───
+
+110. RACE
+yaml
+mode: skip_if_optional_else_review
+
+
+───
+
+111. ETHNICITY
+yaml
+mode: skip_if_optional_else_review
+
+
+───
+
+112. VISIBLE MINORITY STATUS
+yaml
+mode: skip_if_optional_else_review
+
+
+───
+
+113. INDIGENOUS STATUS
+yaml
+mode: skip_if_optional_else_review
+
+
+───
+
+114. DISABILITY STATUS
+yaml
+mode: skip_if_optional_else_review
+
+
+───
+
+115. VETERAN STATUS
+yaml
+mode: skip_if_optional_else_review
+
+
+───
+
+116. MARITAL STATUS
+yaml
+mode: skip_if_optional_else_review
+
+
+───
+
+117. RELIGION
+yaml
+mode: skip_if_optional_else_review
+
+
+───
+
+118. AGE / DATE OF BIRTH
+If question is simply:
+Are you at least 18?
+Answer:
+text
+Yes
+
+Actual date of birth:
+yaml
+mode: profile_lookup_if_verified
+
+Do not infer the birthdate from age.
+
+───
+
+PART XVIII
+ACCOMMODATIONS AND HEALTH
+119. ACCOMMODATION
+Questions:
+• Do you require accommodation?
+• Interview accommodation?
+• Workplace accommodation?
+• Accessibility requirements?
+yaml
+mode: skip_if_optional_else_review
+
+
+───
+
+120. MEDICAL QUESTIONS
+Examples:
+• Medical conditions
+• Allergies
+• Medication
+• Health condition
+• Physical disability
+• Mental-health condition
+yaml
+mode: skip_if_optional_else_review
+sensitivity: medical
+
+
+───
+
+121. ESSENTIAL JOB FUNCTIONS
+Question:
+Can you perform the essential functions of this job with or without accommodation?
+Do not automatically equate this with disability status.
+yaml
+mode: ask_each_time
+
+
+───
+
+PART XIX
+APPLICATION SOURCE
+122. HOW DID YOU HEAR ABOUT US?
+Recognize:
+• How did you hear about us?
+• Where did you find us?
+• Where did you see this position?
+• How did you find this vacancy?
+• How did you learn about this opportunity?
+• Source
+• Referral source
+• Application source
+• Job source
+Preferred source must reflect reality.
+Source mapping:
+yaml
+company_careers_page:
+  answer: Company Website
+
+indeed:
+  answer: Indeed
+
+linkedin:
+  answer: LinkedIn
+
+generic_board:
+  answer: Job Board
+
+google:
+  answer: Google
+
+social:
+  answer: Social Media
+
+friend:
+  answer: Friend / Referral
+
+advertisement:
+  answer: Advertisement
+
+ai_discovery:
+  preferred_options:
+    - Other
+    - Online Search
+    - Internet
+    - Research
+
+Do not claim a referral that did not happen.
+
+───
+
+PART XX
+ONLINE PROFILES
+123. LINKEDIN
+Use only verified LinkedIn URL.
+yaml
+mode: profile_lookup
+
+If missing:
+yaml
+skip_if_optional_else_review: true
+
+
+───
+
+124. WEBSITE
+Confirmed available business website:
+text
+https://melato.ca
+
+Use when asking for:
+• business website
+• personal/professional website where appropriate
+• company website
+• relevant creative work
+Do not automatically use it for unrelated technical portfolio requests.
+
+───
+
+125. PORTFOLIO
+If specific portfolio URL exists:
+yaml
+mode: profile_lookup
+
+If not:
+yaml
+mode: review
+
+Melato.ca can be used only where genuinely appropriate.
+
+───
+
+126. GITHUB
+Use verified GitHub URL if stored.
+Do not invent username from other accounts.
+
+───
+
+PART XXI
+COMPANY-SPECIFIC QUESTIONS
+127. WHY US?
+Examples:
+• Why us?
+• Why do you want to join?
+• Why this company?
+• Why are you interested in our organization?
+• What interests you about our company?
+Mode:
+yaml
+mode: dynamic
+
+Generate using:
+text
+verified candidate experience
++
+actual role
++
+actual company facts
++
+actual job description
+
+No fake admiration.
+No invented product use.
+No fabricated company knowledge.
+
+───
+
+128. WHY THIS ROLE?
+Dynamic.
+Use strongest truthful overlap between:
+text
+candidate experience
+job responsibilities
+required skills
+career direction
+
+
+───
+
+129. TELL US ABOUT YOURSELF
+Dynamic.
+Base structure:
+text
+Current professional identity
++
+most relevant experience
++
+key strengths
++
+why they connect to this opportunity
+
+
+───
+
+130. WHAT MAKES YOU A GOOD FIT?
+Dynamic.
+Use role-specific matching.
+Never claim every requirement.
+
+───
+
+131. GREATEST ACHIEVEMENT
+Use verified achievements only.
+yaml
+mode: derive
+
+Select most relevant verified accomplishment from candidate profile.
+
+───
+
+132. STRENGTHS
+Generate from verified skills and experience.
+
+───
+
+133. WEAKNESSES
+Requires candidate-approved response.
+yaml
+mode: ask_each_time
+
+
+───
+
+134. CAREER GOALS
+Candidate-specific narrative.
+yaml
+mode: ask_each_time
+
+until approved.
+
+───
+
+135. WHY ARE YOU LOOKING FOR WORK?
+Dynamic response based on current circumstances.
+Avoid unnecessary explanations about former employers unless specifically asked.
+
+───
+
+PART XXII
+EMPLOYMENT HISTORY QUESTIONS
+136. REASON FOR LEAVING EMPLOYER
+Answers must be company-specific.
+Never reuse one employer's departure reason for another.
+yaml
+scope: employment_record
+
+
+───
+
+137. MAY WE CONTACT THIS EMPLOYER?
+yaml
+mode: ask_each_time
+
+Especially for current employer/business relationships.
+
+───
+
+138. EMPLOYMENT DATES
+Use exact verified dates.
+Never estimate.
+
+───
+
+139. JOB TITLE
+Use exact verified title.
+Do not inflate title for ATS matching.
+
+───
+
+140. MANAGER NAME
+Only provide if verified.
+
+───
+
+141. EMPLOYER PHONE
+Only provide if verified and appropriate.
+
+───
+
+PART XXIII
+LEGAL DECLARATIONS
+142. TERMS AND CONDITIONS
+Never globally agree to arbitrary legal text.
+yaml
+mode: ask_each_time
+
+
+───
+
+143. PRIVACY POLICY
+If merely acknowledging receipt:
+yaml
+mode: contextual
+
+If granting additional optional consent:
+yaml
+mode: ask_each_time
+
+
+───
+
+144. CERTIFY INFORMATION IS TRUE
+HunterXJob may only check this if:
+text
+all application answers passed Truth Guard
+AND
+no unresolved review items exist
+AND
+all required factual answers are verified
+
+Otherwise stop.
+
+───
+
+145. ELECTRONIC SIGNATURE
+Never generate arbitrary legal signature without explicit workflow authorization.
+
+───
+
+146. NDA / CONFIDENTIALITY
+yaml
+mode: ask_each_time
+
+
+───
+
+147. NON-COMPETE / OUTSIDE BUSINESS
+Because candidate operates Melato:
+yaml
+mode: ask_each_time
+
+
+───
+
+PART XXIV
+COMMUNICATION CONSENT
+148. EMAIL APPLICATION UPDATES
+Can normally be treated separately from marketing.
+
+───
+
+149. SMS RECRUITING UPDATES
+yaml
+mode: ask_each_time
+
+
+───
+
+150. MARKETING EMAILS
+Default recommendation:
+text
+Decline
+
+unless user explicitly opts in.
+Recruitment communication and marketing are not the same consent.
+
+───
+
+151. TALENT COMMUNITY
+yaml
+mode: ask_each_time
+
+
+───
+
+PART XXV
+VACATION / TIME OFF
+152. PRE-PLANNED VACATION
+yaml
+mode: ask_each_time
+
+
+───
+
+153. NO VACATION FIRST 90 DAYS
+yaml
+mode: ask_each_time
+
+
+───
+
+154. TRAINING ATTENDANCE
+If dates/schedule are given:
+yaml
+mode: contextual
+
+Do not answer Yes without checking known availability conflicts.
+
+───
+
+PART XXVI
+ASSESSMENTS
+155. WILLING TO COMPLETE ASSESSMENT
+Examples:
+• Skills test
+• Personality assessment
+• Technical assessment
+• Cognitive assessment
+• Language test
+yaml
+mode: ask_each_time
+
+
+───
+
+156. ASSESSMENT COMPLETION
+If HunterXJob has evidence that it was completed:
+yaml
+mode: application_audit
+
+Otherwise do not claim completion.
+
+───
+
+PART XXVII
+AI DISCLOSURE
+157. DID YOU USE AI?
+This should be based on what actually occurred.
+yaml
+mode: application_audit
+
+If employer asks whether AI was used in:
+• résumé creation
+• cover-letter preparation
+• application answers
+• assessment
+• interview
+HunterXJob must distinguish each.
+Never answer No if AI materially assisted that component.
+
+───
+
+PART XXVIII
+EXPERIENCE REQUIREMENT QUESTIONS
+HunterXJob should recognize patterns such as:
+text
+Do you have X experience?
+How many years of X?
+Have you worked with X?
+Are you proficient in X?
+Describe your experience with X.
+Rate your proficiency in X.
+
+Response engine:
+yaml
+step_1:
+  search_verified_profile_for_skill: true
+
+step_2:
+  search_verified_achievements: true
+
+step_3:
+  calculate_verified_duration_if_needed: true
+
+step_4:
+  compare_to_requirement: true
+
+step_5:
+  answer_truthfully: true
+
+Never use the job description itself as proof that the candidate possesses the skill.
+
+───
+
+PART XXIX
+REQUIREMENT BOOLEAN ENGINE
+Example employer asks:
+Do you have 5+ years of collections experience?
+HunterXJob should not merely detect "collections = yes."
+It must evaluate:
+text
+candidate verified collections duration
+VERSUS
+5-year threshold
+
+Output:
+text
+Yes
+
+only when verified duration ≥ required duration.
+Otherwise:
+text
+No
+
+or review depending on certainty.
+
+───
+
+PART XXX
+NEGATION ENGINE
+Critical hardening.
+These questions mean different things:
+text
+Are you authorized to work in Canada?
+Are you NOT authorized to work in Canada?
+Do you require sponsorship?
+Do you NOT require sponsorship?
+Are you unable to commute?
+Are you able to commute?
+
+HunterXJob must detect:
+• no
+• not
+• never
+• unable
+• without
+• except
+• neither
+• unless
+before selecting a stored answer.
+Never perform pure keyword mapping on questions containing negation.
+
+───
+
+PART XXXI
+CONDITIONAL QUESTION ENGINE
+Examples:
+If yes, please explain.
+If you answered No above, provide details.
+If other, please specify.
+If you require sponsorship, indicate visa type.
+These fields must depend on the previous answer.
+yaml
+mode: conditional
+
+If condition is false:
+text
+skip
+
+Do not fill arbitrary text.
+
+───
+
+PART XXXII
+DROPDOWN OPTION MATCHING
+Suppose stored answer:
+text
+Yes
+
+Form options:
+text
+Yes, I am legally authorized
+No
+Other
+
+HunterXJob should map semantic equivalents.
+But semantic mapping must preserve meaning.
+Safe:
+text
+Yes → Yes, I am legally authorized
+
+Unsafe:
+text
+No → Prefer not to say
+
+Those are not equivalent.
+
+───
+
+PART XXXIII
+NUMERIC FIELD HANDLING
+Examples:
+• Years experience
+• Salary
+• Notice period
+• Travel %
+• Direct reports
+• Portfolio size
+Numeric fields should receive numbers only.
+Example:
+yaml
+stored: "3+ years"
+numeric_field: 3
+
+Never send:
+text
+"more than three years"
+
+into an integer-only field.
+
+───
+
+PART XXXIV
+DATE HANDLING
+Support:
+text
+Immediately
+ASAP
+YYYY-MM-DD
+MM/DD/YYYY
+DD/MM/YYYY
+Month YYYY
+
+If form demands a calendar date for "immediately":
+text
+derive from application date
+
+Do not use a stale hard-coded date.
+
+───
+
+PART XXXV
+MULTISELECT QUESTIONS
+Example:
+Which work arrangements are you open to?
+Ottawa/Gatineau:
+text
+On-site
+Hybrid
+Remote
+
+Elsewhere Canada:
+text
+Remote
+
+Multi-select logic must respect job geography.
+
+───
+
+PART XXXVI
+SENSITIVE INFORMATION THAT MUST NEVER BE STORED AS GENERIC FALLBACK TEXT
+Do not place actual values for these inside an ordinary answer vault:
+text
+SIN
+passport number
+driver's licence number
+bank account
+credit-card number
+government ID number
+password
+security answers
+criminal-record documents
+medical records
+background-check documents
+
+Store secure references or request controlled entry when legitimately required.
+
+───
+
+PART XXXVII
+DUPLICATE QUESTION DETECTION
+Forms often ask the same thing twice:
+text
+Are you legally authorized to work in Canada?
+Do you currently have the right to work in Canada?
+
+HunterXJob should recognize both as:
+text
+work_authorization_ca
+
+and maintain answer consistency.
+
+───
+
+PART XXXVIII
+CONTRADICTION DETECTION
+Before submission, HunterXJob should detect conflicts such as:
+text
+Authorized to work in Canada = Yes
+Needs sponsorship in Canada = Yes
+Citizenship = Canadian
+
+Potential contradiction.
+Or:
+text
+Willing to relocate = No
+Preferred work location = Vancouver onsite
+Current location = Ottawa
+
+Potential contradiction.
+Or:
+text
+Current employment = No
+Current employer = Melato
+Self-employed = Yes
+
+Needs semantic resolution.
+Do not submit contradictory answers.
+
+───
+
+PART XXXIX
+CURRENT SELF-EMPLOYMENT SEMANTICS
+HunterXJob should understand that these can all be simultaneously true:
+yaml
+currently_self_employed: true
+owns_business: true
+current_company: Melato
+seeking_employment: true
+available_to_start: immediately
+
+This is not inherently contradictory.
+
+───
+
+PART XL
+APPLICATION REVIEW REASON CODES
+Instead of generic:
+text
+Missing fact
+
+HunterXJob should report exactly why it stopped.
+Examples:
+yaml
+unknown_fact:
+  description: Candidate fact not available.
+
+sensitive_unconfirmed:
+  description: Sensitive answer requires explicit candidate decision.
+
+company_specific_unknown:
+  description: Answer depends on relationship with this employer.
+
+legal_consent_required:
+  description: Legal acknowledgement cannot be globally reused.
+
+ambiguous_question:
+  description: Question matched multiple canonical intents.
+
+negation_ambiguous:
+  description: Negative wording makes automatic interpretation unsafe.
+
+experience_duration_uncertain:
+  description: Verified experience does not support exact requested duration.
+
+option_mapping_failed:
+  description: Stored answer does not correspond safely to available options.
+
+conditional_dependency_missing:
+  description: Parent question or answer is unavailable.
+
+salary_strategy_required:
+  description: Compensation question requires a strategic choice.
+
+country_scope_missing:
+  description: Work authorization country cannot be determined.
+
+profile_conflict:
+  description: Stored facts contradict one another.
+
+employer_identity_ambiguous:
+  description: Employer may be a subsidiary/former name/related company.
+
+required_sensitive_field:
+  description: Optional skip unavailable because employer made field mandatory.
+
+
+───
+
+PART XLI
+REVIEW SUPPRESSION
+Once the user answers a recurring question, HunterXJob should ask:
+text
+Can this answer safely become a reusable policy?
+
+If Yes:
+store it.
+Then stop asking again.
+Example:
+yaml
+question:
+  Do you have a valid driver's licence?
+
+user_answer:
+  Yes
+
+future_policy:
+  key: drivers_license_valid
+  answer: Yes
+  confidence: 1.0
+  autofill: true
+
+This is how HunterXJob should gradually become more autonomous.
+
+───
+
+PART XLII
+COUNTRY-SCOPED AUTHORIZATION
+Never store:
+yaml
+work_authorization: yes
+
+Instead:
+yaml
+work_authorization:
+  CA:
+    authorized: true
+    sponsorship_required: false
+
+  US:
+    authorized: true
+    search_enabled: false
+
+Future countries get their own records.
+
+───
+
+PART XLIII
+JOB MARKET FILTERS
+Current search policy:
+yaml
+job_search:
+
+  canada:
+
+    ottawa_gatineau:
+      enabled: true
+      onsite: true
+      hybrid: true
+      remote: true
+      priority: 1
+
+    other_canada:
+      enabled: true
+      onsite: false
+      hybrid: false
+      remote: true
+      priority: 2
+
+  united_states:
+    enabled: false
+    priority: 3
+
+  international:
+    enabled: false
+    priority: 4
+
+  relocation:
+    enabled: false
+
+
+───
+
+PART XLIV
+VERIFIED CAREER FACT FAMILIES
+HunterXJob should maintain reusable verified facts for:
+text
+banking
+payments
+fraud
+disputes
+claims
+collections
+credit
+account portfolios
+high-balance portfolios
+customer escalations
+leadership
+supervision
+coaching
+report writing
+risk analysis
+transaction review
+authorizations
+account restrictions
+bilingual customer communication
+business ownership
+creative direction
+e-commerce / apparel business operations
+
+These become evidence for dynamic job questions.
+
+───
+
+PART XLV
+SKILL PROOF MODEL
+Every skill should optionally contain:
+yaml
+skill:
+  name: Excel
+  proficiency: good
+  evidence:
+    - role
+    - achievement
+    - project
+  first_verified_use:
+  last_verified_use:
+  years_experience:
+  aliases:
+
+Example aliases:
+yaml
+collections:
+  aliases:
+    - debt collection
+    - recoveries
+    - arrears
+    - delinquency
+    - delinquent accounts
+    - credit collections
+
+fraud:
+  aliases:
+    - fraud prevention
+    - fraud investigation
+    - transaction fraud
+    - financial crime
+    - fraud analysis
+
+disputes:
+  aliases:
+    - chargebacks
+    - claims
+    - transaction disputes
+    - payment disputes
+
+
+───
+
+PART XLVI
+QUESTION CLASSIFICATION LEVELS
+HunterXJob should classify questions using:
+text
+1. Exact canonical pattern
+2. Known alias
+3. Regex/pattern family
+4. Field metadata
+5. Available options
+6. Section context
+7. Job location
+8. Employer
+9. Semantic classifier
+10. Review
+
+Semantic AI should classify the intent, not invent the answer.
+
+───
+
+PART XLVII
+ANSWER SELECTION ORDER
+Once intent is known:
+text
+1. Application-specific explicit answer
+2. Company-specific explicit answer
+3. Country-specific explicit answer
+4. Global explicit answer
+5. Verified profile fact
+6. Deterministic derived answer
+7. Contextual rule
+8. Review
+
+
+───
+
+PART XLVIII
+NARRATIVE ANSWER TRUTH GUARD
+Generated responses such as:
+• Why us?
+• Tell us about yourself
+• Describe your experience
+• Why should we hire you?
+• Explain your leadership style
+• Describe a challenging situation
+must obey:
+yaml
+narrative_guard:
+
+  verified_facts_only: true
+
+  invent_numbers: false
+
+  invent_titles: false
+
+  invent_skills: false
+
+  invent_certifications: false
+
+  invent_company_relationships: false
+
+  invent_product_usage: false
+
+  invent_customer_names: false
+
+  invent_awards: false
+
+  invent_team_sizes: false
+
+  invent_revenue: false
+
+  invent_results: false
+
+
+───
+
+PART XLIX
+ANSWER LENGTH ADAPTATION
+Same truth, different field sizes.
+Example long answer:
+text
+I am self-employed and currently operate Melato, an apparel brand.
+
+Medium:
+text
+Self-employed, Founder of Melato.
+
+Short:
+text
+Self-employed
+
+Dropdown:
+text
+Self-employed
+
+The semantic answer remains identical.
+
+───
+
+PART L
+REQUIRED VS OPTIONAL
+Unknown optional question:
+text
+SKIP
+
+Unknown required standard question:
+text
+REVIEW
+
+Unknown required sensitive question:
+text
+REVIEW - SENSITIVE
+
+Never fabricate merely because a form made the field mandatory.
+
+───
+
+PART LI
+SAFE AUTOMATIC ANSWER CATEGORIES
+Generally safe when verified:
+text
+name
+email
+phone
+city
+province
+postal code
+country
+languages
+education
+current employer
+current title
+work authorization
+sponsorship
+start availability
+known software skills
+known experience
+location preference
+work arrangement preference
+background-check consent
+
+
+───
+
+PART LII
+HIGH-RISK AUTOMATIC ANSWER CATEGORIES
+Require stronger rules:
+text
+criminal history
+medical information
+disability
+ethnicity
+race
+sexual orientation
+religion
+veteran status
+security clearance
+government employment
+conflict of interest
+family relationship
+financial interests
+drug testing
+credit checks
+references
+legal agreements
+actual signature
+salary strategy
+vacation commitments
+outside employment restrictions
+
+
+───
+
+PART LIII
+FINAL PRE-SUBMISSION CONSISTENCY GATE
+Before HunterXJob allows an application to proceed, validate:
+yaml
+identity_consistent: true
+employment_dates_consistent: true
+education_consistent: true
+salary_answer_valid: true
+location_policy_valid: true
+work_authorization_country_valid: true
+sponsorship_consistent: true
+relocation_consistent: true
+work_mode_consistent: true
+experience_years_supported: true
+sensitive_answers_authorized: true
+legal_answers_authorized: true
+conditional_fields_valid: true
+no_answer_contradictions: true
+no_unverified_claims: true
+no_required_questions_missing: true
+
+If all true:
+text
+READY
+
+If not:
+text
+REVIEW
+
+with the exact reason.
+
+───
+
+PART LIV
+LEARNING LOOP
+When HunterXJob encounters a new application question:
+text
+NEW QUESTION
+     ↓
+CLASSIFY INTENT
+     ↓
+SEARCH EXISTING POLICY
+     ↓
+SEARCH VERIFIED PROFILE
+     ↓
+DETERMINISTIC DERIVATION?
+     ↓
+YES → ANSWER
+NO → REVIEW
+     ↓
+USER ANSWERS
+     ↓
+ASK WHETHER ANSWER IS:
+GLOBAL / COUNTRY / COMPANY / APPLICATION SPECIFIC
+     ↓
+STORE POLICY
+     ↓
+FUTURE APPLICATIONS NO LONGER NEED REVIEW
+
+The goal is not zero review on day one.
+The goal is:
+Every legitimate review makes the next application smarter.
+
+───
+
+PART LV
+CURRENT CANDIDATE MASTER RULES
+yaml
+candidate_policy:
+
+  location:
+    city: Ottawa
+    province: Ontario
+    country: Canada
+    display: "Ottawa, ON"
+    postal_code: "K1K 4G8"
+    postal_only_if_required: true
+
+  languages:
+    french:
+      proficiency: native
+      first_language: true
+
+    english:
+      proficiency: fluent
+
+    bilingual_en_fr: true
+
+    preferred_language_if_forced:
+      English
+
+  compensation:
+    currency: CAD
+    minimum_annual_salary: 60000
+    approved_salary_anchors:
+      - 60000
+      - 70000
+      - 85000
+      - 95000
+      - 107000
+
+  availability:
+    primary: immediately
+    secondary: within_2_weeks
+
+  employment:
+    self_employed: true
+    business: Melato
+
+  relocation:
+    willing: false
+
+  geography:
+
+    ottawa_gatineau:
+      onsite: true
+      hybrid: true
+      remote: true
+
+    canada_elsewhere:
+      remote: true
+
+    united_states:
+      search_enabled: false
+
+    international:
+      search_enabled: false
+
+  work_authorization:
+
+    CA:
+      authorized: true
+      citizenship: Canadian
+      sponsorship_required: false
+
+    US:
+      authorized: true
+      search_enabled: false
+
+  screening:
+    background_check_consent: true
+
+  experience:
+    banking_and_payments_years: 7
+    large_account_portfolio_years: "3+"
+    fraud: true
+    disputes: true
+    collections: true
+    leadership: true
+    coaching: true
+    escalations: true
+    report_writing: true
+
+  tools:
+
+    excel:
+      proficiency: good
+
+    salesforce:
+      proficiency: medium
+
+    netsuite:
+      proficiency: very_good
+
+    google_ad_manager:
+      proficiency: very_good
+
+  website:
+    business: "https://melato.ca"
+
+
+───
+
+PART LVI
+ABSOLUTE NO-GUESS RULE
+HunterXJob must never silently invent an answer merely to achieve a higher completion rate.
+The priority order is:
+text
+TRUTH
+>
+CONSISTENCY
+>
+APPLICATION QUALITY
+>
+AUTONOMY
+>
+SPEED
+>
+FORM COMPLETION %
+
+A system that correctly stops on one unknown field is more reliable than a system that completes 100% of a form using fabricated information.
+The desired end state is not:
+"HunterXJob answers everything."
+It is:
+"HunterXJob automatically answers everything it actually knows."

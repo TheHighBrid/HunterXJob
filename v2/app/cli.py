@@ -270,8 +270,10 @@ def main(argv: list[str] | None = None) -> int:
             command.add_argument("--pause", type=int, default=5, help="seconds to pause and inspect the filled form in headed mode (default: 5)")
             command.add_argument("--max-errors", type=int, default=3, help="maximum errors before stopping the cycle (default: 3)")
     from app.cli_profile import register
+    from app.cli_vault import register as register_vault
 
     register(sub)
+    register_vault(sub)
     args = parser.parse_args(argv)
     handler = getattr(args, "handler", None) or COMMANDS[args.command][0]
     return handler(args)

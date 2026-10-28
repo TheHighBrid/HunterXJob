@@ -1,0 +1,146 @@
+[
+  {
+    "key": "salary_expectation",
+    "value": "60000",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "CAD annual baseline; company/job-specific salary must be evaluated against salary range."
+  },
+  {
+    "key": "willing_to_relocate",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Not willing to relocate."
+  },
+  {
+    "key": "notice_period",
+    "value": "Immediately",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "No notice period; can start immediately."
+  },
+  {
+    "key": "availability_date",
+    "value": "Immediately",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Date inputs must be formatted from actual future start date, not this string."
+  },
+  {
+    "key": "current_company",
+    "value": "MELATO",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Self-employed founder/operator; not another employer."
+  },
+  {
+    "key": "current_title",
+    "value": "Founder & Operator",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "User-owned apparel brand."
+  },
+  {
+    "key": "work_authorization_CA",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Legally entitled to work in Canada."
+  },
+  {
+    "key": "sponsorship_CA",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Canadian citizen."
+  },
+  {
+    "key": "work_authorization_US",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Direct user assertion; US sourcing currently disabled and sponsorship details unknown."
+  },
+  {
+    "key": "background_check_consent",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "User consents to lawful employment-related background checks only; not other contracts."
+  },
+  {
+    "key": "language_proficiency",
+    "value": "French (Native)|English (Fluent)",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "User says French first language and fluent English."
+  },
+  {
+    "key": "city",
+    "value": "Ottawa",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "User instructs Ottawa, ON; only fill postal code when mandatory."
+  },
+  {
+    "key": "state",
+    "value": "Ontario",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Do not select Ontario, California."
+  },
+  {
+    "key": "country",
+    "value": "Canada",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Residence and target market."
+  },
+  {
+    "key": "linkedin_url",
+    "value": "https://www.linkedin.com/in/mohamedalem",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "From past user profile; cross-check current profile."
+  },
+  {
+    "key": "website_url",
+    "value": "https://melato.ca",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Business website, not personal software portfolio."
+  }
+]
