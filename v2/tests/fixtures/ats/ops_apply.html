@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Ontario Public Service Careers / Emplois Fonction publique de l'Ontario</title>
+</head>
+<body>
+  <h2>Senior Systems Analyst - Ministry of Public and Business Service Delivery</h2>
+  <form id="ops_careers_form" method="POST">
+    <label for="first_name">First Name</label>
+    <input type="text" id="first_name" name="first_name" required />
+
+    <label for="last_name">Last Name</label>
+    <input type="text" id="last_name" name="last_name" required />
+
+    <label for="email">Email Address</label>
+    <input type="email" id="email" name="email" required />
+
+    <label for="phone">Phone Number</label>
+    <input type="tel" id="phone" name="phone" required />
+
+    <label for="location">City / Location</label>
+    <input type="text" id="location" name="location" required />
+
+    <label>Legally entitled to work in Canada?</label>
+    <label><input type="radio" name="canadian_citizenship" value="Canadian Citizen / Citoyen canadien" /> Yes</label>
+    <label><input type="radio" name="canadian_citizenship" value="No / Non" /> No</label>
+
+    <label>Resident of Ontario?</label>
+    <label><input type="radio" name="ontario_resident" value="Yes / Oui" /> Yes</label>
+    <label><input type="radio" name="ontario_resident" value="No / Non" /> No</label>
+
+    <label for="resume">Upload Resume</label>
+    <input type="file" id="resume" name="resume" required />
+
+    <button type="submit" id="ops_submit">Submit Application</button>
+  </form>
+</body>
+</html>

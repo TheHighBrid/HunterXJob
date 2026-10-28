@@ -2,10 +2,11 @@
 
 Tracking issue: [#9](https://github.com/TheHighBrid/HunterXJob/issues/9)  
 Updated: 2026-10-28  
-Current Test Suite: **585 / 585 passing tests** (`v2/tests/`)  
+Current Test Suite: **597 / 597 passing tests** (`v2/tests/`)  
 Certification Status: **CERTIFIED** (Gate 1: 100%, Gate 2: 100%, Gate 3: 100%)  
 Evidence Ledger Digest: `b6daa8fc7c51db644f06528f3f7026c3633664391dcff7bb433ee539c8f4e102`  
 Verified Live Production Submissions: **17** across **5 distinct employers**
+Verified Autonomous Dry-Runs on New Units: **10 / 10 passed (100%)** across Commercial ATS & Canadian Government Portals 🇨🇦
 
 ---
 
@@ -35,6 +36,7 @@ All 14 major engineering phases and verification gates have landed with **585 / 
 | **Phase 12: Mobile Release & Packaging** | **Passed** (`mobile/`, `releases/HunterXJob-v1.0.0.apk`) | Production Android APK release (`com.hunterxjob.app` v1.0.0, SHA-256 verified) with tiered access (Free Hunter: 2 applications/day manual fill vs. HunterX Pro: unlimited autonomous loop). |
 | **Phase 13: Multi-Platform ATS Expansion across Difficulty Tiers** | **Passed** (`v2/app/workable_form.py`, `v2/app/breezy_form.py`, `v2/app/recruitee_form.py`) | Native form extractors, discovery engines, and submission selector mappings across **Low-Difficulty** (Lever, Greenhouse, Workable, Breezy HR, Recruitee), **Medium-Difficulty** (SmartRecruiters, BambooHR, Teamtailor, Rippling, Pinpoint, JazzHR), and **High-Difficulty** (Workday, iCIMS, Oracle Recruiting Cloud) platforms. |
 | **Phase 14: Canadian Public Sector & Government Portals 🇨🇦** | **Passed** (`v2/app/canadian_gov_portals.py`) | Dedicated adapters for **GC Jobs** (Federal), **City of Ottawa Careers** (Municipal), **Ontario Public Service (OPS)** (Provincial), **Ville de Gatineau** (Municipal Outaouais), and **Québec Emploi** (Provincial) with account session storage, PSEA citizenship preference, bilingual English/French SLE profiling, and fail-closed security clearance validation. |
+| **Phase 15: Automated Browser Dry-Run Suite on New Units** | **Passed** (`v2/scripts/run_dryrun_units.py`, `./hunterx dryrun-new-units`, `v2/tests/test_dryrun_new_units.py`) | 100% verified interactive browser dry-runs across all 10 newly added commercial (Workable, Breezy HR, Recruitee, Lever, Greenhouse) and Canadian public sector (GC Jobs, Ottawa Careers, OPS, Gatineau, Québec Emploi) portals. Full DOM input typing, dropdown/radio matching, PDF attachment, read-back verification, and SHA-256 evidence generation with guaranteed safe zero-submit. |
 
 ---
 

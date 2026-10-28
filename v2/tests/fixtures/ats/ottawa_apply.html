@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>City of Ottawa Careers / Ville d'Ottawa Emplois</title>
+</head>
+<body>
+  <h2>Project Manager - Information Technology</h2>
+  <form id="ottawa_careers_form" method="POST">
+    <label for="first_name">First Name / Prénom</label>
+    <input type="text" id="first_name" name="first_name" required />
+
+    <label for="last_name">Last Name / Nom</label>
+    <input type="text" id="last_name" name="last_name" required />
+
+    <label for="email">Email / Courriel</label>
+    <input type="email" id="email" name="email" required />
+
+    <label for="phone">Phone / Téléphone</label>
+    <input type="tel" id="phone" name="phone" required />
+
+    <label for="location">Location / Emplacement</label>
+    <input type="text" id="location" name="location" required />
+
+    <label for="language_proficiency">Language Proficiency / Compétences linguistiques</label>
+    <select id="language_proficiency" name="language_proficiency">
+      <option value="">Select...</option>
+      <option value="Bilingual / Bilingue (English & French / Anglais et Français)">Bilingual / Bilingue (English & French / Anglais et Français)</option>
+    </select>
+
+    <label>Resident of National Capital Region (Ottawa-Gatineau)?</label>
+    <label><input type="radio" name="ottawa_resident" value="Yes / Oui" /> Yes / Oui</label>
+    <label><input type="radio" name="ottawa_resident" value="No / Non" /> No / Non</label>
+
+    <label for="resume">Resume / CV</label>
+    <input type="file" id="resume" name="resume" required />
+
+    <button type="submit" id="ottawa_submit">Soumettre la demande / Submit Application</button>
+  </form>
+</body>
+</html>

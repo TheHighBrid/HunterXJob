@@ -274,6 +274,7 @@ case "$cmd" in
   migrate) py_cli migrate ;;
   cycle) py_cli cycle ;;
   autonomous-run) shift; py_cli autonomous-run "$@" ;;
+  dryrun-new-units) shift; py_cli dryrun-new-units "$@" ;;
   certify) shift; py_cli certify "$@" ;;
   dedup-scan) py_cli dedup-scan ;;
   liveness) py_cli liveness ;;
@@ -289,5 +290,5 @@ case "$cmd" in
   doctor) doctor_app ;;
   test) .venv/bin/pytest -q ;;
   logs) tail -n 100 -f logs/api.log ;;
-  *) echo "Usage: ./hunterx {install|start|serve|stop|restart|status|doctor|test|logs|backup [--keep N]|backups|migrate|cycle|autonomous-run|dedup-scan|liveness|api-key|version|openapi [--check]|profile ...|materials ...|service-install|boot-install}" ;;
+  *) echo "Usage: ./hunterx {install|start|serve|stop|restart|status|doctor|test|logs|backup [--keep N]|backups|migrate|cycle|autonomous-run|dryrun-new-units|certify|dedup-scan|liveness|api-key|version|openapi [--check]|profile ...|materials ...|service-install|boot-install}" ;;
 esac

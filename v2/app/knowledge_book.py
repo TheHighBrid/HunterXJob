@@ -330,10 +330,15 @@ class KnowledgeBook:
             return val, f"catalog:{key}"
 
         # 11. Languages
-        if key == "language_french":
-            val = "Fluent"
+        if key in ("language_french", "language_proficiency", "bilingual"):
+            val = "Bilingual"
             if options:
-                val = self._match_option("Fluent", options) or self._match_option("Yes", options) or val
+                val = (
+                    self._match_option("Bilingual", options)
+                    or self._match_option("Fluent", options)
+                    or self._match_option("Yes", options)
+                    or val
+                )
             return val, f"catalog:{key}"
         if key == "language_english":
             val = "Fluent"

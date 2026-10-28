@@ -229,6 +229,19 @@ def _cmd_certify(args: argparse.Namespace) -> int:
     return 0 if dossier["overall_certification_status"] == "CERTIFIED" else 1
 
 
+def _cmd_dryrun_new_units(args: argparse.Namespace) -> int:
+    import subprocess
+    script = Path(__file__).resolve().parents[1] / "scripts" / "run_dryrun_units.py"
+    cmd = [sys.executable, str(script)]
+    if getattr(args, "headed", False):
+        cmd.append("--headed")
+    if getattr(args, "pause", None):
+        cmd.extend(["--pause", str(args.pause)])
+    if getattr(args, "out", None):
+        cmd.extend(["--out", str(args.out)])
+    return subprocess.run(cmd).returncode
+
+
 COMMANDS = {
     "version": (_cmd_version, "print the version"),
     "migrate": (_cmd_migrate, "apply pending database migrations (backs up first)"),
@@ -243,6 +256,7 @@ COMMANDS = {
     "openapi": (_cmd_openapi, "write (or --check) the OpenAPI snapshot used for the mobile types"),
     "autonomous-run": (_cmd_autonomous_run, "run the fully autonomous discovery-to-submission engine"),
     "certify": (_cmd_certify, "generate and verify the official autonomy certification dossier and evidence ledger"),
+    "dryrun-new-units": (_cmd_dryrun_new_units, "perform automated dry-runs across newly added commercial ATS & Canadian gov units"),
 }
 
 
@@ -261,6 +275,10 @@ def main(argv: list[str] | None = None) -> int:
         if name == "certify":
             command.add_argument("--db", help="path to database (default: v2/data/hunterxjob-v2.db)")
             command.add_argument("--output", help="path to output certification dossier JSON (default: evidence/hunterx-certification-dossier.json)")
+        if name == "dryrun-new-units":
+            command.add_argument("--headed", action="store_true", help="run browser visibly to inspect form filling")
+            command.add_argument("--pause", type=int, default=2, help="pause in seconds between actions in headed mode")
+            command.add_argument("--out", type=Path, help="output directory for screenshots and reports")
         if name == "autonomous-run":
             command.add_argument("--live", action="store_true", help="enable live submission (requires ALLOW_LIVE_SUBMISSION=true)")
             command.add_argument("--limit", type=int, default=10, help="maximum applications to process in this run (default: 10)")

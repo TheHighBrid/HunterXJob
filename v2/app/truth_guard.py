@@ -332,12 +332,25 @@ def audit_form_answers(
     labels = labels or {}
     violations: list[str] = []
 
-    profile_certs = {
-        (f.data.get("name") or "").lower() for f in profile.of("certification")
-    }
-    profile_clearances = {
-        (f.data.get("level") or f.data.get("name") or "").lower() for f in profile.of("clearance")
-    }
+    if hasattr(profile, "of"):
+        profile_certs = {
+            (f.data.get("name") or "").lower() for f in profile.of("certification")
+        }
+        profile_clearances = {
+            (f.data.get("level") or f.data.get("name") or "").lower() for f in profile.of("clearance")
+        }
+    elif isinstance(profile, dict):
+        profile_certs = {
+            (c.get("name") if isinstance(c, dict) else str(c)).lower()
+            for c in profile.get("certifications", [])
+        }
+        profile_clearances = {
+            (c.get("level") or c.get("name") if isinstance(c, dict) else str(c)).lower()
+            for c in profile.get("clearances", [])
+        }
+    else:
+        profile_certs = set()
+        profile_clearances = set()
 
     for key, val in answers.items():
         if val is None:
@@ -378,12 +391,25 @@ def enforce_answer_truthfulness(
     sanitized = dict(answers)
     corrections: list[str] = []
 
-    profile_certs = {
-        (f.data.get("name") or "").lower() for f in profile.of("certification")
-    }
-    profile_clearances = {
-        (f.data.get("level") or f.data.get("name") or "").lower() for f in profile.of("clearance")
-    }
+    if hasattr(profile, "of"):
+        profile_certs = {
+            (f.data.get("name") or "").lower() for f in profile.of("certification")
+        }
+        profile_clearances = {
+            (f.data.get("level") or f.data.get("name") or "").lower() for f in profile.of("clearance")
+        }
+    elif isinstance(profile, dict):
+        profile_certs = {
+            (c.get("name") if isinstance(c, dict) else str(c)).lower()
+            for c in profile.get("certifications", [])
+        }
+        profile_clearances = {
+            (c.get("level") or c.get("name") if isinstance(c, dict) else str(c)).lower()
+            for c in profile.get("clearances", [])
+        }
+    else:
+        profile_certs = set()
+        profile_clearances = set()
 
     for key, val in list(sanitized.items()):
         if val is None:

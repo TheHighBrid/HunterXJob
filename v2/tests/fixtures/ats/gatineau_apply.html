@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Ville de Gatineau - Emplois et Carrières</title>
+</head>
+<body>
+  <h2>Conseiller en technologies de l'information</h2>
+  <form id="gatineau_careers_form" method="POST">
+    <label for="first_name">Prénom</label>
+    <input type="text" id="first_name" name="first_name" required />
+
+    <label for="last_name">Nom de famille</label>
+    <input type="text" id="last_name" name="last_name" required />
+
+    <label for="email">Courriel</label>
+    <input type="email" id="email" name="email" required />
+
+    <label for="phone">Téléphone</label>
+    <input type="tel" id="phone" name="phone" required />
+
+    <label for="location">Ville de résidence</label>
+    <input type="text" id="location" name="location" required />
+
+    <label>Statut légal au Canada</label>
+    <label><input type="radio" name="canadian_citizenship" value="Canadian Citizen / Citoyen canadien" /> Citoyen canadien ou résident permanent</label>
+
+    <label for="language_proficiency">Maîtrise du français</label>
+    <select id="language_proficiency" name="language_proficiency">
+      <option value="">Sélectionner</option>
+      <option value="Bilingual / Bilingue (English & French / Anglais et Français)">Bilingue (Français et Anglais)</option>
+    </select>
+
+    <label>Résident de l'Outaouais / Gatineau?</label>
+    <label><input type="radio" name="outaouais_resident" value="Yes / Oui" /> Oui</label>
+    <label><input type="radio" name="outaouais_resident" value="No / Non" /> Non</label>
+
+    <label for="resume">Curriculum Vitae (CV)</label>
+    <input type="file" id="resume" name="resume" required />
+
+    <button type="submit" id="gatineau_submit">Soumettre ma candidature</button>
+  </form>
+</body>
+</html>

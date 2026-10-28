@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head><title>Greenhouse - Application</title></head>
+<body>
+  <h2>Infrastructure Engineer</h2>
+  <form id="application_form" method="POST">
+    <div class="field">
+      <label for="first_name">First Name</label>
+      <input type="text" id="first_name" name="first_name" required />
+    </div>
+    <div class="field">
+      <label for="last_name">Last Name</label>
+      <input type="text" id="last_name" name="last_name" required />
+    </div>
+    <div class="field">
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" required />
+    </div>
+    <div class="field">
+      <label for="phone">Phone</label>
+      <input type="tel" id="phone" name="phone" required />
+    </div>
+    <div class="field">
+      <label for="job_application_location">Location</label>
+      <input type="text" id="job_application_location" name="location" required />
+    </div>
+    <div class="field">
+      <label for="resume">Resume/CV</label>
+      <input type="file" id="resume" name="resume" required />
+    </div>
+    <div class="field">
+      <label for="work_authorization">Work Authorization in Canada</label>
+      <select name="work_authorization" id="work_authorization">
+        <option value="">--</option>
+        <option value="Yes">Yes</option>
+        <option value="No">No</option>
+      </select>
+    </div>
+    <button type="submit" id="submit_app">Submit Application</button>
+  </form>
+</body>
+</html>
