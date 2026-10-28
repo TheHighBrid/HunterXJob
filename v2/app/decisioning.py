@@ -90,17 +90,82 @@ def _bounded_score(value: float) -> float:
     return round(max(0.0, min(5.0, value)), 2)
 
 
+_OTTAWA_NCR_TERMS = (
+    "ottawa", "gatineau", "national capital region", "kanata", "nepean", "gloucester", "hull", "orleans"
+)
+_REMOTE_TERMS = ("remote", "telework", "work from home", "wfh", "anywhere")
+_HYBRID_ON_SITE_TERMS = ("hybrid", "on-site", "onsite", "in-person", "in office", "office-based", "in office")
+
+_MANDATORY_CPA_PATTERNS = (
+    re.compile(r"\bcpa\s+(?:designation\s+)?(?:is\s+)?required\b", re.I),
+    re.compile(r"\b(?:must|should)\s+(?:hold|have|possess)\s+(?:an?\s+)?(?:active\s+)?cpa\b", re.I),
+    re.compile(r"\bactive\s+cpa\b", re.I),
+    re.compile(r"\bholding\s+(?:a\s+)?cpa\b", re.I),
+    re.compile(r"\bdesignated\s+cpa\b", re.I),
+    re.compile(r"\bcpa\s+(?:or\s+equivalent)\s+required\b", re.I),
+    re.compile(r"\bcpa\s+designation\s+\(or\s+equivalent\)\b", re.I),
+)
+
+
 def _hard_veto(job: JobFacts, context: DecisionContext) -> tuple[DecisionReport | None, bool]:
     """Apply hard vetoes. Returns (veto report or None, whether the location is a named target)."""
     location = job.location or ""
+    norm_location = _normalize(location)
+    norm_title = _normalize(job.title or "")
+    desc_sample = (job.description or "")[:800].lower()
+
     if _contains_any(job.company or "", context.blacklisted_companies):
         return DecisionReport(Decision.REJECT, "blacklisted company", 0.0, vetoes=("blacklisted_company",)), False
     if _contains_any(job.title or "", context.excluded_titles):
         return DecisionReport(Decision.REJECT, "excluded title", 0.0, vetoes=("excluded_title",)), False
 
+    # 1. Truth Guard Veto: Mandatory qualifications not held in profile (e.g. CPA required)
+    desc_full = (job.description or "").lower()
+    if any(p.search(desc_full) for p in _MANDATORY_CPA_PATTERNS) or (
+        "cpa" in norm_title and any(w in norm_title for w in ("manager", "accountant", "controller", "internal controls", "audit"))
+    ):
+        return DecisionReport(
+            Decision.REJECT,
+            "mandatory CPA designation required but not verified in candidate profile",
+            0.0,
+            vetoes=("unverified_mandatory_credential",),
+        ), False
+
+    # 2. Location & Workplace Type Analysis
+    is_remote = job.remote or any(term in norm_location or term in norm_title for term in _REMOTE_TERMS) or "100% remote" in desc_sample
+    is_ottawa_ncr = any(term in norm_location for term in _OTTAWA_NCR_TERMS)
+    is_explicit_hybrid_or_onsite = any(term in norm_location or term in norm_title or term in desc_sample for term in _HYBRID_ON_SITE_TERMS)
+
+    # Check if a non-Ottawa location was explicitly targeted as a specific city (e.g. "Montréal")
+    explicit_city_target = any(
+        _normalize(target) in norm_location
+        for target in context.target_locations
+        if _normalize(target) not in ("canada", "remote canada", "remote", "anywhere")
+    )
+
+    # Candidate rule: In-person or hybrid work is allowed ONLY in Ottawa–Gatineau (or explicitly targeted city).
+    # All other locations must be 100% remote.
+    if (not is_remote or is_explicit_hybrid_or_onsite) and not is_ottawa_ncr and not explicit_city_target and location:
+        return DecisionReport(
+            Decision.REJECT,
+            f"non-remote or hybrid position outside Ottawa-Gatineau: {location}",
+            0.0,
+            vetoes=("non_remote_outside_ottawa",),
+        ), False
+
+    # 3. International physical roles (UK, US, etc.) are vetoed unless remote Canada is verified
+    intl_terms = ("united kingdom", "london", "uk", "great britain", "england", "united states", "usa", "san francisco", "new york", "california")
+    if any(term in norm_location for term in intl_terms) and (not is_remote or is_explicit_hybrid_or_onsite):
+        return DecisionReport(
+            Decision.REJECT,
+            f"international physical/hybrid position: {location}",
+            0.0,
+            vetoes=("international_non_remote",),
+        ), False
+
     excluded_location = _contains_any(location, context.excluded_locations)
     target_location = _contains_any(location, context.target_locations)
-    remote_targeted = job.remote and any(
+    remote_targeted = is_remote and any(
         "remote" in _normalize(item) for item in context.target_locations if _normalize(item)
     )
     if excluded_location and not target_location:

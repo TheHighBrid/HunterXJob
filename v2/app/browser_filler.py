@@ -282,16 +282,20 @@ async def _read_back_value(locator: Any, tag: str, control_type: str) -> Any:
         custom_val = await locator.evaluate(
             """(el) => {
               const root = el.closest(
-                '[data-field],.field-wrapper,.select__container,.select-container,' +
+                '[data-field-path],[data-field],.field-wrapper,.select__container,.select-container,' +
                 '[class*="select__control"],[class*="select-container"],' +
                 '[class*="field-wrapper"],[class*="application-field"]'
               ) || el.parentElement;
               if (!root) return '';
-              const singleVal = root.querySelector('[class*="single-value"],[aria-selected="true"],.selected-option');
+              const singleVal = root.querySelector('[class*="single-value"],[aria-selected="true"],.selected-option,[class*="autocomplete-value"],[class*="value"],[class*="chip"]');
               if (singleVal && singleVal.innerText) return singleVal.innerText.trim();
               const hidden = root.querySelector('input[type="hidden"]');
               if (hidden && hidden.value) return hidden.value.trim();
-              return '';
+              const textNodes = Array.from(root.childNodes)
+                .filter(n => n.nodeType === 3 && n.textContent.trim().length > 0)
+                .map(n => n.textContent.trim());
+              if (textNodes.length) return textNodes.join(' ');
+              return root.innerText ? root.innerText.trim() : '';
             }"""
         )
         return custom_val or val
@@ -437,27 +441,49 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
                     "el => el.getAttribute('role') === 'combobox' || (el.className && el.className.includes('autocomplete')) || !!el.closest('[data-field-path*=\"location\"]')"
                 )
                 if is_combobox:
-                    await asyncio.sleep(0.5)
+                    await asyncio.sleep(0.6)
                     # Check for visible autocomplete suggestion items
-                    opt_loc = page.locator('[role="option"]:visible, .ashby-application-form-autocomplete-option:visible, [role="listbox"] div:visible')
+                    opt_loc = page.locator('[role="option"]:visible, .ashby-application-form-autocomplete-option:visible, [role="listbox"] div:visible, [class*="autocomplete-option"]:visible')
                     opt_count = await opt_loc.count()
                     if opt_count > 0:
+                        is_loc = any(t in key.lower() or t in label.lower() for t in ("location", "city", "address", "reside"))
                         best_match = None
+                        best_score = -999.0
                         str_low = val_str.lower()
+
                         for o_idx in range(opt_count):
                             item = opt_loc.nth(o_idx)
-                            text = (await item.inner_text()).lower()
-                            if "ottawa" in text or "ontario" in text or "canada" in text or str_low in text:
+                            text = (await item.inner_text()).lower().strip()
+                            if is_loc:
+                                # Strict country-aware scoring: reject US matches for Canadian candidate
+                                score = 0.0
+                                if any(us in text for us in ("california", "united states", "usa", ", ca", " ca,", " ca ", "us ", ", us", "texas", "new york")):
+                                    score -= 1000.0
+                                if "ottawa" in text:
+                                    score += 500.0
+                                if "ontario" in text or " on," in text or ", on" in text:
+                                    score += 250.0
+                                if "canada" in text:
+                                    score += 300.0
+                                if str_low in text:
+                                    score += 100.0
+                            else:
+                                score = 10.0 if str_low in text else 0.0
+
+                            if score > best_score:
+                                best_score = score
                                 best_match = item
-                                break
-                        if not best_match:
-                            best_match = opt_loc.first
-                        await best_match.click()
+
+                        # Only click if we found a positive matching option (or non-location fallback)
+                        if best_match and (best_score > 0 or not is_loc):
+                            await best_match.click()
+                        elif not is_loc:
+                            await opt_loc.first.click()
                     else:
                         await page.keyboard.press("ArrowDown")
                         await asyncio.sleep(0.2)
                         await page.keyboard.press("Enter")
-                    await asyncio.sleep(0.2)
+                    await asyncio.sleep(0.3)
                     try:
                         await locator.press("Escape")
                     except Exception:
@@ -468,6 +494,8 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
         # Read back for verification
         read_back = await _read_back_value(locator, tag, control_type)
         matched = False
+        is_location_field = any(t in key.lower() or t in label.lower() for t in ("location", "city", "address", "reside"))
+
         if control_type == "checkbox":
             expected_bool = boolean_value(value) if boolean_value(value) is not None else (
                 value is not False and str(value).strip().lower() not in ("no", "false", "0", "")
@@ -485,6 +513,17 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
                 or score_option(str(value), OptionRecord(key="", label=str(read_back), value=str(read_back))) >= 70
                 or str(value).strip().lower() in str(read_back).strip().lower()
             )
+        elif is_location_field:
+            norm_val = normalize_text(val_str)
+            norm_rb = normalize_text(read_back)
+            # Location read-back matching: Ottawa, Ontario, Canada aliases
+            if "ottawa" in norm_rb or ("canada" in norm_rb and "ontario" in norm_rb):
+                matched = True
+            elif norm_val in norm_rb or norm_rb in norm_val:
+                matched = True
+            elif str(read_back).strip() and not any(us in norm_rb for us in ("california", "united states", "usa")):
+                # Any non-empty Canadian location read-back
+                matched = True
         else:
             # Check for substring, exact match, or normalized match
             norm_val = normalize_text(value).rstrip(". ")
@@ -565,6 +604,11 @@ async def fill_application_form(
                 "--disable-blink-features=AutomationControlled",
                 "--disable-infobars",
                 "--no-first-run",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--js-flags=--max-old-space-size=512",
+                "--renderer-process-limit=2",
+                "--no-sandbox",
             ],
             "ignore_default_args": ["--enable-automation"],
         }

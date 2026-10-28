@@ -334,6 +334,38 @@ class KnowledgeBook:
                 val = self._match_option("Prefer not to answer", options) or self._match_option("Decline to self-identify", options) or val
             return val, f"catalog:{key}"
 
+        # 13. Security Clearance (fail-closed truth guard)
+        if key == "security_clearance":
+            clearance_facts = [
+                (f.data.get("level") or f.data.get("name") or "").lower()
+                for f in self.profile.of("clearance")
+            ]
+            if clearance_facts:
+                val = clearance_facts[0]
+                if options:
+                    val = self._match_option(val, options) or val
+                return val, f"catalog:{key}"
+            else:
+                val = "No"
+                if options:
+                    for neg in ("I do not have security clearance", "None", "No clearance", "Not cleared", "No"):
+                        m = self._match_option(neg, options)
+                        if m:
+                            val = m
+                            break
+                return val, f"catalog:{key}:truth_guard_negative"
+
+        # 14. Certifications / Professional designations (CPA, CFA, PMP, etc.)
+        if key in ("certifications", "professional_license", "cpa_designation"):
+            profile_certs = {
+                (f.data.get("name") or "").lower() for f in self.profile.of("certification")
+            }
+            has_cpa = any("cpa" in c for c in profile_certs)
+            val = "Yes" if has_cpa else "No"
+            if options:
+                val = self._match_option(val, options) or val
+            return val, f"catalog:{key}"
+
         return None
 
     def resolve_screening_question(self, label: str, options: list[str] | None = None) -> tuple[Any, str]:
@@ -377,7 +409,56 @@ class KnowledgeBook:
                         return matched, f"screening_pattern:{rule_name}"
                 return default_val, f"screening_pattern:{rule_name}"
 
-        # 3b. Work authorization checks
+        # 3a. Professional designation & certification checks (Truth Guard: fail-closed)
+        cert_match = re.search(r"\b(cpa|cfa|pmp|p\.?eng|bar\s+admission|cma|cga|cfe|cams|series\s+7)\b", text, re.I)
+        if cert_match or re.search(r"(?:do\s+you\s+hold|possess|have)\s+(?:an?\s+)?(?:active\s+)?(?:professional\s+)?(?:designation|license|certification)", text, re.I):
+            matched_code = cert_match.group(1).lower() if cert_match else ""
+            profile_certs = {
+                (f.data.get("name") or "").lower() for f in self.profile.of("certification")
+            }
+            has_cert = False
+            if matched_code:
+                has_cert = any(matched_code in c or c in matched_code for c in profile_certs)
+
+            val = "Yes" if has_cert else "No"
+            if options:
+                val = self._match_option(val, options) or ("No" if not has_cert else val)
+            return val, f"profile_truth_guard:certification_{matched_code or 'general'}"
+
+        # 3b. Security clearance checks (Truth Guard: fail-closed)
+        if re.search(r"security\s+clearance|clearance\s+level|hold\s+(?:an?\s+)?(?:active\s+)?clearance", text, re.I):
+            clearance_facts = [
+                (f.data.get("level") or f.data.get("name") or "").lower()
+                for f in self.profile.of("clearance")
+            ]
+            if clearance_facts:
+                val = clearance_facts[0]
+                if options:
+                    val = self._match_option(val, options) or val
+                return val, "profile_security_clearance"
+            else:
+                val = "No"
+                if options:
+                    for neg in (
+                        "I do not have security clearance",
+                        "I do not hold a security clearance",
+                        "None",
+                        "No clearance",
+                        "Not cleared",
+                        "No",
+                    ):
+                        matched_neg = self._match_option(neg, options)
+                        if matched_neg:
+                            val = matched_neg
+                            break
+                    if val == "No" and options:
+                        for opt in options:
+                            if any(w in opt.lower() for w in ("do not have", "none", "not cleared", "no")):
+                                val = opt
+                                break
+                return val, "profile_truth_guard:no_security_clearance"
+
+        # 3c. Work authorization checks
         if re.search(r"legally\s+(?:authorized|eligible)\s+to\s+work|work\s+authorization", text, re.I):
             country = "CA" if "canada" in text.lower() else "US" if ("us" in text.lower() or "united states" in text.lower()) else "CA"
             auth_facts = [f.data for f in self.profile.of("work_authorization") if f.data.get("country", "").upper() == country]
@@ -387,7 +468,7 @@ class KnowledgeBook:
                     val = self._match_option(val, options) or val
                 return val, "profile_work_authorization"
 
-        # 3c. Role & Domain Experience checks
+        # 3d. Role & Domain Experience checks
         if re.search(r"(?:do\s+you\s+have\s+(?:at\s+least\s+)?\d*\s*years?|experience\s+in|background\s+in|worked\s+in)", text, re.I):
             text_lower = text.lower()
             if any(t in text_lower for t in ("operations", "compliance", "fraud", "risk", "kyc", "kyb", "financial services", "fintech", "banking", "credit", "collections", "customer")):
@@ -401,7 +482,7 @@ class KnowledgeBook:
                     else:
                         return val, "profile_financial_experience"
 
-        # 3d. Language proficiency checks (French / English)
+        # 3e. Language proficiency checks (French / English)
         if re.search(r"french|français", text, re.I):
             lang_facts = [f.data for f in self.profile.of("language") if "french" in f.data.get("name", "").lower()]
             if lang_facts:
@@ -437,9 +518,17 @@ class KnowledgeBook:
         if re.search(r"start\s+date|earliest\s+date|notice\s+period|availability", text, re.I):
             avail = self.preferences.get("notice_period", "2 weeks")
             return avail, "preference_start_date"
-            return avail, "preference_start_date"
 
         # 7. Experience descriptions & narrative questions
+        # Client-facing / customer-facing experience (check before general experience)
+        if re.search(r"(?:client|customer)[\s-]facing|facing\s+(?:clients?|customers?)|stakeholder\s+engagement|client\s+experience|customer\s+interactions?|working\s+with\s+clients|experience\s+with\s+ai\s+or\s+agentic", text, re.I):
+            summary = (
+                "Extensive experience in high-touch client-facing roles handling complex escalations, customer dispute resolution, and risk consultations. "
+                "Proven track record across Scotiabank, BMO, RBC, and TD Canada Trust communicating effectively with enterprise and retail clients, "
+                "while leveraging workflow automation and agentic systems to streamline investigations and deliver exceptional outcomes."
+            )
+            return summary, "profile_client_facing_narrative"
+
         if re.search(r"describe\s+your\s+experience.*(?:fintech|financial|banking|operations|risk|fraud|work)", text, re.I):
             summary = (
                 "Over 5+ years of financial operations and banking experience across Tier-1 Canadian financial institutions "
@@ -456,13 +545,6 @@ class KnowledgeBook:
                 "and bilingual client operations, I look forward to contributing directly to high-standard customer trust and platform growth."
             )
             return summary, "profile_interest_narrative"
-
-        if re.search(r"experience\s+in\s+client-facing\s+roles|experience\s+with\s+ai\s+or\s+agentic", text, re.I):
-            summary = (
-                "Proven track record in high-touch client-facing roles handling complex escalations, customer dispute resolution, and risk consultations. "
-                "Experienced in deploying automated AI workflows, workflow automation tools, and agentic systems to streamline investigations and operational pipelines."
-            )
-            return summary, "profile_agentic_narrative"
 
         return None, "unresolved"
 
@@ -481,16 +563,26 @@ class KnowledgeBook:
         if not text:
             return None, "empty_label"
 
+        # Detect if question asks about credentials, certifications, licenses, or security clearances
+        is_cred_question = bool(re.search(
+            r"\b(cpa|cfa|pmp|p\.?eng|bar|license|certified|certification|clearance|security\s+clearance|designation|degree|phd)\b",
+            text,
+            re.I,
+        ))
+
         # 1. Multiple-choice / Select / Radio with options
         if options:
             numbered = "\n".join(f"{i}: {opt}" for i, opt in enumerate(options))
             prompt = (
-                "You are assisting a senior financial operations, fraud investigations, compliance, and risk leader "
+                "You are assisting a senior financial operations, fraud investigations, compliance, and risk professional "
                 "(5+ years at Scotiabank, BMO, RBC, TD Canada Trust; based in Ottawa, Ontario, Canada; bilingual English/French) "
-                "completing a job application.\n\n"
+                "completing a job application.\n"
+                "TRUTH GUARD MANDATE: Candidate holds CompTIA A+, ITIL 4, Azure AZ-900, MS-900, Google AI certifications. "
+                "Candidate does NOT hold a CPA, CFA, Bar admission, or Government Security Clearance. "
+                "NEVER select Yes or claim qualifications or clearances not verified in the profile. Unverified credentials must be answered No / negative.\n\n"
                 f"Question: {text}\n\n"
                 f"Options:\n{numbered}\n\n"
-                "Select the single strongest, most collaborative, risk-sound professional option. "
+                "Select the most truthful, professional option matching the candidate's verified background. "
                 "Reply with ONLY the option number (e.g. 0, 1, 2, or 3)."
             )
             try:
@@ -512,16 +604,27 @@ class KnowledgeBook:
                     if m:
                         idx = int(m.group(1))
                         if 0 <= idx < len(options):
-                            return options[idx], "ollama_option_choice"
+                            chosen = options[idx]
+                            # If LLM hallucinates Yes to a credential question, Truth Guard overrides it
+                            if is_cred_question and chosen.lower() in ("yes", "true", "1", "top secret", "secret"):
+                                pass  # Fall through to deterministic negative
+                            else:
+                                return chosen, "ollama_option_choice"
             except Exception as exc:
                 logger.debug("Ollama option resolution fallback (%s)", exc)
 
             # Heuristic option scoring fallback using 4-tier primitives
             records = [OptionRecord(key=str(i), label=opt, value=opt) for i, opt in enumerate(options)]
-            scored_candidates = [
-                "Yes", "Authorized to work in Canada", "Reliability Status",
-                "Full-time", "LinkedIn", "Prefer not to answer", "Decline to self-identify",
-            ]
+            if is_cred_question:
+                scored_candidates = [
+                    "No", "None", "I do not have security clearance", "I do not hold a security clearance",
+                    "No clearance", "Not cleared", "Prefer not to answer", "Decline to self-identify",
+                ]
+            else:
+                scored_candidates = [
+                    "Authorized to work in Canada", "Reliability Status",
+                    "Full-time", "LinkedIn", "Prefer not to answer", "Decline to self-identify",
+                ]
             for cand in scored_candidates:
                 m_res = match_answers_to_options([cand], records, allow_multiple=False)
                 if m_res.matched:
@@ -530,7 +633,7 @@ class KnowledgeBook:
             pos_words = (
                 "review", "collaborate", "escalate", "consolidate", "huddle", "protocol",
                 "root cause", "quantify", "stakeholder", "verification", "systemic",
-                "yes", "authorized", "eligible", "fluent", "native", "consent",
+                "authorized", "eligible", "fluent", "native", "consent",
             )
             neg_words = (
                 "immediately unfreeze", "refuse", "best judgment on a case-by-case",
@@ -542,6 +645,10 @@ class KnowledgeBook:
             for opt in options:
                 ol = opt.lower()
                 score = sum(2 for w in pos_words if w in ol) - sum(3 for w in neg_words if w in ol)
+                if is_cred_question and ol in ("yes", "true", "1"):
+                    score -= 50
+                elif is_cred_question and ol in ("no", "false", "0", "none"):
+                    score += 20
                 if score > best_score:
                     best_score = score
                     best_opt = opt
@@ -656,7 +763,11 @@ class KnowledgeBook:
             "_systemfield_last_name": answers.get("last_name"),
             "_systemfield_email": answers.get("email"),
             "_systemfield_phone": answers.get("phone"),
-            "_systemfield_location": answers.get("location") or answers.get("city"),
+            "_systemfield_location": (
+                "Ottawa, Ontario, Canada"
+                if "ottawa" in str(answers.get("location", "")).lower()
+                else (answers.get("location") or answers.get("city") or "Ottawa, Ontario, Canada")
+            ),
             "_systemfield_linkedin": answers.get("linkedin_url"),
             "_systemfield_github": answers.get("github_url"),
             "_systemfield_website": answers.get("portfolio_url"),

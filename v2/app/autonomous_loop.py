@@ -302,6 +302,15 @@ class AutonomousRunner:
             and "hidden" not in str(getattr(ctrl, "control_type", "")).lower()
         ]
 
+        # 3b. Pre-Submission Truth Guard: strictly enforce candidate verified facts
+        from app.truth_guard import audit_form_answers, enforce_answer_truthfulness
+        violations = audit_form_answers(answers, book.profile, labels=labels)
+        if violations:
+            logger.warning("Truth Guard detected unverified claims for %s: %s", job.title, violations)
+            answers, corrections = enforce_answer_truthfulness(answers, book.profile, labels=labels)
+            for corr in corrections:
+                logger.info("Truth Guard enforced correction: %s", corr)
+
         # 4. Execute Browser Form Fill & Optional Live Submission (Single Browser Session)
         sc_path = job_dir / "pre_submit.png"
         post_sc_path = job_dir / "post_submit.png"

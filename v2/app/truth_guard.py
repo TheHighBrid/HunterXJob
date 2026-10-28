@@ -305,3 +305,112 @@ def check_cover_letter(doc: dict, profile: VerifiedProfile, *, job_description: 
     for line in [doc.get("greeting", ""), *doc.get("signature", [])[:1]]:
         violations.extend(check_text(_strip_target(line, title, company), corpus))
     return sorted(set(violations))
+
+
+# ----------------------------------------------------------- form answers guard
+
+# Credentials that must never be affirmatively claimed unless verified in profile facts.
+UNVERIFIED_CREDENTIAL_PATTERNS = {
+    "cpa": re.compile(r"\b(?:cpa|chartered\s+professional\s+accountant|certified\s+public\s+accountant)\b", re.I),
+    "cfa": re.compile(r"\b(?:cfa|chartered\s+financial\s+analyst)\b", re.I),
+    "pmp": re.compile(r"\b(?:pmp|project\s+management\s+professional)\b", re.I),
+    "p_eng": re.compile(r"\b(?:p\.?eng|professional\s+engineer)\b", re.I),
+    "bar": re.compile(r"\b(?:bar\s+admission|licensed\s+lawyer|licensed\s+attorney)\b", re.I),
+    "security_clearance": re.compile(r"\b(?:security\s+clearance|top\s+secret|secret\s+clearance)\b", re.I),
+}
+
+
+def audit_form_answers(
+    answers: dict[str, Any],
+    profile: VerifiedProfile,
+    labels: dict[str, str] | None = None,
+) -> list[str]:
+    """Verify that form answers do not claim credentials absent from profile facts.
+
+    Fail-closed: An unknown fact or credential must never become affirmative.
+    """
+    labels = labels or {}
+    violations: list[str] = []
+
+    profile_certs = {
+        (f.data.get("name") or "").lower() for f in profile.of("certification")
+    }
+    profile_clearances = {
+        (f.data.get("level") or f.data.get("name") or "").lower() for f in profile.of("clearance")
+    }
+
+    for key, val in answers.items():
+        if val is None:
+            continue
+        val_str = str(val).strip().lower()
+        is_affirmative = val_str in ("yes", "true", "1", "i do", "currently hold") or any(
+            aff in val_str for aff in ("top secret", "secret clearance", "cpa", "cfa", "p.eng", "pmp")
+        )
+        if not is_affirmative:
+            continue
+
+        label_text = labels.get(key, key)
+        full_context = f"{key} {label_text}"
+
+        for cred_name, pattern in UNVERIFIED_CREDENTIAL_PATTERNS.items():
+            if pattern.search(full_context):
+                if cred_name == "security_clearance":
+                    has_verified = bool(profile_clearances)
+                else:
+                    has_verified = any(cred_name in c or c in cred_name for c in profile_certs)
+
+                if not has_verified:
+                    violations.append(
+                        f"Truth Guard violation: Answer for {key!r} ({label_text!r}) claims {cred_name.upper()} "
+                        f"but no verified {cred_name.upper()} fact exists in profile"
+                    )
+
+    return violations
+
+
+def enforce_answer_truthfulness(
+    answers: dict[str, Any],
+    profile: VerifiedProfile,
+    labels: dict[str, str] | None = None,
+) -> tuple[dict[str, Any], list[str]]:
+    """Enforce truthfulness on answers: override false claims to fail-closed negatives."""
+    labels = labels or {}
+    sanitized = dict(answers)
+    corrections: list[str] = []
+
+    profile_certs = {
+        (f.data.get("name") or "").lower() for f in profile.of("certification")
+    }
+    profile_clearances = {
+        (f.data.get("level") or f.data.get("name") or "").lower() for f in profile.of("clearance")
+    }
+
+    for key, val in list(sanitized.items()):
+        if val is None:
+            continue
+        val_str = str(val).strip().lower()
+        is_affirmative = val_str in ("yes", "true", "1", "i do", "currently hold") or any(
+            aff in val_str for aff in ("top secret", "secret clearance", "cpa", "cfa", "p.eng", "pmp")
+        )
+        if not is_affirmative:
+            continue
+
+        label_text = labels.get(key, key)
+        full_context = f"{key} {label_text}"
+
+        for cred_name, pattern in UNVERIFIED_CREDENTIAL_PATTERNS.items():
+            if pattern.search(full_context):
+                if cred_name == "security_clearance":
+                    has_verified = bool(profile_clearances)
+                    safe_fallback = "I do not have security clearance"
+                else:
+                    has_verified = any(cred_name in c or c in cred_name for c in profile_certs)
+                    safe_fallback = "No"
+
+                if not has_verified:
+                    sanitized[key] = safe_fallback
+                    corrections.append(
+                        f"Overrode unverified {cred_name.upper()} claim on {key!r} to {safe_fallback!r}"
+                    )
+
+    return sanitized, corrections
