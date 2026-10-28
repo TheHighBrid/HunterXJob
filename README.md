@@ -18,12 +18,26 @@ It discovers live job postings, evaluates match scores against your verified pro
 * **Smart CAPTCHA Bridge & Post-Submit Challenge Hold**: Detects Google reCAPTCHA (v2/v3/Enterprise), hCaptcha, and Cloudflare Turnstile. Automatically ignores passive invisible reCAPTCHA v3 badges so forms submit cleanly, supports automated token injection, and—when an interactive post-submit CAPTCHA puzzle (`bframe` / hCaptcha) appears—automatically holds the headed browser window open for up to 180 seconds for completion before capturing confirmation proof. Includes automatic backoff and retry for transient ATS anti-spam flags.
 * **Cross-ATS Deduplication & Submit Guard**: Detects cross-posted or duplicate roles across Greenhouse, Lever, Ashby, SmartRecruiters, and Workday, permanently blocking duplicate submissions.
 * **Cryptographic Evidence & Post-Submission Tracking**: Captures confirmation receipt banners, digit-validated candidate reference IDs, pre/post-submit SHA-256 screenshot and DOM hashes, and schedules automated 7-day and 14-day check-in reminders.
-* **Multi-Platform ATS Support**:
-  - **Ashby** (`jobs.ashbyhq.com`) — *17 verified live autonomous submissions in production*
-  - **Greenhouse** (`boards.greenhouse.io`, `job-boards.greenhouse.io`) — *live submit ready & fixture verified*
-  - **Lever** (`jobs.lever.co`) — *live submit ready & fixture verified*
-  - **SmartRecruiters** (`jobs.smartrecruiters.com`, `careers.smartrecruiters.com`) — *live submit ready & fixture verified*
-  - **Workday** (`*.myworkdayjobs.com`) — *live submit ready & fixture verified*
+* **Multi-Platform ATS Support (Tiered Architecture)**:
+  - **Production Certified (Live Submissions Verified)**:
+    - **Ashby** (`jobs.ashbyhq.com`) — *17 verified live autonomous submissions in production*
+  - **Tier 1: Low-Difficulty Single-Page Platforms (Form Extracted & Live Submit Ready)**:
+    - **Lever** (`jobs.lever.co`) — *live submit ready, fixture verified, single-page form*
+    - **Greenhouse** (`boards.greenhouse.io`, `job-boards.greenhouse.io`) — *live submit ready, boards API & browser verified*
+    - **Workable** (`apply.workable.com`) — *native API v3 form extraction, file upload & combobox fill*
+    - **Breezy HR** (`*.breezy.hr`) — *native JSON form extraction & questionnaire fill*
+    - **Recruitee** (`*.recruitee.com`) — *native offers API form extraction & open-ended question fill*
+  - **Tier 2: Medium-Difficulty Reactive & Portal Platforms (Dry-Run & Browser Fill Ready)**:
+    - **SmartRecruiters** (`jobs.smartrecruiters.com`, `careers.smartrecruiters.com`) — *live submit ready & fixture verified*
+    - **BambooHR** (`*.bamboohr.com`) — *real-form extraction and single-page fill*
+    - **Teamtailor** (`*.teamtailor.com`) — *reactive SPA form fill & attachment handling*
+    - **Rippling** (`rippling.com`) — *unified candidate application form fill*
+    - **Pinpoint** (`*.pinpointhq.com`) — *custom question sets & single-page fill*
+    - **JazzHR** (`*.applytojob.com`) — *classic single-page form fill*
+  - **Tier 3: High-Difficulty Enterprise & Multi-Step Portals**:
+    - **Workday** (`*.myworkdayjobs.com`) — *multi-step wizard state persistence & data-automation-id mapping*
+    - **iCIMS** (`*.icims.com`) — *portal detection & iframe candidate profile handling*
+    - **Oracle Recruiting Cloud (ORC)** (`*.oraclecloud.com`, Taleo) — *enterprise candidate flow & session token management*
 
 ---
 
@@ -45,7 +59,7 @@ HunterXJob is officially available as an Android APK release, with web dashboard
 
 ## Current State & Achievements (October 2026)
 
-* **Verification Matrix**: Full autonomous pipeline verified across **569 passing automated tests** (`v2/tests/`).
+* **Verification Matrix**: Full autonomous pipeline verified across **578 passing automated tests** (`v2/tests/`).
 * **Live Production Submissions Verified**: Executed **17 end-to-end live autonomous submissions** against real employer boards in production (**Cohere**, **Wealthsimple**, **Float**, **1Password**, **Jobber** on Ashby), capturing live confirmation banners, SHA-256 post-submit full-page screenshot proofs, and automated Day 7 / Day 14 follow-up schedules in the SQLite ledger.
 * **Truth Guard Hardening**: Enforces fail-closed validation on sensitive certifications (CPA, CFA, Bar, Security Clearance) preventing affirmative answers without verified profile evidence.
 * **Country-Aware Location Intelligence**: Eliminates US mismatches (e.g. Ontario, CA) and resolves Ashby `_systemfield_location` dropdowns with container badge read-backs.

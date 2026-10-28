@@ -2,7 +2,7 @@
 
 Tracking issue: [#9](https://github.com/TheHighBrid/HunterXJob/issues/9)  
 Updated: 2026-10-28  
-Current Test Suite: **569 / 569 passing tests** (`v2/tests/`)  
+Current Test Suite: **578 / 578 passing tests** (`v2/tests/`)  
 Certification Status: **CERTIFIED** (Gate 1: 100%, Gate 2: 100%, Gate 3: 100%)  
 Evidence Ledger Digest: `b6daa8fc7c51db644f06528f3f7026c3633664391dcff7bb433ee539c8f4e102`  
 Verified Live Production Submissions: **17** across **5 distinct employers**
@@ -14,7 +14,7 @@ Verified Live Production Submissions: **17** across **5 distinct employers**
 Scope is governed by [RECOVERY_CONTRACT.md](RECOVERY_CONTRACT.md) and expanded by the Autonomous Roadmap Blueprint.
 The execution host is standard Linux and macOS at $0: developer workstation (Apple Silicon M1 / Linux) plus GitHub-hosted Ubuntu runners (the `gate1` job is pinned to `ubuntu-24.04`).
 
-All 12 major engineering phases and verification gates have landed with **569 / 569 passing tests** and verified live production submissions.
+All 13 major engineering phases and verification gates have landed with **578 / 578 passing tests** and verified live production submissions.
 
 | Gate / Milestone | Status | What it proves |
 |---|---|---|
@@ -33,6 +33,7 @@ All 12 major engineering phases and verification gates have landed with **569 / 
 | **Phase 10: Commute Boundaries & Pre-Launch Filtering** | **Passed** (`v2/app/decisioning.py`) | Commute boundary enforcement: allows hybrid/in-person work exclusively in Ottawa–Gatineau National Capital Region, enforcing remote-only elsewhere. Pre-filters roles with mandatory qualifications absent from verified candidate profile before browser launch. |
 | **Phase 11: Master Answer Policy v3.0 & Answer Vault Compiler** | **Passed** (`v2/app/answer_policy_compiler.py`, `v2/app/vault_store.py`) | Ported JobTomatik Master Answer Policy v3.0: compiles 143 question families, multilingual English/French regexes, decision contracts, and targeting rules. Seeds 63 verified production answer policies in SQLite with full `./hunterx vault` CLI management (`seed`, `list`, `get`, `set`). |
 | **Phase 12: Mobile Release & Packaging** | **Passed** (`mobile/`, `releases/HunterXJob-v1.0.0.apk`) | Production Android APK release (`com.hunterxjob.app` v1.0.0, SHA-256 verified) with tiered access (Free Hunter: 2 applications/day manual fill vs. HunterX Pro: unlimited autonomous loop). |
+| **Phase 13: Multi-Platform ATS Expansion across Difficulty Tiers** | **Passed** (`v2/app/workable_form.py`, `v2/app/breezy_form.py`, `v2/app/recruitee_form.py`) | Native form extractors, discovery engines, and submission selector mappings across **Low-Difficulty** (Lever, Greenhouse, Workable, Breezy HR, Recruitee), **Medium-Difficulty** (SmartRecruiters, BambooHR, Teamtailor, Rippling, Pinpoint, JazzHR), and **High-Difficulty** (Workday, iCIMS, Oracle Recruiting Cloud) platforms. |
 
 ---
 
