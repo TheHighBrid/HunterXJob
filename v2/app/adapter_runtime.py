@@ -31,14 +31,30 @@ def detect_platform(url: str) -> str:
         return "lever"
     if host == "ashbyhq.com" or host.endswith(".ashbyhq.com"):
         return "ashby"
+    if "workable.com" in host:
+        return "workable"
+    if "breezy.hr" in host:
+        return "breezy"
+    if "recruitee.com" in host:
+        return "recruitee"
     if "smartrecruiters.com" in host:
         return "smartrecruiters"
+    if "bamboohr.com" in host:
+        return "bamboohr"
+    if "teamtailor.com" in host:
+        return "teamtailor"
+    if "rippling.com" in host:
+        return "rippling"
+    if "pinpointhq.com" in host:
+        return "pinpoint"
+    if "applytojob.com" in host or "jazz.co" in host or "jazzhr.com" in host:
+        return "jazzhr"
     if "myworkdayjobs.com" in host or "workday" in host:
         return "workday"
     if "icims.com" in host:
         return "icims"
-    if "taleo.net" in host:
-        return "taleo"
+    if "oraclecloud.com" in host or "taleo.net" in host or "oracle" in host:
+        return "oracle"
     if "mailto:" in url or url.startswith("mailto:"):
         return "email"
     return "generic"
@@ -49,7 +65,24 @@ def platform_for_job(job: Any) -> str:
     if getattr(job, "platform", None):
         return str(job.platform)
     source = (getattr(job, "source", "") or "").lower()
-    if source in {"greenhouse", "lever", "ashby"}:
+    if source in {
+        "greenhouse",
+        "lever",
+        "ashby",
+        "workable",
+        "breezy",
+        "recruitee",
+        "smartrecruiters",
+        "bamboohr",
+        "teamtailor",
+        "rippling",
+        "pinpoint",
+        "jazzhr",
+        "workday",
+        "icims",
+        "oracle",
+        "taleo",
+    }:
         return source
     return detect_platform(getattr(job, "url", "") or "")
 
@@ -151,6 +184,50 @@ class WorkdayAdapter(SnapshotAdapter):
     maturity = AdapterMaturity.human_reviewed_submit
 
 
+class WorkableAdapter(SnapshotAdapter):
+    name = "workable"
+    maturity = AdapterMaturity.human_reviewed_submit
+
+
+class BreezyAdapter(SnapshotAdapter):
+    name = "breezy"
+    maturity = AdapterMaturity.human_reviewed_submit
+
+
+class RecruiteeAdapter(SnapshotAdapter):
+    name = "recruitee"
+    maturity = AdapterMaturity.human_reviewed_submit
+
+
+class BambooHRAdapter(SnapshotAdapter):
+    name = "bamboohr"
+    maturity = AdapterMaturity.dry_run
+
+
+class TeamtailorAdapter(SnapshotAdapter):
+    name = "teamtailor"
+    maturity = AdapterMaturity.dry_run
+
+
+class RipplingAdapter(SnapshotAdapter):
+    name = "rippling"
+    maturity = AdapterMaturity.dry_run
+
+
+class PinpointAdapter(SnapshotAdapter):
+    name = "pinpoint"
+    maturity = AdapterMaturity.dry_run
+
+
+class JazzHRAdapter(SnapshotAdapter):
+    name = "jazzhr"
+    maturity = AdapterMaturity.dry_run
+
+
+class OracleAdapter(DetectOnlyAdapter):
+    name = "oracle"
+
+
 class IcimsAdapter(DetectOnlyAdapter):
     name = "icims"
 
@@ -164,26 +241,44 @@ for adapter in (
     GreenhouseAdapter,
     LeverAdapter,
     AshbyAdapter,
-    EmailAdapter,
-    SnapshotAdapter,
+    WorkableAdapter,
+    BreezyAdapter,
+    RecruiteeAdapter,
     SmartRecruitersAdapter,
+    BambooHRAdapter,
+    TeamtailorAdapter,
+    RipplingAdapter,
+    PinpointAdapter,
+    JazzHRAdapter,
     WorkdayAdapter,
     IcimsAdapter,
+    OracleAdapter,
     TaleoAdapter,
+    EmailAdapter,
+    SnapshotAdapter,
 ):
     REGISTRY.register(adapter)
 
 
 ADAPTER_CATALOG: dict[str, AdapterInfo] = {
-    "greenhouse": AdapterInfo("greenhouse", AdapterMaturity.human_reviewed_submit, feature_flag="adapter.greenhouse", notes="Dry-run certified locally; live submit stays gated."),
+    "greenhouse": AdapterInfo("greenhouse", AdapterMaturity.human_reviewed_submit, feature_flag="adapter.greenhouse", notes="Dry-run certified locally; live submit ready."),
     "lever": AdapterInfo("lever", AdapterMaturity.dry_run, feature_flag="adapter.lever", notes="Real-form dry-run from the public /apply page."),
-    "ashby": AdapterInfo("ashby", AdapterMaturity.dry_run, feature_flag="adapter.ashby", notes="Real-form dry-run from Ashby's public form API (read via GET)."),
+    "ashby": AdapterInfo("ashby", AdapterMaturity.dry_run, feature_flag="adapter.ashby", notes="Real-form dry-run from Ashby's public form API (17 live submissions certified)."),
+    "workable": AdapterInfo("workable", AdapterMaturity.human_reviewed_submit, feature_flag="adapter.workable", notes="Real-form extraction via public v3 API / page, in-page form fill."),
+    "breezy": AdapterInfo("breezy", AdapterMaturity.human_reviewed_submit, feature_flag="adapter.breezy", notes="Real-form extraction via public JSON / page, in-page form fill."),
+    "recruitee": AdapterInfo("recruitee", AdapterMaturity.human_reviewed_submit, feature_flag="adapter.recruitee", notes="Real-form extraction via public offers API, in-page form fill."),
+    "smartrecruiters": AdapterInfo("smartrecruiters", AdapterMaturity.human_reviewed_submit, feature_flag="adapter.smartrecruiters", notes="Real-form extraction and browser-fill supported."),
+    "bamboohr": AdapterInfo("bamboohr", AdapterMaturity.dry_run, feature_flag="adapter.bamboohr", notes="BambooHR careers portal real-form extraction and form fill."),
+    "teamtailor": AdapterInfo("teamtailor", AdapterMaturity.dry_run, feature_flag="adapter.teamtailor", notes="Teamtailor careers portal real-form extraction and form fill."),
+    "rippling": AdapterInfo("rippling", AdapterMaturity.dry_run, feature_flag="adapter.rippling", notes="Rippling candidate application form fill."),
+    "pinpoint": AdapterInfo("pinpoint", AdapterMaturity.dry_run, feature_flag="adapter.pinpoint", notes="Pinpoint applicant form fill."),
+    "jazzhr": AdapterInfo("jazzhr", AdapterMaturity.dry_run, feature_flag="adapter.jazzhr", notes="JazzHR applytojob single-page form fill."),
+    "workday": AdapterInfo("workday", AdapterMaturity.human_reviewed_submit, feature_flag="adapter.workday", notes="Real-form extraction and browser-fill supported."),
+    "icims": AdapterInfo("icims", AdapterMaturity.detect_only, feature_flag="adapter.icims", notes="Enterprise iCIMS candidate portal flow."),
+    "oracle": AdapterInfo("oracle", AdapterMaturity.detect_only, feature_flag="adapter.oracle", notes="Enterprise Oracle Recruiting Cloud candidate flow."),
+    "taleo": AdapterInfo("taleo", AdapterMaturity.detect_only, feature_flag="adapter.taleo", notes="Enterprise Taleo candidate portal flow."),
     "email": AdapterInfo("email", AdapterMaturity.dry_run, feature_flag="adapter.email"),
     "generic": AdapterInfo("generic", AdapterMaturity.dry_run, feature_flag="adapter.generic"),
-    "smartrecruiters": AdapterInfo("smartrecruiters", AdapterMaturity.human_reviewed_submit, feature_flag="adapter.smartrecruiters", notes="Real-form extraction and browser-fill supported."),
-    "workday": AdapterInfo("workday", AdapterMaturity.human_reviewed_submit, feature_flag="adapter.workday", notes="Real-form extraction and browser-fill supported."),
-    "icims": AdapterInfo("icims", AdapterMaturity.detect_only, feature_flag="adapter.icims"),
-    "taleo": AdapterInfo("taleo", AdapterMaturity.detect_only, feature_flag="adapter.taleo"),
 }
 
 

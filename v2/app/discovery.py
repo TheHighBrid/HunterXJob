@@ -150,6 +150,90 @@ def ashby_jobs(org: str, timeout: float = 30.0) -> list[JobRecord]:
     return [record for record in records if record is not None]
 
 
+def workable_jobs(company: str, timeout: float = 30.0) -> list[JobRecord]:
+    url = f"https://apply.workable.com/api/v1/widget/accounts/{_slug(company)}"
+    response = httpx.get(url, timeout=timeout, follow_redirects=True, headers={"Accept": "application/json"})
+    response.raise_for_status()
+    payload = response.json()
+    items = payload.get("jobs", []) if isinstance(payload, dict) else []
+    records: list[JobRecord] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        city = item.get("city") or ""
+        country = item.get("country") or ""
+        location = f"{city}, {country}".strip(", ")
+        telecommuting = bool(item.get("telecommuting") or False)
+        shortcode = str(item.get("shortcode") or item.get("id") or "")
+        records.append(JobRecord(
+            source="workable",
+            external_id=shortcode,
+            title=str(item.get("title") or ""),
+            company=company,
+            location=location,
+            remote=telecommuting or "remote" in location.lower(),
+            url=str(item.get("url") or f"https://apply.workable.com/{company}/j/{shortcode}/"),
+            description=clean_html(str(item.get("description") or "")),
+            board=company.lower(),
+        ))
+    return records
+
+
+def breezy_jobs(company: str, timeout: float = 30.0) -> list[JobRecord]:
+    url = f"https://{_slug(company)}.breezy.hr/json"
+    response = httpx.get(url, timeout=timeout, follow_redirects=True, headers={"Accept": "application/json"})
+    response.raise_for_status()
+    payload = response.json()
+    items = payload if isinstance(payload, list) else []
+    records: list[JobRecord] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        loc_obj = item.get("location") or {}
+        loc_name = loc_obj.get("name") or ""
+        is_remote = bool(loc_obj.get("is_remote") or "remote" in loc_name.lower())
+        pos_id = str(item.get("id") or "")
+        records.append(JobRecord(
+            source="breezy",
+            external_id=pos_id,
+            title=str(item.get("name") or item.get("title") or ""),
+            company=company,
+            location=loc_name,
+            remote=is_remote,
+            url=str(item.get("url") or f"https://{company}.breezy.hr/p/{pos_id}"),
+            description=clean_html(str(item.get("description") or "")),
+            board=company.lower(),
+        ))
+    return records
+
+
+def recruitee_jobs(company: str, timeout: float = 30.0) -> list[JobRecord]:
+    url = f"https://{_slug(company)}.recruitee.com/api/offers"
+    response = httpx.get(url, timeout=timeout, follow_redirects=True, headers={"Accept": "application/json"})
+    response.raise_for_status()
+    payload = response.json()
+    items = payload.get("offers", []) if isinstance(payload, dict) else []
+    records: list[JobRecord] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        slug = str(item.get("slug") or item.get("id") or "")
+        location = str(item.get("location") or item.get("city") or "")
+        remote = bool(item.get("remote") or "remote" in location.lower())
+        records.append(JobRecord(
+            source="recruitee",
+            external_id=slug,
+            title=str(item.get("title") or ""),
+            company=company,
+            location=location,
+            remote=remote,
+            url=str(item.get("careers_url") or f"https://{company}.recruitee.com/o/{slug}"),
+            description=clean_html(str(item.get("description") or "")),
+            board=company.lower(),
+        ))
+    return records
+
+
 #: A failing board must not stop discovery of the others.
 SOURCE_FAILURES: tuple[type[Exception], ...] = (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError)
 
@@ -167,10 +251,20 @@ def configured_sources(settings: Settings) -> list[tuple[str, str]]:
     sources = [("greenhouse", token) for token in settings.greenhouse_board_list]
     sources += [("lever", company) for company in settings.lever_company_list]
     sources += [("ashby", org) for org in settings.ashby_org_list]
+    sources += [("workable", company) for company in settings.workable_company_list]
+    sources += [("breezy", company) for company in settings.breezy_company_list]
+    sources += [("recruitee", company) for company in settings.recruitee_company_list]
     return sources
 
 
-_FETCHERS = {"greenhouse": greenhouse_jobs, "lever": lever_jobs, "ashby": ashby_jobs}
+_FETCHERS = {
+    "greenhouse": greenhouse_jobs,
+    "lever": lever_jobs,
+    "ashby": ashby_jobs,
+    "workable": workable_jobs,
+    "breezy": breezy_jobs,
+    "recruitee": recruitee_jobs,
+}
 
 
 def discover_run(settings: Settings) -> DiscoveryRun:

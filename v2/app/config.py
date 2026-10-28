@@ -79,6 +79,9 @@ class Settings(BaseSettings):
     greenhouse_board_tokens: str = ""
     lever_companies: str = ""
     ashby_orgs: str = ""
+    workable_companies: str = ""
+    breezy_companies: str = ""
+    recruitee_companies: str = ""
     generic_feed_urls: str = ""
 
     # Real-form dry-runs (read-only). The public Greenhouse API is primary;
@@ -126,6 +129,18 @@ class Settings(BaseSettings):
         return self._csv(self.ashby_orgs)
 
     @property
+    def workable_company_list(self) -> list[str]:
+        return self._csv(self.workable_companies)
+
+    @property
+    def breezy_company_list(self) -> list[str]:
+        return self._csv(self.breezy_companies)
+
+    @property
+    def recruitee_company_list(self) -> list[str]:
+        return self._csv(self.recruitee_companies)
+
+    @property
     def target_location_list(self) -> list[str]:
         return self._csv(self.target_locations)
 
@@ -151,6 +166,9 @@ class Settings(BaseSettings):
             "greenhouse_boards": len(self._csv(self.greenhouse_board_tokens)),
             "lever_companies": len(self._csv(self.lever_companies)),
             "ashby_orgs": len(self._csv(self.ashby_orgs)),
+            "workable_companies": len(self._csv(self.workable_companies)),
+            "breezy_companies": len(self._csv(self.breezy_companies)),
+            "recruitee_companies": len(self._csv(self.recruitee_companies)),
             "generic_feeds": len(self._csv(self.generic_feed_urls)),
         }
 

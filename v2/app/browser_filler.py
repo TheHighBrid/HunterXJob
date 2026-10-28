@@ -190,9 +190,9 @@ async def _find_input_for_key(page: Any, key: str, label_hint: str = "", value_h
         except Exception:
             pass
 
-    # 3. data-automation-id (Workday), data-qa, data-testid
+    # 3. data-automation-id (Workday), data-qa, data-testid, data-ui (Workable)
     for k in (key, key_camel):
-        for attr in ("data-automation-id", "data-qa", "data-testid"):
+        for attr in ("data-automation-id", "data-qa", "data-testid", "data-ui"):
             loc = page.locator(f'[{attr}*="{k}" i]')
             try:
                 if await loc.count() > 0 and await loc.first.is_visible():
@@ -236,8 +236,10 @@ async def _find_input_for_key(page: Any, key: str, label_hint: str = "", value_h
 
 async def _find_file_input(page: Any, key: str) -> tuple[Any, str]:
     """Find the file input for resume or cover letter."""
-    # Try direct id / name / data-qa
-    loc = page.locator(f'input[type="file"][id="{key}"], input[type="file"][name="{key}"], input[type="file"][data-qa*="{key}"]')
+    # Try direct id / name / data-qa / data-ui
+    loc = page.locator(
+        f'input[type="file"][id="{key}"], input[type="file"][name="{key}"], input[type="file"][data-qa*="{key}"], input[type="file"][data-ui*="{key}"]'
+    )
     try:
         if await loc.count() > 0:
             return loc.first, f'input[type="file"][name/id="{key}"]'
@@ -247,7 +249,9 @@ async def _find_file_input(page: Any, key: str) -> tuple[Any, str]:
     # Look for file inputs matching key or keywords
     keywords = ["resume", "cv"] if "resume" in key.lower() or "cv" in key.lower() else ["cover", "letter"]
     for kw in keywords:
-        loc = page.locator(f'input[type="file"][id*="{kw}" i], input[type="file"][name*="{kw}" i], input[type="file"][data-qa*="{kw}" i]')
+        loc = page.locator(
+            f'input[type="file"][id*="{kw}" i], input[type="file"][name*="{kw}" i], input[type="file"][data-qa*="{kw}" i], input[type="file"][data-ui*="{kw}" i]'
+        )
         if await loc.count() > 0:
             return loc.first, f'input[type="file"][keyword="{kw}"]'
 

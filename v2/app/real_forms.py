@@ -14,6 +14,7 @@ import httpx
 from app.adapter_runtime import platform_for_job
 from app.ashby_form import ASHBY_READ_OPS, AshbyJobRef, ashby_ref_for_job, fetch_ashby_form
 from app.config import Settings
+from app.breezy_form import BreezyJobRef, breezy_ref_for_job, fetch_breezy_form
 from app.greenhouse_browser import (
     DomSnapshot,
     form_from_dom,
@@ -29,19 +30,39 @@ from app.greenhouse_form import (
     ref_for_job,
 )
 from app.lever_form import LeverJobRef, fetch_lever_form, lever_ref_for_job
+from app.recruitee_form import RecruiteeJobRef, fetch_recruitee_form, recruitee_ref_for_job
 from app.smartrecruiters_form import (
     SmartRecruitersJobRef,
     fetch_smartrecruiters_form,
     smartrecruiters_ref_for_job,
 )
+from app.workable_form import WorkableJobRef, fetch_workable_form, workable_ref_for_job
 from app.workday_form import (
     WorkdayJobRef,
     fetch_workday_form,
     workday_ref_for_job,
 )
 
-JobRef = GreenhouseJobRef | LeverJobRef | AshbyJobRef | SmartRecruitersJobRef | WorkdayJobRef
-SUPPORTED_PLATFORMS = ("greenhouse", "lever", "ashby", "smartrecruiters", "workday")
+JobRef = (
+    GreenhouseJobRef
+    | LeverJobRef
+    | AshbyJobRef
+    | SmartRecruitersJobRef
+    | WorkdayJobRef
+    | WorkableJobRef
+    | BreezyJobRef
+    | RecruiteeJobRef
+)
+SUPPORTED_PLATFORMS = (
+    "greenhouse",
+    "lever",
+    "ashby",
+    "smartrecruiters",
+    "workday",
+    "workable",
+    "breezy",
+    "recruitee",
+)
 
 
 class FormProvider(Protocol):
@@ -57,6 +78,8 @@ def default_inspector(ref: JobRef, timeout_ms: int, trace_dir: str | None = None
     if isinstance(ref, SmartRecruitersJobRef):
         return inspect_page(ref.apply_url, timeout_ms=timeout_ms, trace_dir=trace_dir)
     if isinstance(ref, WorkdayJobRef):
+        return inspect_page(ref.apply_url, timeout_ms=timeout_ms, trace_dir=trace_dir)
+    if isinstance(ref, (WorkableJobRef, BreezyJobRef, RecruiteeJobRef)):
         return inspect_page(ref.apply_url, timeout_ms=timeout_ms, trace_dir=trace_dir)
     return inspect_page(ref.page_url, timeout_ms=timeout_ms, graphql_ops=ASHBY_READ_OPS, trace_dir=trace_dir)
 
@@ -89,6 +112,12 @@ class LiveFormProvider:
             return self._smartrecruiters(job)
         if platform == "workday":
             return self._workday(job)
+        if platform == "workable":
+            return self._workable(job)
+        if platform == "breezy":
+            return self._breezy(job)
+        if platform == "recruitee":
+            return self._recruitee(job)
         raise FormFetchError(
             "form_unavailable",
             f"no real-form fetcher for platform '{platform}' yet; dry-run refused rather than planning against a sample form",
@@ -154,4 +183,25 @@ class LiveFormProvider:
             raise FormFetchError("form_unavailable", "could not identify the Workday tenant and posting id for this job")
         form = fetch_workday_form(ref, job_location=getattr(job, "location", "") or "", client=self.client,
                                   timeout=self.settings.greenhouse_form_timeout)
+        return self._verify(form, ref)
+
+    def _workable(self, job: Any) -> RealForm:
+        ref = workable_ref_for_job(job)
+        if ref is None:
+            raise FormFetchError("form_unavailable", "could not identify the Workable company and shortcode for this job")
+        form = fetch_workable_form(ref, client=self.client, timeout=self.settings.greenhouse_form_timeout)
+        return self._verify(form, ref)
+
+    def _breezy(self, job: Any) -> RealForm:
+        ref = breezy_ref_for_job(job)
+        if ref is None:
+            raise FormFetchError("form_unavailable", "could not identify the Breezy company and position id for this job")
+        form = fetch_breezy_form(ref, client=self.client, timeout=self.settings.greenhouse_form_timeout)
+        return self._verify(form, ref)
+
+    def _recruitee(self, job: Any) -> RealForm:
+        ref = recruitee_ref_for_job(job)
+        if ref is None:
+            raise FormFetchError("form_unavailable", "could not identify the Recruitee company and offer slug for this job")
+        form = fetch_recruitee_form(ref, client=self.client, timeout=self.settings.greenhouse_form_timeout)
         return self._verify(form, ref)
