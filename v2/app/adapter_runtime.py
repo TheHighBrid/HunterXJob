@@ -22,9 +22,11 @@ class AdapterInfo:
 
 
 def detect_platform(url: str) -> str:
-    host = urlparse(url).netloc.lower()
-    path = urlparse(url).path.lower()
-    hay = f"{host}{path}"
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+    path = parsed.path.lower()
+    query = parsed.query.lower()
+    hay = f"{host}{path}?{query}"
     if "greenhouse.io" in host or "greenhouse" in hay or "gh_jid=" in urlparse(url).query.lower():
         return "greenhouse"
     if "lever.co" in host:
@@ -55,6 +57,17 @@ def detect_platform(url: str) -> str:
         return "icims"
     if "oraclecloud.com" in host or "taleo.net" in host or "oracle" in host:
         return "oracle"
+    # Canadian Federal, Provincial & Municipal Portals (Ottawa–Gatineau NCR)
+    if any(h in host for h in ("jobs.gc.ca", "emplois.gc.ca", "cfp-psc.gc.ca")):
+        return "gc_jobs"
+    if "cityofottawa.hua.hrsmart.com" in host or ("ottawa.ca" in host and any(t in hay for t in ("job", "career", "hrsmart", "dayforce"))):
+        return "ottawa_careers"
+    if "gojobs.gov.on.ca" in host or ("ontario.ca" in host and "careers" in hay):
+        return "ops_careers"
+    if "gatineau.cvmanager.com" in host or ("gatineau.ca" in host and any(t in hay for t in ("emploi", "carriere"))):
+        return "gatineau_careers"
+    if "quebecemploi.gouv.qc.ca" in host or "emploiquebec.gouv.qc.ca" in host:
+        return "quebec_emploi"
     if "mailto:" in url or url.startswith("mailto:"):
         return "email"
     return "generic"
@@ -82,6 +95,11 @@ def platform_for_job(job: Any) -> str:
         "icims",
         "oracle",
         "taleo",
+        "gc_jobs",
+        "ottawa_careers",
+        "ops_careers",
+        "gatineau_careers",
+        "quebec_emploi",
     }:
         return source
     return detect_platform(getattr(job, "url", "") or "")
@@ -228,6 +246,31 @@ class OracleAdapter(DetectOnlyAdapter):
     name = "oracle"
 
 
+class GCJobsAdapter(SnapshotAdapter):
+    name = "gc_jobs"
+    maturity = AdapterMaturity.dry_run
+
+
+class OttawaCareersAdapter(SnapshotAdapter):
+    name = "ottawa_careers"
+    maturity = AdapterMaturity.dry_run
+
+
+class OPSCareersAdapter(SnapshotAdapter):
+    name = "ops_careers"
+    maturity = AdapterMaturity.dry_run
+
+
+class GatineauCareersAdapter(SnapshotAdapter):
+    name = "gatineau_careers"
+    maturity = AdapterMaturity.dry_run
+
+
+class QuebecEmploiAdapter(SnapshotAdapter):
+    name = "quebec_emploi"
+    maturity = AdapterMaturity.dry_run
+
+
 class IcimsAdapter(DetectOnlyAdapter):
     name = "icims"
 
@@ -251,6 +294,11 @@ for adapter in (
     PinpointAdapter,
     JazzHRAdapter,
     WorkdayAdapter,
+    GCJobsAdapter,
+    OttawaCareersAdapter,
+    OPSCareersAdapter,
+    GatineauCareersAdapter,
+    QuebecEmploiAdapter,
     IcimsAdapter,
     OracleAdapter,
     TaleoAdapter,
@@ -274,6 +322,11 @@ ADAPTER_CATALOG: dict[str, AdapterInfo] = {
     "pinpoint": AdapterInfo("pinpoint", AdapterMaturity.dry_run, feature_flag="adapter.pinpoint", notes="Pinpoint applicant form fill."),
     "jazzhr": AdapterInfo("jazzhr", AdapterMaturity.dry_run, feature_flag="adapter.jazzhr", notes="JazzHR applytojob single-page form fill."),
     "workday": AdapterInfo("workday", AdapterMaturity.human_reviewed_submit, feature_flag="adapter.workday", notes="Real-form extraction and browser-fill supported."),
+    "gc_jobs": AdapterInfo("gc_jobs", AdapterMaturity.dry_run, feature_flag="adapter.gc_jobs", notes="Federal GC Jobs (jobs.gc.ca) account-based application flow."),
+    "ottawa_careers": AdapterInfo("ottawa_careers", AdapterMaturity.dry_run, feature_flag="adapter.ottawa_careers", notes="City of Ottawa municipal career portal."),
+    "ops_careers": AdapterInfo("ops_careers", AdapterMaturity.dry_run, feature_flag="adapter.ops_careers", notes="Ontario Public Service (gojobs.gov.on.ca) portal."),
+    "gatineau_careers": AdapterInfo("gatineau_careers", AdapterMaturity.dry_run, feature_flag="adapter.gatineau_careers", notes="Ville de Gatineau municipal career portal (cvmanager)."),
+    "quebec_emploi": AdapterInfo("quebec_emploi", AdapterMaturity.dry_run, feature_flag="adapter.quebec_emploi", notes="Québec Emploi provincial career portal."),
     "icims": AdapterInfo("icims", AdapterMaturity.detect_only, feature_flag="adapter.icims", notes="Enterprise iCIMS candidate portal flow."),
     "oracle": AdapterInfo("oracle", AdapterMaturity.detect_only, feature_flag="adapter.oracle", notes="Enterprise Oracle Recruiting Cloud candidate flow."),
     "taleo": AdapterInfo("taleo", AdapterMaturity.detect_only, feature_flag="adapter.taleo", notes="Enterprise Taleo candidate portal flow."),

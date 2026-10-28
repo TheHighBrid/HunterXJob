@@ -38,6 +38,12 @@ It discovers live job postings, evaluates match scores against your verified pro
     - **Workday** (`*.myworkdayjobs.com`) — *multi-step wizard state persistence & data-automation-id mapping*
     - **iCIMS** (`*.icims.com`) — *portal detection & iframe candidate profile handling*
     - **Oracle Recruiting Cloud (ORC)** (`*.oraclecloud.com`, Taleo) — *enterprise candidate flow & session token management*
+  - **Canadian Public Sector & Government Portals 🇨🇦 (Ottawa–Gatineau NCR & Provincial)**:
+    - **GC Jobs** (`jobs.gc.ca`, `emploisfp-psjobs.cfp-psc.gc.ca`) — *Federal recruitment, PSEA citizenship preference, SLE bilingual profiling, security clearance validation*
+    - **City of Ottawa Careers** (`ottawa.ca`, `cityofottawa.hua.hrsmart.com`) — *Municipal NCR bilingual opportunities & HRsmart form extraction*
+    - **Ontario Public Service (OPS)** (`gojobs.gov.on.ca`) — *Ontario provincial positions & job ad parsing*
+    - **Ville de Gatineau** (`gatineau.ca`, `gatineau.cvmanager.com`) — *Municipal & French-language candidate portal (Outaouais)*
+    - **Québec Emploi** (`quebecemploi.gouv.qc.ca`) — *Québec provincial employment portal*
 
 ---
 
@@ -59,7 +65,7 @@ HunterXJob is officially available as an Android APK release, with web dashboard
 
 ## Current State & Achievements (October 2026)
 
-* **Verification Matrix**: Full autonomous pipeline verified across **578 passing automated tests** (`v2/tests/`).
+* **Verification Matrix**: Full autonomous pipeline verified across **585 passing automated tests** (`v2/tests/`).
 * **Live Production Submissions Verified**: Executed **17 end-to-end live autonomous submissions** against real employer boards in production (**Cohere**, **Wealthsimple**, **Float**, **1Password**, **Jobber** on Ashby), capturing live confirmation banners, SHA-256 post-submit full-page screenshot proofs, and automated Day 7 / Day 14 follow-up schedules in the SQLite ledger.
 * **Truth Guard Hardening**: Enforces fail-closed validation on sensitive certifications (CPA, CFA, Bar, Security Clearance) preventing affirmative answers without verified profile evidence.
 * **Country-Aware Location Intelligence**: Eliminates US mismatches (e.g. Ontario, CA) and resolves Ashby `_systemfield_location` dropdowns with container badge read-backs.

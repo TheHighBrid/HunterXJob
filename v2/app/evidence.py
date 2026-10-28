@@ -21,6 +21,14 @@ CONFIRMATION_MARKERS = (
     "we received your application",
     "your application was submitted",
     "application received",
+    # French & Canadian Public Sector confirmation signals
+    "merci d'avoir postulé",
+    "votre candidature a été soumise",
+    "candidature reçue",
+    "votre demande a été soumise",
+    "demande transmise avec succès",
+    "nous avons bien reçu votre candidature",
+    "votre demande d'emploi a été reçue",
 )
 
 

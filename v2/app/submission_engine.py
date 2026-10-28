@@ -50,6 +50,9 @@ SUBMIT_BUTTON_SELECTORS = [
     'button:has-text("Submit application")',
     'button:has-text("Submit")',
     'button:has-text("Send application")',
+    'button:has-text("Soumettre la demande")',
+    'button:has-text("Soumettre ma candidature")',
+    'button:has-text("Postuler")',
     'button:has-text("Apply now")',
     'button:has-text("Apply")',
 ]

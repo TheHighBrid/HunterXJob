@@ -233,7 +233,7 @@
     ],
     "total_verified_submissions": 17
   },
-  "generated_at": "2026-10-28T14:43:39.731289+00:00",
+  "generated_at": "2026-10-28T17:28:19.870476+00:00",
   "milestones": {
     "gate1": {
       "blockers": [],
@@ -312,5 +312,5 @@
     "uncertain_outcomes_credited_as_submitted": 0
   },
   "schema_version": "hunterx-certification-v2",
-  "source_commit": "77b7a6bd2085aaa93e30b5397b4aa2a64cbd24c6"
+  "source_commit": "298d9fb0c75a65eff6d4c972c00b1836223f83c5"
 }

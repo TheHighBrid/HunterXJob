@@ -15,6 +15,19 @@ from app.adapter_runtime import platform_for_job
 from app.ashby_form import ASHBY_READ_OPS, AshbyJobRef, ashby_ref_for_job, fetch_ashby_form
 from app.config import Settings
 from app.breezy_form import BreezyJobRef, breezy_ref_for_job, fetch_breezy_form
+from app.canadian_gov_portals import (
+    GatineauCareersJobRef,
+    GCJobsJobRef,
+    OPSCareersJobRef,
+    OttawaCareersJobRef,
+    QuebecEmploiJobRef,
+    fetch_canadian_gov_form,
+    parse_gatineau_ref,
+    parse_gc_jobs_ref,
+    parse_ops_ref,
+    parse_ottawa_ref,
+    parse_quebec_emploi_ref,
+)
 from app.greenhouse_browser import (
     DomSnapshot,
     form_from_dom,
@@ -52,6 +65,11 @@ JobRef = (
     | WorkableJobRef
     | BreezyJobRef
     | RecruiteeJobRef
+    | GCJobsJobRef
+    | OttawaCareersJobRef
+    | OPSCareersJobRef
+    | GatineauCareersJobRef
+    | QuebecEmploiJobRef
 )
 SUPPORTED_PLATFORMS = (
     "greenhouse",
@@ -62,6 +80,11 @@ SUPPORTED_PLATFORMS = (
     "workable",
     "breezy",
     "recruitee",
+    "gc_jobs",
+    "ottawa_careers",
+    "ops_careers",
+    "gatineau_careers",
+    "quebec_emploi",
 )
 
 
@@ -79,7 +102,7 @@ def default_inspector(ref: JobRef, timeout_ms: int, trace_dir: str | None = None
         return inspect_page(ref.apply_url, timeout_ms=timeout_ms, trace_dir=trace_dir)
     if isinstance(ref, WorkdayJobRef):
         return inspect_page(ref.apply_url, timeout_ms=timeout_ms, trace_dir=trace_dir)
-    if isinstance(ref, (WorkableJobRef, BreezyJobRef, RecruiteeJobRef)):
+    if isinstance(ref, (WorkableJobRef, BreezyJobRef, RecruiteeJobRef, GCJobsJobRef, OttawaCareersJobRef, OPSCareersJobRef, GatineauCareersJobRef, QuebecEmploiJobRef)):
         return inspect_page(ref.apply_url, timeout_ms=timeout_ms, trace_dir=trace_dir)
     return inspect_page(ref.page_url, timeout_ms=timeout_ms, graphql_ops=ASHBY_READ_OPS, trace_dir=trace_dir)
 
@@ -118,6 +141,8 @@ class LiveFormProvider:
             return self._breezy(job)
         if platform == "recruitee":
             return self._recruitee(job)
+        if platform in ("gc_jobs", "ottawa_careers", "ops_careers", "gatineau_careers", "quebec_emploi"):
+            return self._canadian_gov(job, platform)
         raise FormFetchError(
             "form_unavailable",
             f"no real-form fetcher for platform '{platform}' yet; dry-run refused rather than planning against a sample form",
@@ -204,4 +229,22 @@ class LiveFormProvider:
         if ref is None:
             raise FormFetchError("form_unavailable", "could not identify the Recruitee company and offer slug for this job")
         form = fetch_recruitee_form(ref, client=self.client, timeout=self.settings.greenhouse_form_timeout)
+        return self._verify(form, ref)
+
+    def _canadian_gov(self, job: Any, platform: str) -> RealForm:
+        url = getattr(job, "url", "") or ""
+        job_id = getattr(job, "external_id", "") or "default"
+        title = getattr(job, "title", "") or "Public Sector Role"
+        if platform == "gc_jobs":
+            ref = parse_gc_jobs_ref(url) or GCJobsJobRef(poster_id=job_id)
+        elif platform == "ottawa_careers":
+            ref = parse_ottawa_ref(url) or OttawaCareersJobRef(job_id=job_id)
+        elif platform == "ops_careers":
+            ref = parse_ops_ref(url) or OPSCareersJobRef(job_id=job_id)
+        elif platform == "gatineau_careers":
+            ref = parse_gatineau_ref(url) or GatineauCareersJobRef(position_id=job_id)
+        else:
+            ref = parse_quebec_emploi_ref(url) or QuebecEmploiJobRef(offer_id=job_id)
+
+        form = fetch_canadian_gov_form(platform, ref, job_title=title, client=self.client)
         return self._verify(form, ref)
