@@ -1,26 +1,26 @@
 # HunterXJob architecture (v2)
 
-Updated 2026-10-22. What is ready and what isn't: [ROADMAP_STATUS.md](ROADMAP_STATUS.md).
+Updated 2026-10-28. What is ready and what isn't: [ROADMAP_STATUS.md](ROADMAP_STATUS.md).
 
 ## 1. What this is
 
 HunterXJob is a self-hosted, autonomous job application and hunting engine for one person. It operates in two well-defined modes:
 1. **Verified Browser Dry-Run (Default & Safe)**: Interactively fills forms, selects options, and attaches documents in Playwright headless Chromium, verifying all required DOM values, capturing full-page screenshots and execution traces, and recording cryptographic evidence **without clicking submit**.
-2. **Autonomous Live Submission (Safety Gated & Production Verified)**: When `--live` is supplied (or `ALLOW_LIVE_SUBMISSION=true` and `APPLICATION_MODE=autonomous` are enabled), the engine executes form filling, document upload, CAPTCHA handling, and live submission inside a **unified single-browser session** (using the real Google Chrome channel in `--headed` mode with anti-bot stealth hardening), validates confirmation banners, extracts digit-validated candidate/requisition IDs, captures `post_submit.png` SHA-256 proof, and schedules automated Day 7 / Day 14 follow-up cadences.
+2. **Autonomous Live Submission (Safety Gated & Production Verified)**: When `--live` is supplied (or `ALLOW_LIVE_SUBMISSION=true` and `APPLICATION_MODE=autonomous` are enabled), the engine executes form filling, document upload, CAPTCHA handling, and live submission inside a **unified single-browser session** (using the real Google Chrome channel in `--headed` mode with anti-bot stealth hardening), validates confirmation banners, extracts digit-validated candidate/requisition IDs, captures `post_submit.png` SHA-256 proof, and schedules automated Day 7 / Day 14 follow-up cadences. Over **17 live production submissions** have been autonomously completed across 5 major employers (**Cohere**, **Wealthsimple**, **Float**, **1Password**, **Jobber**).
 
 It has two parts:
 
 | Part | Where | Role |
 |---|---|---|
-| **v2 server** | `v2/` (Python 3.12, FastAPI, SQLAlchemy, SQLite, Playwright) | Autonomous core engine. Ingests postings, scores fit, tailors truthful materials, resolves screening & custom scenario questions via Knowledge Book + local Ollama LLM, controls Playwright browser automation, bridges CAPTCHAs, executes submissions, and tracks follow-up cadences. |
-| **Mobile app** | `mobile/` (Expo / React Native, TypeScript) | Remote control for the v2 server: status, kill switch, scheduler, jobs, review queue, settings, reports. Reaches the server over Tailscale (or a TLS tunnel) with the API key. |
+| **v2 server** | `v2/` (Python 3.12, FastAPI, SQLAlchemy, SQLite, Playwright) | Autonomous core engine. Ingests postings, scores fit, pre-filters commute boundaries and mandatory qualifications, tailors truthful materials, audits answers via Truth Guard, resolves screening & custom scenario questions via Knowledge Book + JobTomatik Answer Vault + local Ollama LLM, controls Playwright browser automation, bridges CAPTCHAs, executes submissions, and tracks follow-up cadences. |
+| **Mobile app** | `mobile/` (Expo / React Native, TypeScript, Android APK v1.0.0) | Remote control and standalone client for the v2 server: status, kill switch, scheduler, jobs, review queue, settings, reports, and Free/Pro tier gating. Reaches the server over Tailscale (or a TLS tunnel) with the API key. |
 
 `backend/` is the **legacy v1 engine**. It is kept as a donor for ideas and reference code, but nothing depends on it.
 
 ## 2. Pipeline
 
 ```text
-discover ─▶ normalize ─▶ deterministic gate ─┬─▶ reject
+discover ─▶ normalize ─▶ deterministic gate ─┬─▶ reject (commute veto, unverified credential veto)
                                              ├─▶ review ──(owner)──▶ shortlist
                                              └─▶ eligible ─▶ score (rules + optional local AI)
                                                                │
@@ -29,9 +29,11 @@ discover ─▶ normalize ─▶ deterministic gate ─┬─▶ reject
                                  prepare materials (Truth Guard) ── owner / auto ──▶ ready_to_apply
                                                                                         │
                                      autonomous single-browser session (Playwright) ◀───┘
-                                     - Inputs, combobox autocomplete, selects, <label> radios, toggles
+                                     - Inputs, combobox autocomplete (country-aware matching)
+                                     - Selects, <label> radios, button[data-option] Yes/No toggles
                                      - PDF & cover letter attachments (set_input_files)
-                                     - Knowledge Book + Local Ollama (llama3.2:3b) question resolution
+                                     - Answer Vault + Knowledge Book + Local Ollama (llama3.2:3b)
+                                     - Truth Guard Pre-Submission Audit (fail-closed credential checks)
                                      - Smart CAPTCHA bridge (reCAPTCHA v2/v3, hCaptcha, Turnstile, 180s hold)
                                                                                         │
                                         ┌────── validated dry-run (trace + screenshot) ─┤
@@ -42,9 +44,10 @@ discover ─▶ normalize ─▶ deterministic gate ─┬─▶ reject
 
 * **State machine** (`app/state_machine.py`): every stage change goes through
   `assert_transition`, and illegal transitions raise. Each change is written to `pipeline_events`.
-* **Deterministic core first** (`app/decisioning.py`): a six-dimension weighted
-  score with vetoes and review flags runs before any AI. The AI only adjusts the
-  score of jobs that pass. AI failures fall back to the rules alone.
+* **Deterministic core & pre-launch vetoes** (`app/decisioning.py`): a six-dimension weighted
+  score runs before any AI. Pre-filters roles by commute boundaries (hybrid/in-person restricted to Ottawa–Gatineau NCR for local candidates; remote-only elsewhere) and hard qualification vetoes (auto-rejects roles requiring unverified credentials like CPA or Bar).
+* **JobTomatik Master Answer Vault & Compiler** (`app/answer_policy_compiler.py`, `app/vault_store.py`):
+  compiles and classifies 143 question families using multilingual (English/French) regex matching. Seeds 63 verified production answer policies into SQLite, managed via `./hunterx vault`.
 * **Candidate Knowledge Book + Local LLM** (`app/knowledge_book.py`, `app/profile.py`): central
   vault loaded from verified profile facts. Deterministically resolves standard ATS system fields
   (`_systemfield_*`), UUID-keyed contact fields, and screening questions (work authorization,
@@ -52,14 +55,14 @@ discover ─▶ normalize ─▶ deterministic gate ─┬─▶ reject
   start date, background check consent, non-competes), and delegates custom behavioral/scenario
   multiple-choice and open-ended questions to local **Ollama (`llama3.2:3b`)** with deterministic
   heuristic fallbacks.
-* **Truth Guard** (`app/truth_guard.py`): zero-hallucination auditor ensuring every
-  claim, metric, company, and date in tailored résumés and cover letters matches verified facts.
+* **Truth Guard Pre-Submission Audit** (`app/truth_guard.py`): zero-hallucination auditor ensuring every
+  claim, metric, company, and date in tailored résumés and cover letters matches verified facts. Pre-submission audit strictly enforces fail-closed checks for professional certifications (CPA, CFA, Bar) and security clearances, preventing unverified affirmative answers.
 * **Unified Single-Browser Automation** (`app/browser_filler.py`): Playwright interactive
   automation filling inputs, comboboxes (`ArrowDown` + `Enter`), selects, `<label>`-bound radios,
   checkboxes, Ashby `[data-field-path]` / `button[data-option]` toggles, and attaching generated PDF/DOCX
-  files via `set_input_files`. Launches real Chrome (`channel="chrome"`) in headed mode with anti-bot
-  stealth flags (`--disable-blink-features=AutomationControlled`, `navigator.webdriver` spoofing).
-  Verifies all required DOM values, captures pre/post-submit full-page screenshots, and writes traces.
+  files via `set_input_files`. Uses country-aware autocomplete matching to prioritize home country options (e.g. Canada) and penalize foreign options (e.g. US). Launches real Chrome (`channel="chrome"`) in headed mode with anti-bot
+  stealth flags and lean memory flags (`--disable-dev-shm-usage`, `--no-sandbox`) for rock-solid stability on Apple Silicon M1 Macs.
+  Verifies all required DOM values (including Ashby badge container tags), captures pre/post-submit full-page screenshots, and writes traces.
 * **Smart CAPTCHA Resolution Bridge** (`app/captcha_bridge.py`): detects reCAPTCHA v2/v3/Enterprise,
   hCaptcha, and Cloudflare Turnstile. Automatically ignores passive invisible reCAPTCHA v3 badges,
   supports automated token injection, and detects visible post-submit interactive challenge modals

@@ -10,17 +10,20 @@ It discovers live job postings, evaluates match scores against your verified pro
 
 * **Autonomous End-to-End Loop**: From discovery $\rightarrow$ fit scoring $\rightarrow$ material tailoring $\rightarrow$ interactive browser form filling $\rightarrow$ local LLM custom question answering $\rightarrow$ CAPTCHA resolution $\rightarrow$ live submit / verified dry-run $\rightarrow$ evidence hashing $\rightarrow$ follow-up cadence tracking.
 * **Unified Single-Browser Playwright Automation**: Uses a single browser session (with real Google Chrome channel support in headed mode and anti-bot stealth hardening) to interactively type inputs, navigate combobox/autocomplete dropdowns (`ArrowDown` + `Enter`), click React/Ashby `<label>`-bound radio groups and `button[data-option]` Yes/No toggles, attach generated résumé PDFs and cover letters (`set_input_files`), and verify DOM read-backs with pre- and post-submit full-page screenshots and execution traces.
+* **Pre-Submission Truth Guard & Fail-Closed Integrity**: All generated résumé bullets, cover letters, and form answers are strictly audited against verified candidate facts before any application is prepared or submitted. For professional credentials (`cpa`, `cfa`, `p.eng`, `bar`) and security clearances, the system fails closed: if the credential is not in your verified profile, affirmative answers are strictly prohibited and replaced with truthful negative responses.
+* **Country-Aware Location Autocomplete**: Resolves location comboboxes (such as Ashby `_systemfield_location`) with country-aware intelligence. Prioritizes the candidate's home country (e.g. Canada over US for Ottawa, Ontario; explicitly penalizing and rejecting Ontario, California), and verifies selected container badge text on DOM read-back.
+* **Pre-Launch Commute & Hard Veto Filter**: Evaluates job location type and mandatory qualifications before browser launch. Rejects non-remote roles outside Ottawa–Gatineau and roles requiring unverified credentials before touching the browser.
+* **JobTomatik Master Answer Vault (v3.0)**: Integrated comprehensive answer policy system covering **143 question families** with multilingual English/French regex matching, backed by **63 seeded production answer policies** in SQLite and managed via `./hunterx vault`.
 * **Candidate Knowledge Book + Local Ollama LLM (`llama3.2:3b`)**: Central factual vault loaded from your verified profile YAML. Deterministically resolves standard ATS screening questions (Canadian/US work authorization, sponsorship, relocation, bilingual English/French proficiency, domain/financial experience, salary expectations, notice period, background check consent) and wires into local **Ollama (`llama3.2:3b`)** (with deterministic heuristic fallbacks) to answer custom behavioral, scenario, and role-specific multiple-choice or open-ended questions.
-* **Strict Truth Guard (Zero Hallucination)**: All generated résumé bullets and cover letters are strictly audited against verified candidate facts before any application is prepared or submitted.
 * **Smart CAPTCHA Bridge & Post-Submit Challenge Hold**: Detects Google reCAPTCHA (v2/v3/Enterprise), hCaptcha, and Cloudflare Turnstile. Automatically ignores passive invisible reCAPTCHA v3 badges so forms submit cleanly, supports automated token injection, and—when an interactive post-submit CAPTCHA puzzle (`bframe` / hCaptcha) appears—automatically holds the headed browser window open for up to 180 seconds for completion before capturing confirmation proof. Includes automatic backoff and retry for transient ATS anti-spam flags.
 * **Cross-ATS Deduplication & Submit Guard**: Detects cross-posted or duplicate roles across Greenhouse, Lever, Ashby, SmartRecruiters, and Workday, permanently blocking duplicate submissions.
 * **Cryptographic Evidence & Post-Submission Tracking**: Captures confirmation receipt banners, digit-validated candidate reference IDs, pre/post-submit SHA-256 screenshot and DOM hashes, and schedules automated 7-day and 14-day check-in reminders.
 * **Multi-Platform ATS Support**:
-  - **Greenhouse** (`boards.greenhouse.io`, `job-boards.greenhouse.io`)
-  - **Lever** (`jobs.lever.co`)
-  - **Ashby** (`jobs.ashbyhq.com`) — *verified live autonomous submissions in production*
-  - **SmartRecruiters** (`jobs.smartrecruiters.com`, `careers.smartrecruiters.com`)
-  - **Workday** (`*.myworkdayjobs.com`)
+  - **Ashby** (`jobs.ashbyhq.com`) — *17 verified live autonomous submissions in production*
+  - **Greenhouse** (`boards.greenhouse.io`, `job-boards.greenhouse.io`) — *live submit ready & fixture verified*
+  - **Lever** (`jobs.lever.co`) — *live submit ready & fixture verified*
+  - **SmartRecruiters** (`jobs.smartrecruiters.com`, `careers.smartrecruiters.com`) — *live submit ready & fixture verified*
+  - **Workday** (`*.myworkdayjobs.com`) — *live submit ready & fixture verified*
 
 ---
 
@@ -42,8 +45,10 @@ HunterXJob is officially available as an Android APK release, with web dashboard
 
 ## Current State & Achievements (October 2026)
 
-* **Phases 1–6 & Recovery Gates 1–2 Complete**: Full autonomous pipeline verified across **528 passing automated tests** (`v2/tests/`).
-* **Live Production Submissions Verified**: Executed end-to-end live autonomous submissions against real employer boards (including **Cohere**, **Wealthsimple**, and **Float** on Ashby), capturing live confirmation banners, SHA-256 post-submit full-page screenshot proofs, and automated Day 7 / Day 14 follow-up schedules in the SQLite ledger.
+* **Verification Matrix**: Full autonomous pipeline verified across **569 passing automated tests** (`v2/tests/`).
+* **Live Production Submissions Verified**: Executed **17 end-to-end live autonomous submissions** against real employer boards in production (**Cohere**, **Wealthsimple**, **Float**, **1Password**, **Jobber** on Ashby), capturing live confirmation banners, SHA-256 post-submit full-page screenshot proofs, and automated Day 7 / Day 14 follow-up schedules in the SQLite ledger.
+* **Truth Guard Hardening**: Enforces fail-closed validation on sensitive certifications (CPA, CFA, Bar, Security Clearance) preventing affirmative answers without verified profile evidence.
+* **Country-Aware Location Intelligence**: Eliminates US mismatches (e.g. Ontario, CA) and resolves Ashby `_systemfield_location` dropdowns with container badge read-backs.
 * **Zero-Touch Dynamic Form Resolution**: Full support for UUID-keyed ATS fields, `[data-field-path]` containers, custom scenario radio/select options, and narrative textareas powered by local `llama3.2:3b` + Knowledge Book rules.
 
 ---
@@ -54,13 +59,15 @@ HunterXJob is officially available as an Android APK release, with web dashboard
 HunterXJob/
 ├── hunterx             # Root CLI wrapper (forwards directly to v2/hunterx)
 ├── v2/                 # FastAPI core engine, Playwright runner, SQLite state machine, and tests
-│   ├── app/            # Application modules (autonomous loop, browser filler, knowledge book, etc.)
-│   ├── tests/          # Comprehensive 528-test verification suite
+│   ├── app/            # Application modules (autonomous loop, browser filler, knowledge book, truth guard, etc.)
+│   ├── tests/          # Comprehensive 569-test verification suite
 │   ├── scripts/        # Recovery Gate 1, Gate 2, and batch verification scripts
+│   ├── data/           # SQLite databases (hunterxjob-v2.db) and answer vault policies
 │   ├── hunterx         # Primary CLI utility for running, testing, and managing the daemon
 │   └── openapi.json    # Committed OpenAPI 3.1 specification
 ├── mobile/             # Expo / React Native remote control app with typed client
-├── backend/            # Legacy v1 engine (donor/reference only)
+├── releases/           # Release distribution artifacts (HunterXJob-v1.0.0.apk)
+├── evidence/           # Cryptographic certification dossiers (hunterx-certification-dossier.json)
 ├── docs/               # Architecture, recovery contracts, and roadmap status
 └── scripts/            # Repository-wide test runners
 ```
@@ -91,7 +98,23 @@ cp v2/examples/profile.example.yaml my_profile.yaml
 ./hunterx profile list
 ```
 
-### 4. Configure Job Boards (`.env`)
+### 4. Manage Answer Vault Policies
+Seed and inspect the JobTomatik Master Answer Vault (143 question families, 63 seeded policies):
+```bash
+# Seed verified default policies into SQLite
+./hunterx vault seed
+
+# List active answer policies
+./hunterx vault list
+
+# Look up a specific answer policy
+./hunterx vault get salary_expectation
+
+# Set a custom policy override
+./hunterx vault set salary_expectation '{"type": "numeric", "value": 75000}'
+```
+
+### 5. Configure Job Boards (`.env`)
 Edit `v2/.env` to configure target locations, keywords, and job board slugs:
 ```dotenv
 TARGET_LOCATIONS=Ottawa,Remote Canada,Canada,Toronto
@@ -103,7 +126,7 @@ LEVER_COMPANIES=pointclickcare,waveapps,achievers
 ASHBY_ORGS=cohere,wealthsimple,1password,jobber,float
 ```
 
-### 5. Start the Web UI & API
+### 6. Start the Web UI & API
 ```bash
 ./hunterx start
 ```
@@ -135,6 +158,19 @@ Executes end-to-end live applications in a unified browser session, unlocking th
 
 ---
 
+## Certification & Evidence Dossier
+
+HunterXJob maintains an automated, cryptographically signed certification dossier verifying all live submissions, safety invariants, and gate requirements directly against the production SQLite database:
+
+```bash
+# Generate and display the certification dossier
+./hunterx certify
+```
+
+The output dossier is maintained in [`evidence/hunterx-certification-dossier.json`](evidence/hunterx-certification-dossier.json).
+
+---
+
 ## Roadmap
 
 See [docs/ROADMAP_STATUS.md](docs/ROADMAP_STATUS.md) for the complete milestone matrix and readiness breakdown:
@@ -145,13 +181,20 @@ See [docs/ROADMAP_STATUS.md](docs/ROADMAP_STATUS.md) for the complete milestone 
   - Phase 2: Candidate Knowledge Book & Deterministic Screening Resolver
   - Phase 3: Dual-Mode CAPTCHA Bridge & Single-Session Live Submission Engine
   - Phase 4: Cross-ATS Deduplication Guard, Inbox Matcher & Follow-Up Cadence Scheduler
-  - Phase 5: Multi-ATS Native Adapters (Greenhouse, Lever, Ashby, SmartRecruiters, Workday)
-  - Phase 6: Zero-Touch Autonomous Loop, Root CLI, Local Ollama LLM (`llama3.2:3b`) Custom Question Answering, Anti-Bot Stealth & Live Production Submissions
+  - Phase 5: Multi-ATS Native Adapters (Ashby, Greenhouse, Lever, SmartRecruiters, Workday)
+  - Phase 6: Zero-Touch Autonomous Loop, Root CLI, Local Ollama LLM (`llama3.2:3b`) Custom Question Answering, Anti-Bot Stealth
+  - Phase 7: Live Production Submissions (17 verified submissions across Cohere, Wealthsimple, Float, 1Password, Jobber)
+  - Phase 8: Truth Guard Pre-Submission Audit & Fail-Closed Credential Integrity
+  - Phase 9: Country-Aware Location Selection & Autocomplete Matching
+  - Phase 10: Commute Boundaries & Pre-Launch Filtering
+  - Phase 11: Master Answer Policy v3.0 & Answer Vault Compiler
+  - Phase 12: Mobile Release & Packaging (Android v1.0.0 APK, Free vs Pro tiers)
 * **Next Milestones**:
   1. **Live Production Certification Across Remaining ATS Adapters**: Expand live submission verification to Greenhouse, Lever, SmartRecruiters, and Workday postings alongside Ashby.
-  2. **Automated 2Captcha / CapSolver API Integration**: Plug cloud solver providers into the `CaptchaSolver` protocol for fully unattended resolution of interactive reCAPTCHA v2/hCaptcha image challenges.
-  3. **Outbound Follow-Up Email Dispatch**: Authenticated SMTP/OAuth dispatch of approved 7-day and 14-day check-in drafts.
-  4. **Session Continuity & Enterprise Portal Auth**: Persistent browser storage states for multi-step corporate login portals (Workday / iCIMS / Taleo).
+  2. **Cross-Platform Native Apps**: Google Play Store rollout, iOS TestFlight (Expo), macOS native desktop app, and Windows client.
+  3. **Automated 2Captcha / CapSolver API Integration**: Plug cloud solver providers into the `CaptchaSolver` protocol for fully unattended resolution of interactive reCAPTCHA v2/hCaptcha image challenges.
+  4. **Outbound Follow-Up Email Dispatch**: Authenticated SMTP/OAuth dispatch of approved 7-day and 14-day check-in drafts.
+  5. **Session Continuity & Enterprise Portal Auth**: Persistent browser storage states for multi-step corporate login portals (Workday / iCIMS / Taleo).
 
 ---
 
@@ -163,13 +206,13 @@ See [docs/ROADMAP_STATUS.md](docs/ROADMAP_STATUS.md) for the complete milestone 
   ```
 * **Daily Submission Caps**: Enforces `MAX_APPLICATIONS_PER_DAY=10` in `.env` to prevent flood applications.
 * **Quiet Hours**: Suspends automatic cycles during configured off-hours (default: 23:00 to 07:00 local time).
-* **Truth Guard Validation**: Compares every line of generated text against candidate facts. Any unverified claim triggers a review task and halts submission.
+* **Truth Guard Validation**: Compares every line of generated text and every form answer against candidate facts. Any unverified claim triggers a review task and halts submission.
 
 ---
 
 ## Testing & Verification
 
-Run the full 528-test test suite:
+Run the full 569-test test suite:
 ```bash
 cd v2
 ./hunterx test
