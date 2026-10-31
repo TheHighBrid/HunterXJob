@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
@@ -11,10 +12,13 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+logger = logging.getLogger(__name__)
+
 from app import __version__
 from app.adapter_runtime import ADAPTER_CATALOG
 from app.ai import LocalAI
 from app.api_schemas import HealthOut
+from app.autofill_api import router as autofill_router
 from app.config import Settings, get_settings
 from app.dashboard_template import get_dashboard_html
 from app.db import SessionLocal, get_db, init_db
@@ -73,15 +77,13 @@ app = FastAPI(
     # One schema per model (no "-Input"/"-Output" pairs) for the generated mobile types.
     separate_input_output_schemas=False,
 )
-if settings.cors_origin_list:
-    # Only needed for the Expo web preview; native apps do not use CORS.
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origin_list,
-        allow_credentials=False,
-        allow_methods=["GET", "POST", "PUT", "PATCH"],
-        allow_headers=[API_KEY_HEADER, "Authorization", "Content-Type"],
-    )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origin_list or ["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 api = APIRouter(dependencies=[Depends(require_api_key)])
 
 
@@ -142,6 +144,142 @@ def health(request: Request, db: DbSession, current: CurrentSettings) -> dict[st
         "ai": LocalAI(current).health(),
         "resume_loaded": RESUME_FACTS_PATH.exists(),
     }
+
+
+@api.get("/api/agent/champion")
+def get_agent_champion(
+    db: DbSession,
+    project: str = "allo",
+) -> dict[str, object]:
+    """Retrieve the current active champion agent configuration."""
+    from improvement_kernel.storage.db import get_current_champion
+    import json
+
+    champion = get_current_champion(db, project=project)
+    config_dict = {}
+    if champion.harness_config_json:
+        try:
+            config_dict = json.loads(champion.harness_config_json)
+        except Exception:
+            config_dict = {}
+
+    if project == "allo":
+        system_prompt = config_dict.get("system_prompt") or (
+            "You are Kenza, a warm, affectionate, natural-speaking female companion. "
+            "Speak conversationally in concise spoken English (1-2 sentences at a time). "
+            "Never sound like a formal robotic AI. Never monologue. "
+            "Never mention Kingston or repetitive family stories unless specifically brought up by the user. "
+            "Respond naturally to short affirmations and listening cues."
+        )
+        vad_sensitivity = config_dict.get("vad_sensitivity_threshold", "START_SENSITIVITY_LOW")
+        elevenlabs_cfg = config_dict.get("elevenlabs") or {
+            "stability": 0.50,
+            "similarity_boost": 0.80,
+            "style": 0.0,
+            "use_speaker_boost": True,
+        }
+        voice_cfg = config_dict.get("voice") or {
+            "name": "Aoede",
+            "gender": "female",
+            "style": "melodious_warm",
+            "forbidden_voices": ["Puck", "Charon", "Fenrir", "Kore"],
+        }
+        audio_pipeline = config_dict.get("audio_pipeline") or {
+            "input_chunk_ms": 40,
+            "vad_prefix_padding_ms": 60,
+            "vad_silence_duration_ms": 800,
+            "client_endpoint_hangover_chunks": 13,
+            "sustained_barge_in_chunks": 8,
+            "output_buffer_ms": 80,
+            "output_buffer_min_ms": 40,
+            "output_buffer_max_ms": 160,
+            "start_of_speech_sensitivity": "START_SENSITIVITY_LOW",
+            "end_of_speech_sensitivity": "END_SENSITIVITY_LOW",
+            "max_latency_ceiling_ms": 1500,
+        }
+        return {
+            "project": project,
+            "version": champion.version,
+            "system_prompt": system_prompt,
+            "vad_sensitivity_threshold": vad_sensitivity,
+            "vad_silence_duration_ms": audio_pipeline.get("vad_silence_duration_ms", 800),
+            "elevenlabs": elevenlabs_cfg,
+            "voice": voice_cfg,
+            "audio_pipeline": audio_pipeline,
+            "models": config_dict.get("models") or {
+                "live_model": "gemini-3.8-live",
+                "memory_model": "gemini-3.8-flash",
+                "script_model": "gemini-3.8-flash",
+            },
+        }
+
+    return {
+        "project": project,
+        "version": champion.version,
+        "config": config_dict,
+    }
+
+
+@app.post("/api/telemetry/trace")
+@api.post("/api/telemetry/trace")
+async def record_telemetry_trace(
+    request: Request,
+    db: DbSession,
+    project: str = "allo",
+) -> dict[str, object]:
+    """Receive and evaluate live conversation telemetry traces emitted by client apps."""
+    try:
+        payload = await request.json()
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="Trace payload must be a JSON object")
+
+        if project == "allo":
+            from improvement_kernel.adapters.allo import AlloAdapter
+            adapter = AlloAdapter(session=db, project=project)
+            eval_result = adapter.evaluate_session_trace(payload)
+            return {
+                "status": "ok",
+                "project": project,
+                "call_id": eval_result.get("call_id"),
+                "evaluation": eval_result,
+            }
+        elif project == "fidelis":
+            from improvement_kernel.adapters.fidelis import FidelisAdapter
+            adapter = FidelisAdapter(session=db, project=project)
+            eval_result = adapter.evaluate_restoration_trace(payload)
+            return {
+                "status": "ok",
+                "project": project,
+                "image_id": eval_result.get("image_id"),
+                "evaluation": eval_result,
+            }
+        elif project == "pedit":
+            from improvement_kernel.adapters.pedit import PeditAdapter
+            adapter = PeditAdapter(session=db, project=project)
+            eval_result = adapter.evaluate_pdf_trace(payload)
+            return {
+                "status": "ok",
+                "project": project,
+                "doc_id": eval_result.get("doc_id"),
+                "evaluation": eval_result,
+            }
+        elif project == "agent_gang":
+            from improvement_kernel.adapters.agent_gang import AgentGangAdapter
+            adapter = AgentGangAdapter(session=db, project=project)
+            eval_result = adapter.evaluate_swarm_trace(payload)
+            return {
+                "status": "ok",
+                "project": project,
+                "task_id": eval_result.get("task_id"),
+                "evaluation": eval_result,
+            }
+        return {"status": "ok", "project": project, "message": "Trace received"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("Error evaluating incoming telemetry trace for %s: %s", project, exc)
+        return {"status": "error", "project": project, "message": str(exc)}
+
 
 
 @api.put("/api/resume-facts")
@@ -509,6 +647,36 @@ def run_due_follow_ups(db: DbSession) -> dict[str, object]:
     }
 
 
+class FollowUpDispatchIn(BaseModel):
+    recipient_email: str | None = None
+    dry_run: bool = False
+
+
+@api.post("/api/follow-ups/{task_id}/dispatch")
+def dispatch_follow_up(
+    task_id: str,
+    payload: FollowUpDispatchIn,
+    db: DbSession,
+    current: CurrentSettings,
+) -> dict[str, object]:
+    from app.follow_up import dispatch_follow_up_email
+
+    try:
+        res = dispatch_follow_up_email(
+            db=db,
+            task_id=task_id,
+            smtp_host=getattr(current, "smtp_host", None),
+            smtp_port=getattr(current, "smtp_port", 587),
+            smtp_user=getattr(current, "smtp_user", None),
+            smtp_password=getattr(current, "smtp_password", None),
+            recipient_email=payload.recipient_email,
+            dry_run=payload.dry_run,
+        )
+        return res
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+
+
 @api.get("/api/jobs/{job_id}/artifacts")
 def list_job_artifacts(job_id: str, current: CurrentSettings) -> dict[str, object]:
     out_dir = Path(getattr(current, "artifact_dir", None) or "/tmp/hunterx_autonomous")
@@ -621,3 +789,4 @@ def export_system_diagnostics(db: DbSession, current: CurrentSettings) -> dict[s
 app.include_router(api)
 app.include_router(remote_router)
 app.include_router(materials_router)
+app.include_router(autofill_router)
