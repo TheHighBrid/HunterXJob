@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 import threading
 from collections.abc import Generator
 from pathlib import Path
 
 from sqlalchemy import Engine, create_engine, event
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import get_settings
@@ -72,15 +74,11 @@ def init_db() -> None:
     with _init_lock:
         if not _initialized:
             if str(settings.database_url).startswith("sqlite:///") and settings.database_url != "sqlite:///:memory:":
-                import contextlib
-                from sqlalchemy.exc import SQLAlchemyError
-
-                with contextlib.suppress(SQLAlchemyError, OSError):
-                    with engine.connect() as conn:
-                        conn.exec_driver_sql("PRAGMA journal_mode=WAL;")
-                        conn.exec_driver_sql("PRAGMA synchronous=FULL;")
-                        conn.exec_driver_sql("PRAGMA busy_timeout=10000;")
-                        conn.commit()
+                with contextlib.suppress(SQLAlchemyError, OSError), engine.connect() as conn:
+                    conn.exec_driver_sql("PRAGMA journal_mode=WAL;")
+                    conn.exec_driver_sql("PRAGMA synchronous=FULL;")
+                    conn.exec_driver_sql("PRAGMA busy_timeout=10000;")
+                    conn.commit()
             migrate()
             _initialized = True
 
