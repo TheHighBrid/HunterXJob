@@ -353,7 +353,10 @@ def supervise(child: Any, timeout: float, grace: float = 5.0) -> dict[str, Any]:
             try:
                 import signal
                 pgid = os.getpgid(child.pid)
-                os.killpg(pgid, signal.SIGKILL)
+                if pgid != os.getpgrp():
+                    os.killpg(pgid, signal.SIGKILL)
+                else:
+                    child.kill()
             except (OSError, ProcessLookupError):
                 child.kill()
             child.join(10)
