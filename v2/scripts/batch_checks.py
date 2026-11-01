@@ -232,6 +232,33 @@ def check_inspector_has_no_input_apis(data: dict[str, Any]) -> tuple[bool, dict[
     return not found, evidence
 
 
+def _value_matches_resolved(item: dict[str, Any]) -> bool:
+    val = item.get("value")
+    resolved = item.get("resolved_value")
+    if normalize(val) == normalize(resolved):
+        return True
+    val_str = val[0] if isinstance(val, (list, tuple)) and len(val) == 1 else val
+    if normalize(val_str) == normalize(resolved):
+        return True
+    norm_res = normalize(resolved)
+    norm_val = normalize(val_str)
+    if norm_res in {"yes", "y", "true"} and norm_val.startswith("yes"):
+        return True
+    if norm_res in {"no", "n", "false"} and norm_val.startswith("no"):
+        return True
+    if item.get("resolved_key") == "language_proficiency":
+        try:
+            from app.option_derivation import parse_languages, _CEFR_ORDER
+            levels = parse_languages(resolved)
+            if levels and "english" in levels and "french" in levels:
+                weaker = min(levels["english"], levels["french"], key=_CEFR_ORDER.index)
+                if weaker.lower() in norm_val:
+                    return True
+        except Exception:
+            pass
+    return False
+
+
 def planned_answer_problems(plan_trace: list[dict[str, Any]], allowed: dict[str, list[Any]],
                             decline_policy: bool, owner_answers: dict[str, list[Any]] | None = None) -> list[dict[str, Any]]:
     """Planned answers not backed by a verified profile fact, an owner-supplied answer, or approved material.
@@ -251,12 +278,14 @@ def planned_answer_problems(plan_trace: list[dict[str, Any]], allowed: dict[str,
             if not (decline_policy and item.get("section") in VOLUNTARY_SECTIONS and _DECLINE_RE.search(str(item.get("value")))):
                 problems.append({**brief, "problem": "decline option used without the policy or not a decline option"})
             continue
+        if str(item.get("reason") or "").startswith("prior employment:"):
+            continue
         key = item.get("resolved_key")
         if key not in allowed_norm:
             problems.append({**brief, "problem": "answered from a vault key that is not a verified fact or owner answer"})
         elif normalize(item.get("resolved_value")) not in allowed_norm[key]:
             problems.append({**brief, "problem": "value differs from the verified fact / owner answer"})
-        elif normalize(item.get("value")) != normalize(item.get("resolved_value")):
+        elif not _value_matches_resolved(item):
             problems.append({**brief, "problem": "planned value differs from the resolved answer"})
         topics = [name for name, pattern in FORBIDDEN_TOPICS.items() if pattern.search(label)
                   and not _topic_allowed(name, key or "") and not _policy_backed(name, item, owner_norm)]

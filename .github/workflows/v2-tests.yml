@@ -1,10 +1,11 @@
-name: V2 Tests
+name: V2 and Mobile Tests
 
 on:
   push:
     branches: [main]
     paths:
       - "v2/**"
+      - "mobile/**"
       - ".github/workflows/v2-tests.yml"
       - "ruff.toml"
       - "bandit.yml"
@@ -12,6 +13,7 @@ on:
     branches: [main]
     paths:
       - "v2/**"
+      - "mobile/**"
       - ".github/workflows/v2-tests.yml"
       - "ruff.toml"
       - "bandit.yml"
@@ -103,3 +105,29 @@ jobs:
             v2/gate-artifacts/gate2/gate2-report.json
           if-no-files-found: error
           retention-days: 30
+
+  mobile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check mobile app
+        run: npm run typecheck
+
+      - name: Run Jest test suite
+        run: npm test -- --ci

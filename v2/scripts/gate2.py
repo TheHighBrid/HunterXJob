@@ -188,6 +188,9 @@ def evaluate(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _child_entry(run_dir: str, mode: str, posting: dict[str, Any]) -> None:
+    import contextlib
+    with contextlib.suppress(Exception):
+        os.setsid()
     folder = Path(run_dir)
     os.environ.clear()
     os.environ.update(child_env(folder))

@@ -71,6 +71,15 @@ def init_db() -> None:
         return
     with _init_lock:
         if not _initialized:
+            if str(settings.database_url).startswith("sqlite:///") and settings.database_url != "sqlite:///:memory:":
+                try:
+                    with engine.connect() as conn:
+                        conn.exec_driver_sql("PRAGMA journal_mode=WAL;")
+                        conn.exec_driver_sql("PRAGMA synchronous=FULL;")
+                        conn.exec_driver_sql("PRAGMA busy_timeout=10000;")
+                        conn.commit()
+                except Exception:
+                    pass
             migrate()
             _initialized = True
 

@@ -32,7 +32,8 @@ Open `http://127.0.0.1:8011`. Every API call except `/api/health` needs the `X-A
 
 Before any résumé or cover letter is generated, load your profile and verify its facts (`./hunterx profile import data/profile.yaml`, then verify on the phone or with `./hunterx profile verify ...`). Generated materials are drafts until you approve them; only approved versions are ever attached to a dry-run. See [v2/README.md → Profile and application materials](v2/README.md#profile-and-application-materials).
 
-To run it unattended, use the systemd service on a small Linux VM (primary) or Termux:Boot on the phone (fallback): see [docs/DEPLOY_VM.md](docs/DEPLOY_VM.md). Continuous discover → score → prepare → dry-run cycles are off by default; see `v2/README.md`.
+> **Execution Host (per [docs/RECOVERY_CONTRACT.md](docs/RECOVERY_CONTRACT.md)):**
+> The locked host is plain local developer Linux / macOS plus GitHub Actions runners at $0. Cloud VMs (such as Oracle Cloud) and on-device Android execution (Termux / PRoot) are frozen / on hold as legacy hosting modes; the Android mobile app is a remote control client to the v2 API and runs no heavy workloads. See [docs/RECOVERY_CONTRACT.md](docs/RECOVERY_CONTRACT.md) and [docs/DEPLOY_VM.md](docs/DEPLOY_VM.md) for context. Continuous discover → score → prepare → dry-run cycles are off by default; see `v2/README.md`.
 
 ## Legacy backend (v1, donor only)
 
