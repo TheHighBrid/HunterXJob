@@ -17,10 +17,21 @@ def _make_engine():
     settings = get_settings()
     settings.ensure_dirs()
     db_path = settings.DATABASE_PATH
-    return create_engine(
+    created = create_engine(
         f"sqlite:///{db_path}",
         connect_args={"check_same_thread": False},
     )
+    from sqlalchemy import event
+
+    def _pragmas(conn, _rec):
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=FULL")
+        cursor.execute("PRAGMA busy_timeout=10000")
+        cursor.close()
+
+    event.listen(created, "connect", _pragmas)
+    return created
 
 
 engine = _make_engine()

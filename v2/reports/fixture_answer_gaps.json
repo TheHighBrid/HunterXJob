@@ -1,6 +1,6 @@
 {
   "totals": {
-    "review": 41,
+    "review": 36,
     "skip": 33
   },
   "by_category": [
@@ -48,17 +48,10 @@
     },
     {
       "name": "option_mismatch",
-      "total": 4,
-      "review": 4,
+      "total": 2,
+      "review": 2,
       "skip": 0,
-      "required": 4
-    },
-    {
-      "name": "prior_employment",
-      "total": 4,
-      "review": 4,
-      "skip": 0,
-      "required": 4
+      "required": 2
     },
     {
       "name": "referral",
@@ -66,6 +59,13 @@
       "review": 0,
       "skip": 2,
       "required": 0
+    },
+    {
+      "name": "prior_employment",
+      "total": 1,
+      "review": 1,
+      "skip": 0,
+      "required": 1
     },
     {
       "name": "work_authorization",
@@ -77,18 +77,18 @@
   ],
   "by_control_type": [
     {
-      "name": "select",
-      "total": 21,
-      "review": 19,
-      "skip": 2,
-      "required": 18
-    },
-    {
       "name": "text",
       "total": 19,
       "review": 3,
       "skip": 16,
       "required": 2
+    },
+    {
+      "name": "select",
+      "total": 17,
+      "review": 15,
+      "skip": 2,
+      "required": 14
     },
     {
       "name": "textarea",
@@ -106,10 +106,10 @@
     },
     {
       "name": "multiselect",
-      "total": 4,
-      "review": 4,
+      "total": 3,
+      "review": 3,
       "skip": 0,
-      "required": 3
+      "required": 2
     },
     {
       "name": "radio",
@@ -202,14 +202,6 @@
     {
       "form": "greenhouse/asana_8165477.json",
       "status": "review",
-      "category": "prior_employment",
-      "type": "select",
-      "required": true,
-      "label": "Have you been employed, or otherwise engaged, by an Asana entity in the past? (P"
-    },
-    {
-      "form": "greenhouse/asana_8165477.json",
-      "status": "review",
       "category": "sensitive_self_id",
       "type": "select",
       "required": true,
@@ -290,14 +282,6 @@
     {
       "form": "greenhouse/d2l_7696196.json",
       "status": "review",
-      "category": "option_mismatch",
-      "type": "multiselect",
-      "required": true,
-      "label": "Bilingualism in English and Canadian French is required. Please indicate your le"
-    },
-    {
-      "form": "greenhouse/d2l_7696196.json",
-      "status": "review",
       "category": "role_screening",
       "type": "select",
       "required": true,
@@ -334,14 +318,6 @@
       "type": "text",
       "required": false,
       "label": "If someone from D2L referred you to this role, please help us thank them by list"
-    },
-    {
-      "form": "greenhouse/d2l_7696196.json",
-      "status": "review",
-      "category": "prior_employment",
-      "type": "select",
-      "required": true,
-      "label": "Have you previously worked for D2L in any capacity? If yes, please select the mo"
     },
     {
       "form": "greenhouse/d2l_7696196.json",
@@ -438,14 +414,6 @@
       "type": "select",
       "required": true,
       "label": "Will you now or in the future require sponsorship for a visa to remain in your c"
-    },
-    {
-      "form": "greenhouse/gitlab_8556658002.json",
-      "status": "review",
-      "category": "prior_employment",
-      "type": "select",
-      "required": true,
-      "label": "Have you previously worked at or consulted for GitLab?"
     },
     {
       "form": "ats/lever_apply.html",
@@ -622,14 +590,6 @@
       "type": "textarea",
       "required": true,
       "label": "What does delivering exceptional client service mean to you?"
-    },
-    {
-      "form": "ats/ashby_form_advisor.json",
-      "status": "review",
-      "category": "option_mismatch",
-      "type": "select",
-      "required": true,
-      "label": "Are you fluent to a professional level in BOTH French AND English?"
     },
     {
       "form": "ats/ashby_form_advisor.json",

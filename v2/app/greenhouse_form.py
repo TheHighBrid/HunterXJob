@@ -36,6 +36,7 @@ from app.form_engine import (
     ControlType,
     FormControl,
 )
+from app.prior_employment import PRIOR_EMPLOYMENT_RE, tag_prior_employer
 
 GREENHOUSE_API_HOST = "boards-api.greenhouse.io"
 GREENHOUSE_EMBED_HOST = "job-boards.greenhouse.io"
@@ -256,10 +257,7 @@ _WORK_AUTH_RE = re.compile(
     r"(?:legally )?(?:eligible|authori[sz]ed|permitted|entitled) to work|work authori[sz]ation|right to work|work permit"
 )
 # "Have you worked for <employer> before?" is employer-specific: never shared.
-_PRIOR_EMPLOYMENT_RE = re.compile(
-    r"previous(?:ly)? (?:worked|employed|been employed)|worked (?:at|for) .* (?:before|previously|in the past)|"
-    r"(?:employed|engaged)[^?]* in the past|consulted for"
-)
+_PRIOR_EMPLOYMENT_RE = PRIOR_EMPLOYMENT_RE
 
 # Ordered rules: (patterns that must all match, canonical key, max label length).
 _KEY_RULES: tuple[tuple[tuple[re.Pattern[str], ...], str, int | None], ...] = (
@@ -589,6 +587,7 @@ def parse_greenhouse_payload(payload: dict[str, Any], ref: GreenhouseJobRef) -> 
     if any(control.control_type is ControlType.UNKNOWN for control in controls):
         warnings.append("form contains field types this engine does not support")
 
+    tag_prior_employer(controls, ref.board)
     return RealForm(
         platform="greenhouse",
         source="greenhouse_api",
