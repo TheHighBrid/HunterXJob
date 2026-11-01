@@ -8,6 +8,7 @@ the claims-to-avoid scan over generated materials, and the batch summary.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import html
 import re
