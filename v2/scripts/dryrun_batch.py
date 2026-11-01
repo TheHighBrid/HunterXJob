@@ -61,6 +61,7 @@ from batch_checks import (
     is_transient,
     material_texts,
     open_check_url,
+    owner_answer_map,
     parse_open_posting,
     run_directory,
     run_extra_checks,
@@ -266,6 +267,7 @@ def seed_application(posting: dict[str, Any], inputs: dict[str, Any], data: dict
                         "answers_stored": [item["key"] for item in inputs["answers"]],
                         "job_stage": job.stage, "application_stage": application.stage}
         data["allowed_answers"] = _allowed_answers(db, application, inputs["answers"])
+        data["owner_answers"] = owner_answer_map((item["key"], item["value"]) for item in inputs["answers"])
         data["decline_policy"] = any(item["key"] == "voluntary_self_identification" and str(item["value"]) == "decline"
                                      for item in inputs["answers"])
         if job.stage != PipelineStage.ready_to_apply.value:

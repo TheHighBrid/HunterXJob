@@ -102,6 +102,15 @@ FORBIDDEN_TOPICS: dict[str, re.Pattern[str]] = {
     # (?-i:...) keeps "US"/"U.S."/"USA" case-sensitive so the pronoun "us" never matches.
     "us_work": re.compile(r"(?-i:\bU\.?S\.?A?\b)|(?i:\bunited states\b|\bétats-unis\b)"),
 }
+# Never-auto-answer topics the owner has since covered with a stored answer (#36, #40). A field on one of
+# these topics may be filled only from the matching classifier key, and only with the owner's exact value.
+POLICY_TOPIC_KEYS: dict[str, frozenset[str]] = {
+    "salary": frozenset({"salary_expectation"}),
+    "start_date": frozenset({"start_date"}),
+    "relocation": frozenset({"willing_to_relocate"}),
+    "employment_status": frozenset({"employment_status"}),
+    "education": frozenset({"education_level"}),
+}
 # Review buckets: what the owner would need to supply to make forms complete.
 REVIEW_BUCKETS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("salary expectations", FORBIDDEN_TOPICS["salary"]),
@@ -224,9 +233,13 @@ def check_inspector_has_no_input_apis(data: dict[str, Any]) -> tuple[bool, dict[
 
 
 def planned_answer_problems(plan_trace: list[dict[str, Any]], allowed: dict[str, list[Any]],
-                            decline_policy: bool) -> list[dict[str, Any]]:
-    """Planned answers not backed by a verified profile fact, an owner-supplied answer, or approved material."""
+                            decline_policy: bool, owner_answers: dict[str, list[Any]] | None = None) -> list[dict[str, Any]]:
+    """Planned answers not backed by a verified profile fact, an owner-supplied answer, or approved material.
+
+    ``owner_answers`` holds only what the owner stored (no profile facts or materials); a never-auto-answer
+    topic in ``POLICY_TOPIC_KEYS`` passes only when its value is exactly one of those stored answers."""
     allowed_norm = {key: {normalize(value) for value in values} for key, values in allowed.items()}
+    owner_norm = {key: {normalize(value) for value in values} for key, values in (owner_answers or {}).items()}
     problems = []
     for item in plan_trace:
         if item.get("status") != "fill":
@@ -246,7 +259,7 @@ def planned_answer_problems(plan_trace: list[dict[str, Any]], allowed: dict[str,
         elif normalize(item.get("value")) != normalize(item.get("resolved_value")):
             problems.append({**brief, "problem": "planned value differs from the resolved answer"})
         topics = [name for name, pattern in FORBIDDEN_TOPICS.items() if pattern.search(label)
-                  and not _topic_allowed(name, key or "")]
+                  and not _topic_allowed(name, key or "") and not _policy_backed(name, item, owner_norm)]
         if topics:
             problems.append({**brief, "problem": f"answered a never-auto-answer topic: {', '.join(topics)}"})
     return problems
@@ -260,11 +273,51 @@ def _topic_allowed(topic: str, key: str) -> bool:
     return topic == "us_work" and key.endswith("_us")
 
 
+def _policy_backed(topic: str, item: dict[str, Any], owner_norm: dict[str, set[str]]) -> bool:
+    """The topic's classifier key, answered with exactly the value the owner stored for it."""
+    key = item.get("resolved_key") or ""
+    if key not in POLICY_TOPIC_KEYS.get(topic, frozenset()) or key not in owner_norm:
+        return False
+    resolved = normalize(item.get("resolved_value"))
+    return resolved in owner_norm[key] and normalize(item.get("value")) == resolved
+
+
+def owner_answer_map(pairs: Any) -> dict[str, list[Any]]:
+    """Owner-stored answers by canonical vault key, with the vault's policy aliases (``availability_date`` →
+    ``start_date``) applied only where the target key was not stored itself, exactly as ``load_vault`` does."""
+    from app.answer_vault import _canonical_key
+    from app.vault_store import _POLICY_KEY_ALIASES
+
+    stored: dict[str, list[Any]] = {}
+    for key, value in pairs:
+        stored.setdefault(_canonical_key(key), []).append(value)
+    aliased: dict[str, list[Any]] = {}
+    for key, values in stored.items():
+        for alias in _POLICY_KEY_ALIASES.get(key, ()):
+            if alias not in stored:
+                aliased.setdefault(alias, []).extend(values)
+    return {**stored, **aliased}
+
+
+def _owner_answers(data: dict[str, Any], allowed: dict[str, list[Any]]) -> dict[str, list[Any]]:
+    if data.get("owner_answers") is not None:
+        return data["owner_answers"]
+    # Observations saved before owner answers were recorded on their own: the stored keys are in the seed
+    # summary, and those keys' values in ``allowed`` came from the owner (profile facts use other keys).
+    from app.answer_vault import _canonical_key
+
+    stored = (data.get("seed") or {}).get("answers_stored") or []
+    return owner_answer_map((key, value) for key in stored for value in allowed.get(_canonical_key(key), []))
+
+
 def check_planned_answers(data: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
     trace = data.get("plan_trace")
     if trace is None:
         return False, {"error": "no plan was captured"}
-    problems = planned_answer_problems(trace, data.get("allowed_answers") or {}, bool(data.get("decline_policy")))
+    allowed = data.get("allowed_answers") or {}
+    owner = _owner_answers(data, allowed)
+    allowed = {**{key: list(values) for key, values in owner.items()}, **allowed}
+    problems = planned_answer_problems(trace, allowed, bool(data.get("decline_policy")), owner)
     planned = [item for item in trace if item.get("status") == "fill"]
     return not problems, {"planned": len(planned), "unbacked": problems}
 
