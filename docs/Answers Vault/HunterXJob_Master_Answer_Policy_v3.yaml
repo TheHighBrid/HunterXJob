@@ -1,0 +1,2474 @@
+schema_version: '3.0'
+project: HunterXJob
+as_of: '2026-10-27'
+purpose: Portable, provenance-aware application question/answer policy. Not an import schema for the current HunterXJob API.
+provenance:
+  source: direct_user_instructions_plus_prior_profile_context
+  confidence_label: user_provided_or_contextual
+  confirmation_policy: Only direct user answers eligible for auto after exact field match; other facts require verified profile
+    or human review.
+decision_contract:
+  unknown_required: REVIEW
+  unknown_optional: SKIP
+  sensitive_unknown: REVIEW_OR_DECLINE_IF_USER_APPROVED
+  never_infer:
+  - criminal history
+  - government clearance
+  - driver licence
+  - car ownership
+  - US citizenship
+  - US sponsorship
+  - ethnicity
+  - race
+  - sexual orientation
+  - disability
+  - veteran status
+  - gender
+  - marital status
+  - DOB
+  - SIN
+  - SSN
+  - certifications
+  - technical experience
+  - prior rejection
+  - company relationships
+  - stock holdings
+  source_precedence:
+  - company_scoped_explicit_answer
+  - platform_scoped_explicit_answer
+  - global_explicit_answer
+  - verified_profile
+  - verified_job_specific_context
+  - manual_review
+  same_scope_conflict: REVIEW
+  unmatched_question: REVIEW_IF_REQUIRED_ELSE_SKIP
+  options: Use exact option semantics, not closest text. If no equivalent allowed option exists, review. Distinguish yes/no,
+    negative polarity, ranges, multi-select, date and numbers.
+  consent: Background-check consent is explicitly granted. Other legal agreements, privacy terms, recordings, reference checks
+    and self-ID remain unapproved unless independently authorized.
+  no_live_submission_implicit: The answer policy never itself authorizes application submission, bypass of CAPTCHA, falsification
+    or anti-bot circumvention.
+  question_8: Bare answer No is unbound and MUST NOT apply to any live field.
+  confirmation: Prove real submission with an employer confirmation page/email/receipt; a click or successful form fill does
+    not prove submission.
+targeting:
+  currency: CAD
+  salary_minimum_annual: 60000
+  salary_baseline_annual: 60000
+  salary_format_equivalents:
+  - '60000'
+  - 60,000
+  - 60 000
+  - '60.000'
+  - 60K
+  - $60,000 CAD
+  salary_negotiation_candidates_not_equivalent:
+  - 70000
+  - 85000
+  - 95000
+  - 107000
+  salary_rule: Use a higher figure only when supported by the role pay band/seniority and candidate expectations. Never blindly
+    substitute salary figures. Do not reinterpret CAD as USD or annual as hourly.
+  location_priority:
+  - Ottawa ON and Gatineau QC, any work model
+  - Elsewhere Canada, fully remote only
+  enabled_countries:
+  - CA
+  disabled_countries:
+  - US
+  - other
+  us_authorized_but_search_disabled: true
+  ottawa_gatineau_modes:
+  - on_site
+  - hybrid
+  - remote
+  rest_of_canada_modes:
+  - remote
+  relocation_allowed: false
+  employer_exclusions:
+  - TD
+  - RBC
+  - BMO
+  - Scotiabank
+  - Tangerine
+  role_relevance:
+  - collections
+  - accounts receivable
+  - fraud
+  - disputes
+  - credit operations
+  - portfolio management
+  - financial operations
+  - customer operations
+  - bilingual support
+  - operations analyst
+  - data/IT roles only when VERIFIED skill fit is shown
+  remote_requirements: Check hiring jurisdiction, payroll eligibility, required physical office visits and actual onsite days;
+    marketing label Remote is insufficient.
+  employment_status: Self-employed, owns/operates MELATO; not employed by a separate company as of supplied context.
+profile_facts:
+  name: Mohamed Alem
+  email: mohamed@melato.ca
+  phone: +1 343 324 7677
+  location: Ottawa, ON
+  postal_if_mandatory: K1K 4G8
+  linkedin: https://www.linkedin.com/in/mohamedalem
+  business_website: https://melato.ca
+  first_language: French
+  english: Fluent
+  french: Native
+  language_preference: Either, English if forced to pick one
+  business: MELATO
+  current_work: Founder/Operator, self-employed
+  experience: About 7 years in Canadian banking and payments
+  past_employers:
+  - RBC
+  - Scotiabank / Tangerine
+  - BMO
+  - TD
+  leadership: RBC and Scotiabank supervisory duties
+  portfolio: More than 3 years of large-balance account portfolio management
+  skills_self_reported:
+    Excel: Good
+    Salesforce: Medium
+    NetSuite: Very good
+    Google Ad Manager: Very good
+  program_reported: 2-year college studies, Technique en Systèmes Informatiques; award status to be verified
+  CA_work_authorized: true
+  CA_citizen: true
+  US_work_authorized_user_claim: true
+  US_citizen: null
+  US_sponsorship_needed: null
+  background_check_consent: true
+  accuracy_note: Profile contact and old employment from prior context; corroborate with existing verified HunterXJob profile
+    before overwriting any conflicting detail.
+stages:
+- stage: 1
+  name: original_questions_and_fallbacks
+  keys:
+  - salary_expectation
+  - minimum_acceptable_salary
+  - start_availability
+  - notice_period
+  - self_employed
+  - currently_employed_any
+  - currently_employed_elsewhere
+  - current_company
+  - current_role
+  - relocation
+  - onsite_or_hybrid_local
+  - onsite_or_hybrid_nonlocal
+  - work_arrangement_local
+  - work_arrangement_nonlocal
+  - canadian_work_authorization
+  - us_work_authorization
+  - background_check_consent
+  - hear_about_us
+  - bilingual_status
+  - native_language
+  - english_proficiency
+  - french_proficiency
+  - preferred_work_language
+  - city
+  - province
+  - country
+  - postal_code
+  - full_address
+  - unmapped_user_answer_8
+- stage: 2
+  name: requested_additional_question_families
+  keys:
+  - previously_worked_at_target
+  - currently_work_at_target
+  - applied_to_target_before
+  - prior_rejection
+  - current_employee_referral
+  - friends_or_family_at_target
+  - relative_on_board
+  - shares_in_target
+  - conflict_of_interest
+  - noncompete
+  - criminal_convictions
+  - police_clearance
+  - terms_consent
+  - reference_check_consent
+  - share_data_future_roles
+  - marketing_consent
+  - ai_processing_consent
+  - government_clearance
+  - government_employee_current
+  - government_employee_past
+  - government_clearance_eligibility
+  - canadian_citizen
+  - us_citizen
+  - immigration_status_US
+  - sponsorship_required_CA
+  - sponsorship_required_US
+  - social_insurance_number_valid
+  - legal_age
+  - drivers_license
+  - car_ownership
+  - commute_local
+  - commute_outside_local
+  - marital_status
+  - gender
+  - pronouns
+  - sexual_orientation
+  - race_ethnicity
+  - visible_minority
+  - indigenous_identity
+  - disability_status
+  - accommodation_required
+  - veteran_status
+  - professional_organization
+  - highest_education
+  - education_field
+  - professional_certifications
+  - currently_student
+  - vacation_90_day
+  - future_vacation
+  - sales_experience
+  - linkedin_url
+  - personal_website
+  - portfolio_url
+  - quiet_workspace
+  - high_speed_internet
+  - personal_computer
+  - mobile_phone
+  - allergies
+  - management_experience
+- stage: 3
+  name: expanded_ats_question_coverage
+  keys:
+  - banking_experience_years
+  - portfolio_management_experience
+  - portfolio_management_years
+  - fraud_experience
+  - collections_experience
+  - customer_facing_experience
+  - excel_skill
+  - netsuite_skill
+  - salesforce_skill
+  - google_ad_manager_skill
+  - sql_skill
+  - python_skill
+  - smb_lending
+  - direct_underwriting
+  - compliance_experience
+  - supervision_example
+  - why_company
+  - why_role
+  - motivation
+  - greatest_strength
+  - greatest_achievement
+  - difficult_customer
+  - employment_gap
+  - reason_for_leaving
+  - willing_overtime
+  - evening_night_shift
+  - weekend_shifts
+  - work_travel
+  - references_available
+  - competing_offers
+  - salary_history
+  - compensation_type
+  - role_specific_tools
+  - work_eligibility_start
+  - education_graduation_year
+  - birth_date
+  - gov_id
+  - previous_employers
+  - financial_regulatory_action
+  - lawsuits_or_pending_charges
+  - non_disclosure_agreement
+  - work_permit_expiry
+  - physical_job_requirements
+  - security_equipment
+  - internet_billing
+  - pre_employment_test
+  - recorded_interview_consent
+  - religious_identity
+  - national_origin
+  - salary_currency
+  - remote_location_eligibility
+  - time_zone
+  - language_assessment
+  - remote_other_country
+  - school_or_work_references
+question_bank:
+- key: salary_expectation
+  stage: 1
+  category: compensation
+  questions:
+  - What are your salary expectations?
+  - What is your desired annual salary?
+  - Expected base salary (CAD)
+  - Desired compensation
+  - What compensation are you seeking?
+  - What is your salary requirement?
+  - Prétentions salariales?
+  - Salaire annuel souhaité?
+  mode: auto
+  answer: '60000'
+  answer_variants:
+  - 60,000
+  - 60 000
+  - 60K
+  - 60k
+  - '60.000'
+  - $60,000 CAD
+  - CAD 60,000
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: CAD annual baseline. Formatting variants mean 60000. Salary figures 70000/85000/95000/107000 are NEGOTIATION LEVELS,
+    not equivalent-format fallbacks. May choose appropriate higher expectation only with role-level evidence and pay range.
+- key: minimum_acceptable_salary
+  stage: 1
+  category: compensation
+  questions:
+  - What is the minimum annual salary you would accept?
+  - Minimum base salary (CAD)?
+  mode: auto
+  answer: '60000'
+  answer_variants:
+  - $60,000 CAD
+  - 60K
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Hard targeting minimum. Do not use this number for hourly or USD field without validated currency/units conversion.
+- key: start_availability
+  stage: 1
+  category: availability
+  questions:
+  - When can you start?
+  - Earliest availability?
+  - When would you be available to join?
+  - When can you begin work?
+  - Date de disponibilité?
+  mode: auto
+  answer: Immediately
+  answer_variants:
+  - Available immediately
+  - As soon as possible
+  - ASAP
+  - Immediate start
+  - In 2 weeks
+  - Within 14 days
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Immediately is preferred. Two weeks only if immediately is not offered, or the actual employer start requirements
+    justify it. Dates must be calculated when a date picker requires YYYY-MM-DD; never enter words in a date input.
+- key: notice_period
+  stage: 1
+  category: availability
+  questions:
+  - What is your notice period?
+  - How much notice must you give?
+  - What is your current notice?
+  - Délai de préavis?
+  mode: auto
+  answer: '0'
+  answer_variants:
+  - No notice required
+  - Immediately
+  - 0 weeks
+  - Two weeks
+  - 2 weeks
+  - 14 days
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: 0 is the truthful default for preferred start. An optional two-week transition is flexibility, not an obligatory
+    notice period.
+- key: self_employed
+  stage: 1
+  category: employment
+  questions:
+  - Are you self-employed?
+  - Do you operate your own business?
+  - Are you the owner of a company?
+  - Do you currently run a business?
+  mode: auto
+  answer: 'Yes'
+  answer_variants:
+  - Self-employed
+  - Yes, I own and operate MELATO, an apparel brand.
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: currently_employed_any
+  stage: 1
+  category: employment
+  questions:
+  - Are you currently employed?
+  - Do you currently work?
+  - What is your current employment status?
+  - Êtes-vous actuellement employé?
+  mode: auto
+  answer: Self-employed
+  answer_variants:
+  - Yes, self-employed
+  - Business owner
+  - Founder and operator of MELATO
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Do not answer No solely because the candidate is not employed by a separate company. If options are Employed/Unemployed,
+    select Employed only if employer definitions include self-employment; otherwise review.
+- key: currently_employed_elsewhere
+  stage: 1
+  category: employment
+  questions:
+  - Are you presently employed by another organization?
+  - Are you a current employee of another company?
+  - Do you currently work for another employer?
+  mode: auto
+  answer: 'No'
+  answer_variants:
+  - No, I am self-employed running MELATO.
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Distinguish from being self-employed.
+- key: current_company
+  stage: 1
+  category: employment
+  questions:
+  - What is your current company?
+  - Who is your current employer?
+  - Company name (present)
+  - Current organization
+  mode: auto
+  answer: MELATO
+  answer_variants:
+  - Melato
+  - MELATO apparel brand
+  - Self-employed, MELATO
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: current_role
+  stage: 1
+  category: employment
+  questions:
+  - What is your current title?
+  - Current position?
+  - Current job title?
+  mode: auto
+  answer: Founder & Operator
+  answer_variants:
+  - Business Owner
+  - Founder
+  - Owner / Creative Director
+  - Founder and operator of MELATO
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Designer and Creative Director is also a current business role; select based on question context.
+- key: relocation
+  stage: 1
+  category: geography
+  questions:
+  - Are you willing to relocate?
+  - Would you consider moving for this position?
+  - Open to relocation?
+  - Êtes-vous prêt à déménager?
+  mode: auto
+  answer: 'No'
+  answer_variants:
+  - Not open to relocation
+  - I am based in Ottawa and am not seeking relocation.
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: onsite_or_hybrid_local
+  stage: 1
+  category: geography
+  questions:
+  - Are you able to work on-site in Ottawa?
+  - Are you available to work at our Gatineau office?
+  - Can you commute for hybrid work in the Ottawa-Gatineau region?
+  mode: auto
+  answer: 'Yes'
+  answer_variants:
+  - Yes, on-site, hybrid, or remote are all acceptable in Ottawa/Gatineau.
+  option_equivalents: []
+  condition: job.location_in_ottawa_gatineau == true
+  sensitive: false
+  notes: ''
+- key: onsite_or_hybrid_nonlocal
+  stage: 1
+  category: geography
+  questions:
+  - Can you work in person in Toronto?
+  - Are you willing to attend our office in Vancouver?
+  - Can you work hybrid from Montreal?
+  - Are you able to commute to an office outside Ottawa/Gatineau?
+  mode: auto
+  answer: 'No'
+  answer_variants:
+  - No, remote only outside Ottawa/Gatineau.
+  option_equivalents: []
+  condition: job.location_in_ottawa_gatineau == false
+  sensitive: false
+  notes: Filter job out before answering when on-site/hybrid outside the Ottawa-Gatineau area. A Canadian remote role may
+    still have province-specific employment restrictions.
+- key: work_arrangement_local
+  stage: 1
+  category: geography
+  questions:
+  - Which working arrangement do you prefer?
+  - Remote, hybrid or on-site?
+  - Preferred work model?
+  mode: auto
+  answer: No preference
+  answer_variants:
+  - Remote / Hybrid / On-site
+  - Flexible
+  - Any of the three
+  option_equivalents: []
+  condition: job.location_in_ottawa_gatineau == true
+  sensitive: false
+  notes: ''
+- key: work_arrangement_nonlocal
+  stage: 1
+  category: geography
+  questions:
+  - What work setup would you consider if the role is outside Ottawa/Gatineau?
+  - Work model for other Canadian cities?
+  mode: auto
+  answer: Remote
+  answer_variants:
+  - Fully remote
+  - 100% remote
+  - Work from home
+  option_equivalents: []
+  condition: job.location_in_ottawa_gatineau == false
+  sensitive: false
+  notes: ''
+- key: canadian_work_authorization
+  stage: 1
+  category: legal
+  questions:
+  - Are you legally authorized to work in Canada?
+  - Are you eligible to work in Canada?
+  - Do you have the right to work in Canada?
+  - Autorisé à travailler au Canada?
+  mode: auto
+  answer: 'Yes'
+  answer_variants:
+  - I am legally authorized to work in Canada
+  - Authorized
+  - Eligible
+  - Oui
+  option_equivalents: []
+  condition: job.country == CA
+  sensitive: true
+  notes: User provided Canadian citizenship/work history; use only for Canada.
+- key: us_work_authorization
+  stage: 1
+  category: legal
+  questions:
+  - Are you legally authorized to work in the United States?
+  - Are you authorized to work in the US?
+  mode: auto
+  answer: 'Yes'
+  answer_variants:
+  - Legally authorized to work in the United States
+  option_equivalents: []
+  condition: job.country == US
+  sensitive: true
+  notes: User explicitly states US work authorization; does NOT establish US citizenship, visa type, remote payroll eligibility
+    or sponsorship status. US search currently disabled.
+- key: background_check_consent
+  stage: 1
+  category: legal
+  questions:
+  - Do you consent to a background check?
+  - Do you agree to pre-employment background screening?
+  - Are you willing to undergo an authorized background investigation?
+  - Consent to criminal background screening?
+  mode: auto
+  answer: 'Yes'
+  answer_variants:
+  - I consent
+  - I agree
+  - Yes, I consent to lawful employment-related background checks.
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: User explicitly authorized background-check consent. A specific employer authorization agreement with additional
+    terms may require review; consenting does not imply a clean criminal record.
+- key: hear_about_us
+  stage: 1
+  category: recruiting
+  questions:
+  - How did you hear about this job?
+  - How did you learn about this opportunity?
+  - Source of application?
+  - Where did you find our job posting?
+  - Comment avez-vous entendu parler du poste?
+  mode: auto
+  answer: Company website
+  answer_variants:
+  - Company careers page
+  - Company website
+  - Job board
+  - Indeed
+  - LinkedIn
+  - Social Media
+  - Friend
+  - Advertisement
+  - AI assistant
+  - Research
+  - Google search
+  - Other
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Choose the TRUE discovery channel for each specific posting. Preferred source label is not permission to claim a
+    referral or friend when none exists.
+- key: bilingual_status
+  stage: 1
+  category: language
+  questions:
+  - Are you bilingual in English and French?
+  - Which languages do you speak fluently?
+  - Êtes-vous bilingue français-anglais?
+  mode: auto
+  answer: 'Yes'
+  answer_variants:
+  - Fluent in English and French
+  - Bilingual, French and English
+  - Fully bilingual
+  - Oui
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: native_language
+  stage: 1
+  category: language
+  questions:
+  - What is your first language?
+  - Native language?
+  - Langue maternelle?
+  mode: auto
+  answer: French
+  answer_variants:
+  - Français
+  - French (native)
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: english_proficiency
+  stage: 1
+  category: language
+  questions:
+  - How would you rate your English proficiency?
+  - Are you fluent in English?
+  - Anglais niveau?
+  mode: auto
+  answer: Fluent
+  answer_variants:
+  - Professional fluency
+  - Full professional proficiency
+  - Advanced
+  - 'Yes'
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: french_proficiency
+  stage: 1
+  category: language
+  questions:
+  - How would you rate your French proficiency?
+  - Are you fluent in French?
+  - Français niveau?
+  mode: auto
+  answer: Native
+  answer_variants:
+  - Native speaker
+  - Fluent
+  - Mother tongue
+  - French first language
+  - 'Yes'
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: preferred_work_language
+  stage: 1
+  category: language
+  questions:
+  - Which language do you prefer to work in?
+  - Would you prefer English or French?
+  - Preferred interview language?
+  mode: auto
+  answer: English
+  answer_variants:
+  - No strong preference
+  - Either English or French
+  - Bilingual / Both
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Only choose English when a single language is required. Both are acceptable otherwise.
+- key: city
+  stage: 1
+  category: contact
+  questions:
+  - What city do you live in?
+  - Current city?
+  - City of residence?
+  - Location?
+  mode: auto
+  answer: Ottawa
+  answer_variants:
+  - Ottawa, ON
+  - Ottawa, Ontario
+  - Ottawa, ON, Canada
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: province
+  stage: 1
+  category: contact
+  questions:
+  - Which province do you reside in?
+  - Province / State?
+  mode: auto
+  answer: Ontario
+  answer_variants:
+  - 'ON'
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: country
+  stage: 1
+  category: contact
+  questions:
+  - Country of residence?
+  - Where are you based?
+  mode: auto
+  answer: Canada
+  answer_variants:
+  - CA
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: postal_code
+  stage: 1
+  category: contact
+  questions:
+  - Postal code?
+  - ZIP/postal code?
+  - Code postal?
+  mode: auto
+  answer: K1K 4G8
+  answer_variants:
+  - K1K4G8
+  option_equivalents: []
+  condition: field.required == true
+  sensitive: true
+  notes: 'User instructed: provide postal code only when mandatory. Do NOT expand to street address; never treat postal code
+    as exact mailing address.'
+- key: full_address
+  stage: 1
+  category: contact
+  questions:
+  - What is your full street address?
+  - Residential street address?
+  - Mailing address?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Do not invent street address, unit number or neighborhood. If optional, leave blank; if required request an exact
+    address.
+- key: unmapped_user_answer_8
+  stage: 1
+  category: unmapped
+  questions:
+  - '(Unmapped original instruction #8: No, question not provided)'
+  mode: disabled
+  answer: 'No'
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: NEVER map this to any question until the user identifies the intended field.
+- key: previously_worked_at_target
+  stage: 2
+  category: employment
+  questions:
+  - Have you ever worked for us?
+  - Were you previously employed at this company?
+  - Are you a former employee?
+  - Ex-employee?
+  - Have you worked with our organization in the past?
+  mode: contextual
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Compare exact legal employer and acquisition/subsidiary before answering. Do not default No. Existing history includes
+    RBC, TD, BMO, Scotiabank/Tangerine; those are excluded from search, not erased from truth.
+- key: currently_work_at_target
+  stage: 2
+  category: employment
+  questions:
+  - Are you currently an employee of [COMPANY]?
+  - Do you currently work for us?
+  - Are you an internal applicant?
+  mode: contextual
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: No for companies other than user-owned MELATO, barring evidence of a current separate employment relationship.
+- key: applied_to_target_before
+  stage: 2
+  category: recruiting
+  questions:
+  - Have you applied here before?
+  - Have you ever submitted an application to our company?
+  - Prior candidate?
+  mode: contextual
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Require employer-scoped application ledger; absent evidence, review rather than No.
+- key: prior_rejection
+  stage: 2
+  category: recruiting
+  questions:
+  - Have we declined a previous application from you?
+  - Have you been rejected by this employer before?
+  - Previous unsuccessful application?
+  mode: contextual
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Use employer-specific outcome history only; otherwise review.
+- key: current_employee_referral
+  stage: 2
+  category: relationships
+  questions:
+  - Were you referred by an employee?
+  - Do you have an internal referral?
+  - Who referred you?
+  mode: contextual
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: If true referral evidence exists, select Yes + full name. Otherwise No, no fabricated referral.
+- key: friends_or_family_at_target
+  stage: 2
+  category: relationships
+  questions:
+  - Do you have any friends or relatives who work here?
+  - Do you know someone employed at this company?
+  - Are you related to a current employee?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Unknown; never assume no. Separate friend, relative, and referral questions.
+- key: relative_on_board
+  stage: 2
+  category: relationships
+  questions:
+  - Do you know any member of the board of directors?
+  - Is a relative an executive?
+  - Do you have ties to our leadership or executives?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: No prior confirmed facts.
+- key: shares_in_target
+  stage: 2
+  category: conflicts
+  questions:
+  - Do you own stock in our company?
+  - Have you invested in the hiring company?
+  - Do you hold any securities in [COMPANY]?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Unknown; financial holding questions are company-specific and may be subject to definition or exceptions.
+- key: conflict_of_interest
+  stage: 2
+  category: conflicts
+  questions:
+  - Do you have any conflicts of interest?
+  - Any outside employment or ownership interests?
+  - Do you have a business that might conflict with this job?
+  mode: contextual
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Candidate owns MELATO. Disclose self-employment when relevant. Conflict depends on employer policy and role; never
+    automatically mark No.
+- key: noncompete
+  stage: 2
+  category: legal
+  questions:
+  - Are you subject to a non-compete?
+  - Are you bound by any restrictive covenants?
+  - Does an agreement limit your ability to accept this position?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: ''
+- key: criminal_convictions
+  stage: 2
+  category: legal
+  questions:
+  - Have you ever been convicted of a criminal offence?
+  - Do you have a criminal record?
+  - Have you been convicted of a felony?
+  - Any criminal convictions?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: UNKNOWN. Background-check consent is not a criminal-history answer. Follow exact jurisdictional question, time limit,
+    pardon and exceptions.
+- key: police_clearance
+  stage: 2
+  category: legal
+  questions:
+  - Can you provide a police certificate?
+  - Can you pass a criminal record check?
+  - Can you obtain a vulnerable sector check?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Willingness to screening is established; eligibility/result and specialized checks are not.
+- key: terms_consent
+  stage: 2
+  category: consent
+  questions:
+  - Do you agree to our terms and conditions?
+  - I certify this application is true and complete
+  - Accept applicant privacy statement?
+  - Can we process your personal information?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Read actual employer-specific text and confirm it is within pre-approved scope. Do not turn general consent into
+    blanket acceptance of contracts or attestations.
+- key: reference_check_consent
+  stage: 2
+  category: consent
+  questions:
+  - May we contact your references?
+  - May we contact your current or previous employers?
+  - Can we run reference checks?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Distinct from general background check. Contacting MELATO or previous employers may require an explicit contact preference.
+- key: share_data_future_roles
+  stage: 2
+  category: consent
+  questions:
+  - May we keep your resume for future jobs?
+  - Can we contact you about other opportunities?
+  - Join talent pool?
+  mode: skip_optional
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Not necessary for current application. No inferred consent.
+- key: marketing_consent
+  stage: 2
+  category: consent
+  questions:
+  - Subscribe to recruiting news?
+  - Marketing updates?
+  - Would you like company newsletters?
+  mode: skip_optional
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: ''
+- key: ai_processing_consent
+  stage: 2
+  category: consent
+  questions:
+  - Do you consent to AI analysis of your application?
+  - May our AI system evaluate your resume?
+  - AI recruitment consent?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Separate optional and mandatory processing, and assess employer terms.
+- key: government_clearance
+  stage: 2
+  category: government
+  questions:
+  - Do you currently hold a valid government security clearance?
+  - What clearance do you hold?
+  - Do you have Reliability Status, Secret or Top Secret?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Unknown. Never infer clearance from banking roles or CRA applications.
+- key: government_employee_current
+  stage: 2
+  category: government
+  questions:
+  - Are you currently a government employee?
+  - Are you a current public servant?
+  - Êtes-vous employé du gouvernement?
+  mode: auto
+  answer: 'No'
+  answer_variants:
+  - No, I am currently self-employed.
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Based on current self-employment and no current government role; do not use for questions asking ever worked for
+    government.
+- key: government_employee_past
+  stage: 2
+  category: government
+  questions:
+  - Have you ever been a public servant?
+  - Were you employed by the federal government?
+  - Former government employee?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: ''
+- key: government_clearance_eligibility
+  stage: 2
+  category: government
+  questions:
+  - Are you eligible for a Canadian security clearance?
+  - Can you obtain Secret clearance?
+  - Eligible for enhanced reliability screening?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Do not conflate citizenship with all clearance prerequisites.
+- key: canadian_citizen
+  stage: 2
+  category: legal
+  questions:
+  - Are you a Canadian citizen?
+  - Country of citizenship?
+  - Êtes-vous citoyen canadien?
+  mode: auto
+  answer: 'Yes'
+  answer_variants:
+  - Canadian
+  - Canada
+  - Canadian citizen
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Based on prior user-provided citizenship. Separate from work authorization or PR status.
+- key: us_citizen
+  stage: 2
+  category: legal
+  questions:
+  - Are you a United States citizen?
+  - Do you hold US citizenship?
+  - Are you a US national?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: US work authorization does not establish US citizenship. US roles are currently disabled.
+- key: immigration_status_US
+  stage: 2
+  category: legal
+  questions:
+  - What is your US immigration or work visa status?
+  - Are you on H-1B?
+  - Do you have a green card?
+  - Visa category?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Authorization is user-confirmed; immigration class is unknown.
+- key: sponsorship_required_CA
+  stage: 2
+  category: legal
+  questions:
+  - Will you now or in the future require Canadian immigration sponsorship?
+  - Do you need a work visa sponsored in Canada?
+  mode: auto
+  answer: 'No'
+  answer_variants:
+  - No sponsorship required
+  option_equivalents: []
+  condition: job.country == CA
+  sensitive: true
+  notes: Canadian citizen. Do not infer anything about US sponsorship.
+- key: sponsorship_required_US
+  stage: 2
+  category: legal
+  questions:
+  - Will you need employer visa sponsorship now or in the future for US work?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: job.country == US
+  sensitive: true
+  notes: Unknown even though US work authorization is user-confirmed.
+- key: social_insurance_number_valid
+  stage: 2
+  category: legal
+  questions:
+  - Do you have a valid Social Insurance Number?
+  - Do you possess a Canadian SIN?
+  - Will you provide SIN after hire?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Never enter SIN in applications by default. Number itself must not be in this pack.
+- key: legal_age
+  stage: 2
+  category: legal
+  questions:
+  - Are you at least 18?
+  - Are you of legal working age?
+  - Age 18 or older?
+  mode: auto
+  answer: 'Yes'
+  answer_variants:
+  - Over 18
+  - I meet the age requirement
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Age 31 in October 2026 user-provided; legal age minimum only. Do not assume DOB.
+- key: drivers_license
+  stage: 2
+  category: logistics
+  questions:
+  - Do you have a valid driver’s licence?
+  - Do you hold an Ontario G licence?
+  - Are you licensed to drive?
+  - Do you have a G2 licence?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Unknown licence and class. Do not infer from ability to commute.
+- key: car_ownership
+  stage: 2
+  category: logistics
+  questions:
+  - Do you own a vehicle?
+  - Do you have access to a car?
+  - Do you have a personal vehicle?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: commute_local
+  stage: 2
+  category: logistics
+  questions:
+  - Can you reliably commute to Ottawa?
+  - Can you travel to the Gatineau office?
+  - Are you willing to commute?
+  mode: auto
+  answer: 'Yes'
+  answer_variants:
+  - Yes, for roles in Ottawa or Gatineau.
+  option_equivalents: []
+  condition: job.location_in_ottawa_gatineau == true
+  sensitive: false
+  notes: Does not prove ownership of car or licence.
+- key: commute_outside_local
+  stage: 2
+  category: logistics
+  questions:
+  - Can you commute to Toronto three days per week?
+  - Able to travel to Vancouver office weekly?
+  mode: auto
+  answer: 'No'
+  answer_variants:
+  - Not open to a commute outside Ottawa/Gatineau
+  option_equivalents: []
+  condition: job.location_in_ottawa_gatineau == false
+  sensitive: false
+  notes: ''
+- key: marital_status
+  stage: 2
+  category: demographic
+  questions:
+  - Are you married?
+  - What is your marital status?
+  - Single/married?
+  mode: skip_optional
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: ''
+- key: gender
+  stage: 2
+  category: demographic
+  questions:
+  - What is your gender?
+  - How do you identify?
+  - Sex at birth?
+  mode: skip_optional
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Do not infer from name or photos. If optional skip; if must choose, offer Prefer not to answer where available; otherwise
+    review.
+- key: pronouns
+  stage: 2
+  category: demographic
+  questions:
+  - What are your pronouns?
+  - Preferred pronouns?
+  - How should we refer to you?
+  mode: skip_optional
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: ''
+- key: sexual_orientation
+  stage: 2
+  category: demographic
+  questions:
+  - Do you identify as LGBTQ+?
+  - What is your sexual orientation?
+  - Member of LGBTQ community?
+  mode: skip_optional
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: ''
+- key: race_ethnicity
+  stage: 2
+  category: demographic
+  questions:
+  - What is your race?
+  - How would you describe your ethnicity?
+  - Do you identify as Hispanic or Latino?
+  - Ethnic background?
+  mode: skip_optional
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Do not infer from country of origin, language or name.
+- key: visible_minority
+  stage: 2
+  category: demographic
+  questions:
+  - Are you a member of a visible minority?
+  - Do you belong to a designated equity group?
+  - Are you racialized?
+  mode: skip_optional
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: ''
+- key: indigenous_identity
+  stage: 2
+  category: demographic
+  questions:
+  - Do you identify as Indigenous?
+  - First Nations, Inuit or Métis?
+  - Are you an Aboriginal person?
+  mode: skip_optional
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: ''
+- key: disability_status
+  stage: 2
+  category: demographic
+  questions:
+  - Do you identify as a person with a disability?
+  - Do you have a disability?
+  - Self-identification disability?
+  mode: skip_optional
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Do not infer from medical information or ask for sensitive medical disclosures.
+- key: accommodation_required
+  stage: 2
+  category: accommodation
+  questions:
+  - Do you require an accommodation for the hiring process?
+  - Do you need interview accommodations?
+  - Any accessibility needs?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Candidate decides. Optional fields may be skipped rather than answered No.
+- key: veteran_status
+  stage: 2
+  category: demographic
+  questions:
+  - Are you a veteran?
+  - Have you served in the military?
+  - Protected veteran status?
+  mode: skip_optional
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Military service unknown. Never invent No.
+- key: professional_organization
+  stage: 2
+  category: qualifications
+  questions:
+  - Are you a member of a professional association?
+  - Have you been part of an organization?
+  - Do you belong to a professional body?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Distinguish member of any organization from regulated bodies, unions and volunteer affiliations.
+- key: highest_education
+  stage: 2
+  category: education
+  questions:
+  - What is your highest level of education?
+  - Highest credential earned?
+  - Do you have a diploma or degree?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: User reports two years of college studies in computer systems and high school. Graduation/award status must be proven
+    before selecting College Diploma or degree.
+- key: education_field
+  stage: 2
+  category: education
+  questions:
+  - What did you study?
+  - Field of study?
+  - Program of education?
+  - Major?
+  mode: auto
+  answer: Computer Systems (Technique en Systèmes Informatiques)
+  answer_variants:
+  - Computer Systems
+  - Information Technology / Computer Systems
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Program known. Do not claim bachelor, computer engineering, specific degree.
+- key: professional_certifications
+  stage: 2
+  category: qualifications
+  questions:
+  - Do you hold professional certifications?
+  - List your certificates
+  - Do you have CPA/CAMS/CFE/PMP/CFA/CISSP?
+  - Do you have a degree or certification?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: No verified professional certificates in supplied context. Do not respond Yes for any named certification. If optional,
+    leave blank.
+- key: currently_student
+  stage: 2
+  category: education
+  questions:
+  - Are you currently a student?
+  - Are you enrolled in school?
+  - Will you be graduating soon?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Historical education does not establish current student status.
+- key: vacation_90_day
+  stage: 2
+  category: availability
+  questions:
+  - Can you avoid time off in your first 90 days?
+  - Are you available to work for 90 consecutive days?
+  - Will you take a vacation during probation?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Do not claim or promise absence of vacation without owner confirmation and job specifics.
+- key: future_vacation
+  stage: 2
+  category: availability
+  questions:
+  - Do you have any planned vacations?
+  - Are there any upcoming time-off commitments?
+  - Known upcoming absences?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: sales_experience
+  stage: 2
+  category: experience
+  questions:
+  - Do you have sales experience?
+  - Have you worked in sales?
+  - Years of sales experience?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Banking/customer-facing roles do not prove a defined amount of quota-bearing sales. Ask/rely on verified employment
+    evidence.
+- key: linkedin_url
+  stage: 2
+  category: contact
+  questions:
+  - What is your LinkedIn profile?
+  - LinkedIn URL?
+  - LinkedIn account?
+  mode: auto
+  answer: https://www.linkedin.com/in/mohamedalem
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: From prior profile material, should be checked against current live profile before use.
+- key: personal_website
+  stage: 2
+  category: contact
+  questions:
+  - Website?
+  - Personal website?
+  - Business website?
+  mode: auto
+  answer: https://melato.ca
+  answer_variants:
+  - melato.ca
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: This is a business website, not automatically a software-development portfolio.
+- key: portfolio_url
+  stage: 2
+  category: contact
+  questions:
+  - Portfolio?
+  - Design portfolio URL?
+  - Projects website?
+  mode: contextual
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: For fashion/creative work, MELATO site may be relevant. For a tech/design portfolio that explicitly asks for individual
+    work, do not represent melato.ca as a fully evidenced personal case-study portfolio.
+- key: quiet_workspace
+  stage: 2
+  category: remote
+  questions:
+  - Do you have a private, quiet workspace?
+  - A distraction-free place to work remotely?
+  - Dedicated home office?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Not confirmed.
+- key: high_speed_internet
+  stage: 2
+  category: remote
+  questions:
+  - Do you have reliable high-speed internet?
+  - Can you meet minimum bandwidth requirements?
+  - Stable broadband connection?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Access to internet does not establish required download/upload speeds or employer uptime SLA.
+- key: personal_computer
+  stage: 2
+  category: remote
+  questions:
+  - Do you own a computer?
+  - Do you have access to a laptop?
+  - Can you work on your own computer?
+  mode: auto
+  answer: 'Yes'
+  answer_variants:
+  - Yes, I have a MacBook Air.
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: M1 MacBook Air user-provided. Does not prove company device-policy or minimum RAM/performance.
+- key: mobile_phone
+  stage: 2
+  category: remote
+  questions:
+  - Do you have a smartphone?
+  - Do you have a mobile phone?
+  - Can you use a phone for MFA?
+  mode: auto
+  answer: 'Yes'
+  answer_variants:
+  - Yes, I have a smartphone.
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: No claim about specific business phone number unless using verified contact.
+- key: allergies
+  stage: 2
+  category: medical
+  questions:
+  - Do you have allergies?
+  - List your allergies
+  - Any food allergies?
+  mode: skip_optional
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Not relevant to most applications and never infer medical information.
+- key: management_experience
+  stage: 2
+  category: experience
+  questions:
+  - Have you held a leadership position?
+  - Have you supervised a team?
+  - Any people management experience?
+  mode: auto
+  answer: 'Yes'
+  answer_variants:
+  - Yes. I held supervisory responsibilities at RBC and Scotiabank, including coaching, escalations, assessments and reporting.
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Do not invent number of direct reports or years of people-management tenure.
+- key: banking_experience_years
+  stage: 3
+  category: experience
+  questions:
+  - How many years of banking experience do you have?
+  - Years of financial services experience?
+  - Experience in financial institutions?
+  mode: auto
+  answer: '7'
+  answer_variants:
+  - 7 years
+  - Approximately 7 years
+  - Seven years
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Prior user-provided approximate 7 years Canadian banking/payments. No inflation to 8+.
+- key: portfolio_management_experience
+  stage: 3
+  category: experience
+  questions:
+  - Have you managed an account portfolio?
+  - Experience with high-balance accounts?
+  - Are you familiar with collections portfolios?
+  mode: auto
+  answer: 'Yes'
+  answer_variants:
+  - Yes, including more than three years of managing large-balance portfolios.
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: portfolio_management_years
+  stage: 3
+  category: experience
+  questions:
+  - How many years of large-balance portfolio management?
+  - Years managing credit or collection accounts?
+  mode: auto
+  answer: 3+
+  answer_variants:
+  - More than 3 years
+  - At least 3 years
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Only for large-balance account portfolio scope; does not imply commercial loan portfolio ownership.
+- key: fraud_experience
+  stage: 3
+  category: experience
+  questions:
+  - Have you worked in fraud analysis?
+  - Do you have experience handling fraud investigations?
+  - Experience in payment disputes?
+  mode: auto
+  answer: 'Yes'
+  answer_variants:
+  - Yes, fraud, disputes, escalations and transaction-risk decisions in Canadian banking.
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: collections_experience
+  stage: 3
+  category: experience
+  questions:
+  - Have you worked in collections?
+  - Experience with accounts receivable or collections?
+  - Have you managed delinquent portfolios?
+  mode: auto
+  answer: 'Yes'
+  answer_variants:
+  - Yes, collections, account portfolios and loan-related operations.
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: customer_facing_experience
+  stage: 3
+  category: experience
+  questions:
+  - Do you have customer-facing experience?
+  - Are you comfortable interacting with clients?
+  - Have you supported customers directly?
+  mode: auto
+  answer: 'Yes'
+  answer_variants:
+  - Yes, including bilingual escalations, customer support and banking operations.
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: excel_skill
+  stage: 3
+  category: skills
+  questions:
+  - Do you have Excel experience?
+  - How proficient are you in Microsoft Excel?
+  - Excel competency?
+  mode: auto
+  answer: Good
+  answer_variants:
+  - Proficient
+  - Experienced
+  - 'Yes'
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: 'User rating: Good. Do not auto-claim expert VBA, Power Query, Excel macros, Power Pivot or financial modeling.'
+- key: netsuite_skill
+  stage: 3
+  category: skills
+  questions:
+  - Have you used NetSuite?
+  - Are you proficient in Oracle NetSuite?
+  - NetSuite familiarity?
+  mode: auto
+  answer: Very good
+  answer_variants:
+  - Highly proficient
+  - 'Yes'
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: salesforce_skill
+  stage: 3
+  category: skills
+  questions:
+  - Have you used Salesforce?
+  - How proficient are you in Salesforce?
+  - Salesforce CRM experience?
+  mode: auto
+  answer: Intermediate
+  answer_variants:
+  - Moderate
+  - Medium
+  - 'Yes'
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: google_ad_manager_skill
+  stage: 3
+  category: skills
+  questions:
+  - Experience with Google Ad Manager?
+  - Are you proficient in Google Ad Manager?
+  mode: auto
+  answer: Very good
+  answer_variants:
+  - Highly proficient
+  - 'Yes'
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Google Ad Manager is not Google Analytics or Google Ads certifications.
+- key: sql_skill
+  stage: 3
+  category: skills
+  questions:
+  - Do you know SQL?
+  - Years of SQL experience?
+  - Describe your SQL experience
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Previous application questions about SQL do NOT prove direct job experience. Do not invent SQL fluency, SQL projects,
+    data engineering or years.
+- key: python_skill
+  stage: 3
+  category: skills
+  questions:
+  - Do you have professional Python experience?
+  - How many years using Python at work?
+  - Python proficiency?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Technical interest is not professional Python experience.
+- key: smb_lending
+  stage: 3
+  category: experience
+  questions:
+  - Have you worked in SMB lending?
+  - How many years of commercial underwriting?
+  - Which small-business credit products have you owned?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: No verified independent SMB underwriting or policy ownership. Do not convert consumer banking/collections experience
+    into SMB credit underwriting.
+- key: direct_underwriting
+  stage: 3
+  category: experience
+  questions:
+  - Have you personally underwritten credit applications?
+  - Did you set credit risk policy?
+  - Credit policy ownership?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Review before saying Yes. Distinguish loan servicing and credit decision support from underwriting authority.
+- key: compliance_experience
+  stage: 3
+  category: experience
+  questions:
+  - Do you have regulated financial services experience?
+  - Experience following bank policy, escalations and investigations?
+  mode: auto
+  answer: 'Yes'
+  answer_variants:
+  - Yes, within Canadian banking and payment operations.
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Do not invent CAMS, FINTRAC investigator duties, securities registration or specialized certifications.
+- key: supervision_example
+  stage: 3
+  category: free_text
+  questions:
+  - Describe your leadership experience
+  - Have you coached teammates?
+  - Tell us about management responsibilities
+  mode: generate_verified
+  answer: At RBC and Scotiabank, I supported supervisory operations, including escalations, coaching, assessments and reporting,
+    while helping teams deliver accurate decisions in high-pressure financial services environments.
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: May tailor but only from verified accomplishments. Never invent team size, percentages or awards.
+- key: why_company
+  stage: 3
+  category: free_text
+  questions:
+  - Why do you want to work here?
+  - Why our company?
+  - What attracted you to [COMPANY]?
+  - Why us?
+  mode: generate_verified
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Use accurate employer mission/product and job description + candidate banking/operations/leadership skills; no generic
+    unsupported claims. Avoid empty enthusiasm. Example template in writing guide.
+- key: why_role
+  stage: 3
+  category: free_text
+  questions:
+  - Why are you applying for this role?
+  - What interests you about this position?
+  - Why this role?
+  mode: generate_verified
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Tie two or three VERIFIED role requirements to matching experience; do not claim unexplained skills.
+- key: motivation
+  stage: 3
+  category: free_text
+  questions:
+  - What motivates you?
+  - What are you looking for in your next opportunity?
+  - Career goals?
+  mode: generate_verified
+  answer: I am looking for a role where I can apply my background in financial operations, fraud, account management and team
+    support to deliver measurable value, while continuing to develop professionally.
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: greatest_strength
+  stage: 3
+  category: free_text
+  questions:
+  - What is your greatest strength?
+  - What makes you a strong candidate?
+  - What value would you bring?
+  mode: generate_verified
+  answer: My strengths are structured problem-solving, bilingual communication, handling escalations, and making careful decisions
+    in demanding financial-services environments.
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: greatest_achievement
+  stage: 3
+  category: free_text
+  questions:
+  - What is your proudest accomplishment?
+  - Describe a significant professional achievement
+  mode: generate_verified
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Requires a real verified result. Do not invent monetary savings or performance rates.
+- key: difficult_customer
+  stage: 3
+  category: free_text
+  questions:
+  - Describe a challenging customer situation
+  - How do you handle difficult clients?
+  - Tell us about a difficult escalation
+  mode: generate_verified
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Answer as a general approach or grounded example, not invented case narrative, date, dollars or outcome.
+- key: employment_gap
+  stage: 3
+  category: free_text
+  questions:
+  - Explain your career gap
+  - What have you been doing since your last job?
+  - Why have you not worked since 2025?
+  mode: generate_verified
+  answer: I have been operating my apparel brand, MELATO, while pursuing my next professional opportunity.
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Do not say unemployed in a way that erases self-employment. Do not invent business revenue.
+- key: reason_for_leaving
+  stage: 3
+  category: employment
+  questions:
+  - Why did you leave your previous job?
+  - Reason for leaving last employer?
+  - Why are you seeking a new position?
+  mode: contextual
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Employer-specific and accuracy-sensitive. Scotiabank/Tangerine contract finished; older roles have specific history.
+    Never imply dismissal for performance or fabricate a universal leaving reason.
+- key: willing_overtime
+  stage: 3
+  category: availability
+  questions:
+  - Can you work overtime?
+  - Would you be available for extra hours?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: evening_night_shift
+  stage: 3
+  category: availability
+  questions:
+  - Can you work evenings?
+  - Can you do night shifts?
+  - Are you available for rotational shifts?
+  mode: contextual
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Past night-shift work at RBC does not automatically establish current availability for every schedule.
+- key: weekend_shifts
+  stage: 3
+  category: availability
+  questions:
+  - Are you willing to work weekends?
+  - Can you work on statutory holidays?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: work_travel
+  stage: 3
+  category: logistics
+  questions:
+  - Can you travel for work?
+  - Are you willing to travel 25%?
+  - Do you have a valid passport?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Separate short business travel, overnight travel and international travel, and passport validity.
+- key: references_available
+  stage: 3
+  category: references
+  questions:
+  - Can you provide professional references?
+  - List professional referees
+  - Reference contacts?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Never invent people, contact info or consent to contact.
+- key: competing_offers
+  stage: 3
+  category: recruiting
+  questions:
+  - Are you interviewing with other employers?
+  - Do you have any offers?
+  - Where else are you applying?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: ''
+- key: salary_history
+  stage: 3
+  category: compensation
+  questions:
+  - What was your previous salary?
+  - Current compensation?
+  - What did you earn at your last employer?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Do not substitute desired salary for historical earnings. May leave blank when optional and follow relevant legal
+    requirements.
+- key: compensation_type
+  stage: 3
+  category: compensation
+  questions:
+  - Hourly or salaried?
+  - What pay structure do you prefer?
+  - Base salary or commission?
+  mode: contextual
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Default CAD annual baseline where asked; do not invent compensation preferences for commission, equity or bonus.
+- key: role_specific_tools
+  stage: 3
+  category: skills
+  questions:
+  - Which systems have you worked with?
+  - List the CRM/ERP tools you have used
+  - Which software tools do you know?
+  mode: generate_verified
+  answer: Excel, NetSuite, Salesforce and Google Ad Manager.
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Describe relative proficiency accurately. Do not add SQL, Python, SAP, Power BI, Tableau, AWS or other tools without
+    factual basis.
+- key: work_eligibility_start
+  stage: 3
+  category: legal
+  questions:
+  - Can you provide documentation proving eligibility to work?
+  - Can you produce proof of right to work before starting?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Legal right to work known, but not possession of specific documents, type or immediately available copies.
+- key: education_graduation_year
+  stage: 3
+  category: education
+  questions:
+  - What year did you graduate?
+  - Education completion date?
+  - When was your degree awarded?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: No verified completion date. Never calculate from age.
+- key: birth_date
+  stage: 3
+  category: legal
+  questions:
+  - Date of birth?
+  - What is your DOB?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Do not infer from age. Do not disclose if optional and unnecessary.
+- key: gov_id
+  stage: 3
+  category: legal
+  questions:
+  - Government ID number?
+  - Passport number?
+  - Social Insurance Number?
+  - SSN?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: NEVER store or autofill identification numbers in the public answer pack. Require secure verified employer-specific
+    collection only when necessary.
+- key: previous_employers
+  stage: 3
+  category: employment
+  questions:
+  - List previous employers
+  - Employment history?
+  - Where have you worked?
+  mode: generate_verified
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Use verified HunterXJob profile to populate RBC, Scotiabank/Tangerine, BMO, TD and MELATO with exact titles and dates.
+    Do not use this Q&A bank to override current verified résumé chronology.
+- key: financial_regulatory_action
+  stage: 3
+  category: legal
+  questions:
+  - Are you barred from working in financial services?
+  - Have you been disciplined by a financial regulator?
+  - Do you have sanctions or debarments?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: ''
+- key: lawsuits_or_pending_charges
+  stage: 3
+  category: legal
+  questions:
+  - Any pending criminal charges?
+  - Any pending litigation?
+  - Are you currently subject to a legal proceeding?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: ''
+- key: non_disclosure_agreement
+  stage: 3
+  category: legal
+  questions:
+  - Are you bound by an NDA?
+  - Can you comply with confidentiality obligations?
+  - Are you under an existing confidentiality agreement?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Distinguish current agreements from generic willingness to respect employer confidentiality.
+- key: work_permit_expiry
+  stage: 3
+  category: legal
+  questions:
+  - Does your work permit expire?
+  - What is the expiry of your authorization?
+  - Work permit valid through?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Canadian citizenship means no Canadian work permit necessary, but exact form may be inapplicable rather than dates.
+    US visa unknown.
+- key: physical_job_requirements
+  stage: 3
+  category: eligibility
+  questions:
+  - Can you lift 50 pounds?
+  - Can you stand for 8 hours?
+  - Are you able to perform essential physical duties?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Job-specific accommodation/ability should not be assumed.
+- key: security_equipment
+  stage: 3
+  category: remote
+  questions:
+  - Do you have secure home workspace equipment?
+  - Do you own a webcam and headset?
+  - Can you meet remote-work security standards?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Having a laptop or phone does not guarantee enterprise security equipment or software.
+- key: internet_billing
+  stage: 3
+  category: remote
+  questions:
+  - Are you willing to pay for home internet?
+  - Do you have a minimum 100Mbps internet connection?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: ''
+- key: pre_employment_test
+  stage: 3
+  category: assessments
+  questions:
+  - Are you willing to complete a skills assessment?
+  - Can you take an aptitude test?
+  - Will you complete a job-related test?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Do not automatically consent to proctoring/recording or third-party data uses. Can prepare, but cannot impersonate.
+- key: recorded_interview_consent
+  stage: 3
+  category: consent
+  questions:
+  - Do you consent to recording an interview?
+  - Can we record your video answers?
+  - Is automated interview recording acceptable?
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: ''
+- key: religious_identity
+  stage: 3
+  category: demographic
+  questions:
+  - What is your religion?
+  - Religious affiliation?
+  - Faith?
+  mode: skip_optional
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: ''
+- key: national_origin
+  stage: 3
+  category: demographic
+  questions:
+  - Where were you born?
+  - What is your national origin?
+  - Country of birth?
+  mode: skip_optional
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Not the same as citizenship; no need to disclose as demographic field.
+- key: salary_currency
+  stage: 3
+  category: compensation
+  questions:
+  - What currency do you expect to be paid in?
+  - Salary currency?
+  mode: auto
+  answer: CAD
+  answer_variants:
+  - Canadian dollars
+  - Canadian Dollar
+  option_equivalents: []
+  condition: job.country == CA
+  sensitive: false
+  notes: ''
+- key: remote_location_eligibility
+  stage: 3
+  category: geography
+  questions:
+  - Do you reside in Ontario?
+  - Are you based in Canada for remote employment?
+  - Where will you perform the remote role?
+  mode: auto
+  answer: Ottawa, Ontario, Canada
+  answer_variants:
+  - Ottawa, ON
+  - Ontario
+  - Canada
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Only choose an option if it correctly corresponds to the precise question. Never choose California from an Ontario-like
+    selector.
+- key: time_zone
+  stage: 3
+  category: remote
+  questions:
+  - What time zone are you in?
+  - Work-time zone?
+  - Where will you work from?
+  mode: auto
+  answer: America/Toronto
+  answer_variants:
+  - Eastern Time
+  - ET
+  - EST/EDT as applicable
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: America/Toronto handles DST correctly.
+- key: language_assessment
+  stage: 3
+  category: language
+  questions:
+  - Can you work professionally in English and French?
+  - Can you take a bilingual assessment?
+  mode: auto
+  answer: 'Yes'
+  answer_variants:
+  - Fully bilingual in English and French
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: Do not claim specific language-test scores, certifications or government clearance results without verified test
+    record.
+- key: remote_other_country
+  stage: 3
+  category: geography
+  questions:
+  - Can you work remotely from the US?
+  - Open to roles anywhere in the world?
+  - Would you work in a different country?
+  mode: disabled
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: false
+  notes: US/international discovery disabled. US work authorization and country of residence are separate facts. No remote-for-US
+    assurances.
+- key: school_or_work_references
+  stage: 3
+  category: references
+  questions:
+  - Can we contact your current manager?
+  - May we contact your last supervisor?
+  - Please provide your manager email
+  mode: review
+  answer: null
+  answer_variants: []
+  option_equivalents: []
+  condition: null
+  sensitive: true
+  notes: Do not contact former employers without approved person and availability.
