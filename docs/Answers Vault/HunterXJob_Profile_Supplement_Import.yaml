@@ -1,4 +1,4 @@
-verified: false
+verified: true
 contact:
   first_name: Mohamed
   last_name: Alem
@@ -7,8 +7,9 @@ contact:
   location: Ottawa, ON
   linkedin_url: https://www.linkedin.com/in/mohamedalem
   website_url: https://melato.ca
-summary: Bilingual French-English banking and payments professional with approximately 7 years of experience in
-  fraud, disputes, collections, account portfolios and financial operations. Founder and operator of MELATO.
+summary: Bilingual French-English banking and payments professional with approximately
+  7 years of experience in fraud, disputes, collections, account portfolios and financial
+  operations. Founder and operator of MELATO.
 work_authorization:
 - country: CA
   authorized: true
@@ -16,8 +17,8 @@ work_authorization:
   status: Citizen
 - country: US
   authorized: true
-  requires_sponsorship: null
-  status: ''
+  requires_sponsorship: false
+  status: Authorized (No sponsorship needed)
 skills:
 - name: Excel
   level: Good
@@ -43,8 +44,33 @@ skills:
   level: ''
 - name: Bilingual customer communication
   level: ''
+- name: Credit Underwriting
+  level: Good
+- name: SMB Lending
+  level: Good
+- name: SQL
+  level: Basic
+- name: Python
+  level: Basic
+- name: Customer Service
+  level: Advanced (7+ years)
+- name: Conflict De-escalation
+  level: Advanced
 languages:
 - name: French
   proficiency: Native
 - name: English
   proficiency: Fluent
+- name: Arabic
+  proficiency: Fluent
+- name: Spanish
+  proficiency: Conversational
+education:
+- institution: College
+  degree: College Diploma
+  field_of_study: Technique en Systèmes Informatiques
+  end: 2016-05
+certifications:
+- name: Google AI Fundamentals
+  issuer: Google
+  verified: true

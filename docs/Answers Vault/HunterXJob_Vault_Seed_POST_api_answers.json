@@ -6,7 +6,7 @@
     "scope": "global",
     "confidence": 1.0,
     "sensitive": true,
-    "note": "CAD annual baseline; company/job-specific salary must be evaluated against salary range."
+    "note": "CAD annual baseline; company/job-specific salary evaluated against range."
   },
   {
     "key": "willing_to_relocate",
@@ -33,7 +33,7 @@
     "scope": "global",
     "confidence": 1.0,
     "sensitive": false,
-    "note": "Date inputs must be formatted from actual future start date, not this string."
+    "note": "Can start immediately."
   },
   {
     "key": "current_company",
@@ -60,7 +60,16 @@
     "scope": "global",
     "confidence": 1.0,
     "sensitive": true,
-    "note": "Legally entitled to work in Canada."
+    "note": "Legally entitled to work in Canada. Canadian citizen."
+  },
+  {
+    "key": "canadian_citizen",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Canadian citizen."
   },
   {
     "key": "sponsorship_CA",
@@ -69,7 +78,16 @@
     "scope": "global",
     "confidence": 1.0,
     "sensitive": true,
-    "note": "Canadian citizen."
+    "note": "Canadian citizen, no sponsorship required."
+  },
+  {
+    "key": "sponsorship_required_CA",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "No sponsorship required in Canada."
   },
   {
     "key": "work_authorization_US",
@@ -78,7 +96,466 @@
     "scope": "global",
     "confidence": 1.0,
     "sensitive": true,
-    "note": "Direct user assertion; US sourcing currently disabled and sponsorship details unknown."
+    "note": "Authorized to work in US; no sponsorship needed."
+  },
+  {
+    "key": "us_citizen",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Not a US citizen (Canadian citizen)."
+  },
+  {
+    "key": "sponsorship_required_US",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "No US sponsorship needed."
+  },
+  {
+    "key": "highest_education",
+    "value": "College Diploma",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Graduated with College Diploma in Computer Systems (Technique en Systèmes Informatiques) in 2016."
+  },
+  {
+    "key": "education_field",
+    "value": "Computer Systems (Technique en Systèmes Informatiques)",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Computer Systems / Technique en Systèmes Informatiques."
+  },
+  {
+    "key": "education_graduation_year",
+    "value": "2016",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Graduated in 2016."
+  },
+  {
+    "key": "currently_student",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Not currently a student and not planning to return to school soon."
+  },
+  {
+    "key": "plans_return_to_school",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "No plans to go back to school in future."
+  },
+  {
+    "key": "professional_certifications",
+    "value": "Google AI Fundamentals",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Holds Google AI Fundamentals certificate."
+  },
+  {
+    "key": "quiet_workspace",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Dedicated private, quiet home office suitable for confidential remote work."
+  },
+  {
+    "key": "high_speed_internet",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Has reliable high-speed broadband internet."
+  },
+  {
+    "key": "security_equipment",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Secure home workspace equipment in place."
+  },
+  {
+    "key": "remote_workspace",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Fully equipped for remote work."
+  },
+  {
+    "key": "willing_overtime",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Open to overtime; weekdays preferred."
+  },
+  {
+    "key": "weekend_shifts",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Able to work weekends if needed (weekdays preferred)."
+  },
+  {
+    "key": "evening_night_shift",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Able to work evenings, overnight, call center, and fast-paced environments."
+  },
+  {
+    "key": "holiday_work",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Able to work on holidays."
+  },
+  {
+    "key": "work_travel",
+    "value": "Yes (up to 10%)",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Able to travel up to 10% for work."
+  },
+  {
+    "key": "criminal_convictions",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "No criminal record."
+  },
+  {
+    "key": "criminal_record",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "No criminal record."
+  },
+  {
+    "key": "police_clearance",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Can provide police certificate / clearance documentation upon request."
+  },
+  {
+    "key": "government_clearance",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Does not currently hold a government security clearance."
+  },
+  {
+    "key": "drivers_license",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Holds valid Ontario G driver's licence."
+  },
+  {
+    "key": "car_ownership",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Owns and has access to a vehicle."
+  },
+  {
+    "key": "direct_underwriting",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Has credit underwriting experience / lending authority."
+  },
+  {
+    "key": "smb_lending",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Has SMB lending experience."
+  },
+  {
+    "key": "sql_skill",
+    "value": "Basic",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Basic SQL proficiency."
+  },
+  {
+    "key": "python_skill",
+    "value": "Basic",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Basic Python proficiency."
+  },
+  {
+    "key": "computer_skill_level",
+    "value": "Advanced",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Advanced computer proficiency."
+  },
+  {
+    "key": "customer_service_years",
+    "value": "7+",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Over 7 years of customer-facing experience in financial services and retail."
+  },
+  {
+    "key": "customer_deescalation",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Experienced and skilled in de-escalating customer conflicts."
+  },
+  {
+    "key": "teamwork",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Thrives in team environments."
+  },
+  {
+    "key": "work_independently",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Able to work independently and self-manage."
+  },
+  {
+    "key": "references_available",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Professional supervisory references available upon request."
+  },
+  {
+    "key": "school_or_work_references",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Consents to employer contacting professional references."
+  },
+  {
+    "key": "reference_check_consent",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Consents to reference checks."
+  },
+  {
+    "key": "noncompete",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Not subject to any non-compete agreements."
+  },
+  {
+    "key": "fired_from_job",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Has never been terminated or dismissed from employment."
+  },
+  {
+    "key": "referral_source",
+    "value": "Indeed, LinkedIn, Social Media",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Job boards (Indeed, LinkedIn) or company social channels."
+  },
+  {
+    "key": "hear_about_us",
+    "value": "Indeed, LinkedIn, Social Media",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Job boards (Indeed, LinkedIn) or company social channels."
+  },
+  {
+    "key": "current_employee_referral",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "No employee referral."
+  },
+  {
+    "key": "previously_worked_at_target",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Has not previously worked for company."
+  },
+  {
+    "key": "currently_work_at_target",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Not a current employee of target company."
+  },
+  {
+    "key": "friends_or_family_at_target",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "No family or household members have worked at target company."
+  },
+  {
+    "key": "relative_on_board",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "No relatives on board of directors."
+  },
+  {
+    "key": "shares_in_target",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Does not own material shares in target company."
+  },
+  {
+    "key": "conflict_of_interest",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "No conflicts of interest."
+  },
+  {
+    "key": "politically_involved",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Not a politically exposed person (PEP)."
+  },
+  {
+    "key": "government_employee_current",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Not currently a public servant."
+  },
+  {
+    "key": "government_employee_past",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Has not been a public servant."
+  },
+  {
+    "key": "future_vacation",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "No upcoming planned vacations."
+  },
+  {
+    "key": "vacation_90_day",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Able to avoid time off in the first 90 days."
   },
   {
     "key": "background_check_consent",
@@ -87,16 +564,178 @@
     "scope": "global",
     "confidence": 1.0,
     "sensitive": true,
-    "note": "User consents to lawful employment-related background checks only; not other contracts."
+    "note": "Consents to lawful employment-related background checks."
   },
   {
-    "key": "language_proficiency",
-    "value": "French (Native)|English (Fluent)",
+    "key": "terms_consent",
+    "value": "Yes",
     "source": "user",
     "scope": "global",
     "confidence": 1.0,
     "sensitive": false,
-    "note": "User says French first language and fluent English."
+    "note": "Accepts terms, conditions, and employment agreements."
+  },
+  {
+    "key": "agreement_consent",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Accepts standard agreements."
+  },
+  {
+    "key": "salary_acceptance",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Accepts offered salary within expected range."
+  },
+  {
+    "key": "working_conditions_acceptance",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Accepts standard working conditions."
+  },
+  {
+    "key": "language_proficiency",
+    "value": "French (Native)|English (Fluent)|Arabic (Fluent)|Spanish (Conversational)",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Fully bilingual French/English; also speaks Arabic and conversational Spanish."
+  },
+  {
+    "key": "native_language",
+    "value": "French",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "French native."
+  },
+  {
+    "key": "english_proficiency",
+    "value": "Fluent",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Fluent English."
+  },
+  {
+    "key": "french_proficiency",
+    "value": "Native",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Native French."
+  },
+  {
+    "key": "disability_status",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "No disability."
+  },
+  {
+    "key": "disability",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "No disability."
+  },
+  {
+    "key": "accommodation_required",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "No accessibility accommodations required."
+  },
+  {
+    "key": "gender",
+    "value": "Man",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Man (Cisgender)."
+  },
+  {
+    "key": "gender_identity",
+    "value": "Man",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Cisgender Man."
+  },
+  {
+    "key": "sexual_orientation",
+    "value": "Heterosexual",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Heterosexual / Straight."
+  },
+  {
+    "key": "visible_minority",
+    "value": "Yes",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Member of visible minority."
+  },
+  {
+    "key": "race_ethnicity",
+    "value": "Black",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Black."
+  },
+  {
+    "key": "veteran_status",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Not a veteran / military forces member."
+  },
+  {
+    "key": "indigenous_identity",
+    "value": "No",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Not Indigenous / Native."
+  },
+  {
+    "key": "allergies",
+    "value": "Penicillin",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Allergic to Penicillin; no other allergies."
   },
   {
     "key": "city",
@@ -105,7 +744,7 @@
     "scope": "global",
     "confidence": 1.0,
     "sensitive": false,
-    "note": "User instructs Ottawa, ON; only fill postal code when mandatory."
+    "note": "Ottawa, ON."
   },
   {
     "key": "state",
@@ -114,7 +753,7 @@
     "scope": "global",
     "confidence": 1.0,
     "sensitive": false,
-    "note": "Do not select Ontario, California."
+    "note": "Ontario, Canada."
   },
   {
     "key": "country",
@@ -123,7 +762,7 @@
     "scope": "global",
     "confidence": 1.0,
     "sensitive": false,
-    "note": "Residence and target market."
+    "note": "Canada."
   },
   {
     "key": "linkedin_url",
@@ -132,7 +771,7 @@
     "scope": "global",
     "confidence": 1.0,
     "sensitive": false,
-    "note": "From past user profile; cross-check current profile."
+    "note": "LinkedIn profile."
   },
   {
     "key": "website_url",
@@ -141,6 +780,15 @@
     "scope": "global",
     "confidence": 1.0,
     "sensitive": false,
-    "note": "Business website, not personal software portfolio."
+    "note": "Business website."
+  },
+  {
+    "key": "why_company_motivation",
+    "value": "I thrive in a collaborative, transparent, and high-trust work culture that values operational excellence, continuous learning, and mutual respect. What motivates me is solving meaningful problems, delivering measurable value to clients and team members, and applying my background in financial operations, risk analysis, and customer success to achieve shared goals.",
+    "source": "user",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Candidate motivation and work culture answer."
   }
 ]

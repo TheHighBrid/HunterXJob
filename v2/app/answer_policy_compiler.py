@@ -19,12 +19,20 @@ from app.question_catalog import normalize_text
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_POLICY_PATH = (
-    Path(__file__).resolve().parent.parent / "docs" / "Answers Vault" / "HunterXJob_Master_Answer_Policy_v3.yaml"
-)
-DEFAULT_SEED_JSON_PATH = (
-    Path(__file__).resolve().parent.parent / "docs" / "Answers Vault" / "HunterXJob_Vault_Seed_POST_api_answers.json"
-)
+def _resolve_vault_path(filename: str) -> Path:
+    candidates = [
+        Path(__file__).resolve().parent.parent / "docs" / "Answers Vault" / filename,
+        Path(__file__).resolve().parent.parent.parent / "docs" / "Answers Vault" / filename,
+        Path.cwd() / "docs" / "Answers Vault" / filename,
+        Path.cwd().parent / "docs" / "Answers Vault" / filename,
+    ]
+    for c in candidates:
+        if c.is_file():
+            return c
+    return candidates[0]
+
+DEFAULT_POLICY_PATH = _resolve_vault_path("HunterXJob_Master_Answer_Policy_v3.yaml")
+DEFAULT_SEED_JSON_PATH = _resolve_vault_path("HunterXJob_Vault_Seed_POST_api_answers.json")
 
 
 @dataclass(frozen=True)
@@ -121,12 +129,9 @@ def load_master_policy(path: Path | str | None = None, *, force_reload: bool = F
 
     target_path = Path(path) if path else DEFAULT_POLICY_PATH
     if not target_path.is_file():
-        # Fallback to secondary location
-        alt_path = Path("/Users/tyf12/Downloads/HunterXJob-main/docs/Answers Vault/HunterXJob_Master_Answer_Policy_v3.yaml")
-        if alt_path.is_file():
-            target_path = alt_path
-        else:
-            raise FileNotFoundError(f"Master Answer Policy YAML not found at {target_path}")
+        target_path = _resolve_vault_path("HunterXJob_Master_Answer_Policy_v3.yaml")
+    if not target_path.is_file():
+        raise FileNotFoundError(f"Master Answer Policy YAML not found at {target_path}")
 
     raw = yaml.safe_load(target_path.read_text(encoding="utf-8")) or {}
 
@@ -187,11 +192,9 @@ def get_seed_records(json_path: Path | str | None = None) -> list[dict[str, Any]
 
     target = Path(json_path) if json_path else DEFAULT_SEED_JSON_PATH
     if not target.is_file():
-        alt = Path("/Users/tyf12/Downloads/HunterXJob-main/docs/Answers Vault/HunterXJob_Vault_Seed_POST_api_answers.json")
-        if alt.is_file():
-            target = alt
-        else:
-            return []
+        target = _resolve_vault_path("HunterXJob_Vault_Seed_POST_api_answers.json")
+    if not target.is_file():
+        return []
 
     data = json.loads(target.read_text(encoding="utf-8"))
     return data if isinstance(data, list) else []
