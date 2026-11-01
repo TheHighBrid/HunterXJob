@@ -247,15 +247,14 @@ def _value_matches_resolved(item: dict[str, Any]) -> bool:
     if norm_res in {"no", "n", "false"} and norm_val.startswith("no"):
         return True
     if item.get("resolved_key") == "language_proficiency":
-        try:
-            from app.option_derivation import parse_languages, _CEFR_ORDER
+        from app.option_derivation import _CEFR_ORDER, parse_languages
+
+        with contextlib.suppress(KeyError, ValueError, AttributeError):
             levels = parse_languages(resolved)
             if levels and "english" in levels and "french" in levels:
                 weaker = min(levels["english"], levels["french"], key=_CEFR_ORDER.index)
                 if weaker.lower() in norm_val:
                     return True
-        except Exception:
-            pass
     return False
 
 
