@@ -2,7 +2,23 @@
 
 Tracking issue: [#9](https://github.com/TheHighBrid/HunterXJob/issues/9)
 
-Updated: 2026-10-05
+Updated: 2026-11-02
+
+## Evidence labels
+
+Every status claim in this file and in [LIVE_PATHWAY.md](LIVE_PATHWAY.md) uses
+exactly one of these labels:
+
+| Label | Meaning |
+|---|---|
+| Production-evidenced | Seen working on real applications, with a pointer to the evidence (ledger row, confirmation, artifact). No pointer, no label. |
+| Independently tested | Verified by checks that don't reuse the code under test, such as CI tests, gates or rehearsals. Not yet seen in production. |
+| Repo-only | Merged code or numbers with no independent test or production run behind them. |
+| Documented but unverified | Stated in docs or reported by the owner, but nothing in this repo verifies it. |
+
+Live applications run through JobTomatik's supervised services, not HunterXJob.
+See [LIVE_PATHWAY.md](LIVE_PATHWAY.md). The `v2/` dry-run lock below applies to
+HunterXJob only.
 
 ## Recovery gates (current scope)
 
