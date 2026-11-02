@@ -8,7 +8,6 @@ the claims-to-avoid scan over generated materials, and the batch summary.
 """
 from __future__ import annotations
 
-import contextlib
 import hashlib
 import html
 import re
@@ -234,29 +233,12 @@ def check_inspector_has_no_input_apis(data: dict[str, Any]) -> tuple[bool, dict[
 
 
 def _value_matches_resolved(item: dict[str, Any]) -> bool:
+    """Same value after normalization; a one-option multiselect counts as its single value. Options worked
+    out from a stored answer (yes/no prefixes, CEFR levels) are verified separately in ``_derived_option_problem``."""
     val = item.get("value")
     resolved = item.get("resolved_value")
-    if normalize(val) == normalize(resolved):
-        return True
-    val_str = val[0] if isinstance(val, (list, tuple)) and len(val) == 1 else val
-    if normalize(val_str) == normalize(resolved):
-        return True
-    norm_res = normalize(resolved)
-    norm_val = normalize(val_str)
-    if norm_res in {"yes", "y", "true"} and norm_val.startswith("yes"):
-        return True
-    if norm_res in {"no", "n", "false"} and norm_val.startswith("no"):
-        return True
-    if item.get("resolved_key") == "language_proficiency":
-        from app.option_derivation import _CEFR_ORDER, parse_languages
-
-        with contextlib.suppress(KeyError, ValueError, AttributeError):
-            levels = parse_languages(resolved)
-            if levels and "english" in levels and "french" in levels:
-                weaker = min(levels["english"], levels["french"], key=_CEFR_ORDER.index)
-                if weaker.lower() in norm_val:
-                    return True
-    return False
+    single = val[0] if isinstance(val, list | tuple) and len(val) == 1 else val
+    return normalize(resolved) in {normalize(val), normalize(single)}
 
 
 def planned_answer_problems(plan_trace: list[dict[str, Any]], allowed: dict[str, list[Any]],
@@ -278,15 +260,22 @@ def planned_answer_problems(plan_trace: list[dict[str, Any]], allowed: dict[str,
             if not (decline_policy and item.get("section") in VOLUNTARY_SECTIONS and _DECLINE_RE.search(str(item.get("value")))):
                 problems.append({**brief, "problem": "decline option used without the policy or not a decline option"})
             continue
-        if str(item.get("reason") or "").startswith("prior employment:"):
-            continue
         key = item.get("resolved_key")
+        derivation = item.get("derivation") or {}
+        if derivation.get("rule") == "prior_employment":
+            problem = _prior_employment_problem(item, derivation, allowed)
+            if problem:
+                problems.append({**brief, "problem": problem})
+            continue
         if key not in allowed_norm:
             problems.append({**brief, "problem": "answered from a vault key that is not a verified fact or owner answer"})
         elif normalize(item.get("resolved_value")) not in allowed_norm[key]:
             problems.append({**brief, "problem": "value differs from the verified fact / owner answer"})
         elif not _value_matches_resolved(item):
-            problems.append({**brief, "problem": "planned value differs from the resolved answer"})
+            problem = (_derived_option_problem(item, derivation) if derivation.get("rule") == "option"
+                       else "planned value differs from the resolved answer")
+            if problem:
+                problems.append({**brief, "problem": problem})
         topics = [name for name, pattern in FORBIDDEN_TOPICS.items() if pattern.search(label)
                   and not _topic_allowed(name, key or "") and not _policy_backed(name, item, owner_norm)]
         if topics:
@@ -309,6 +298,101 @@ def _policy_backed(topic: str, item: dict[str, Any], owner_norm: dict[str, set[s
         return False
     resolved = normalize(item.get("resolved_value"))
     return resolved in owner_norm[key] and normalize(item.get("value")) == resolved
+
+
+# --- answers worked out from stored facts (#45). The trace carries the rule's own re-run, but these
+# checks re-verify each answer from the facts with their own comparison, never by calling the rule.
+_COMPANY_KEY_RE = re.compile(r"^employment_\d+_company$")
+_COMPANY_SUFFIXES = frozenset({"inc", "incorporated", "llc", "ltd", "limited", "corp", "corporation", "co", "company",
+                               "gmbh", "plc", "sa", "ag", "bv", "the", "group", "holdings"})
+_CEFR = ("A1", "A2", "B1", "B2", "C1", "C2")
+_LEVEL_WORDS: tuple[tuple[str, str], ...] = (
+    ("native", "C2"), ("bilingual", "C2"), ("mother tongue", "C2"), ("full professional", "C1"), ("fluent", "C1"),
+    ("professional working", "B2"), ("limited working", "B1"), ("intermediate", "B1"), ("elementary", "A2"),
+    ("basic", "A2"),
+)
+_CEFR_PREFIX_RE = re.compile(r"^\s*([ABC][12])\b")
+
+
+def _values(value: Any) -> list[str]:
+    return [normalize(item) for item in value] if isinstance(value, list | tuple) else [normalize(value)]
+
+
+def _company_words(name: Any) -> list[str]:
+    return [word for word in re.findall(r"[a-z0-9]+", str(name).casefold()) if word not in _COMPANY_SUFFIXES]
+
+
+def _same_or_lookalike(employer: str, known: Any) -> bool:
+    """Equal, sharing a word, or one name inside the other: any of these is too close to answer "No"."""
+    target, other = _company_words(employer), _company_words(known)
+    if not target or not other:
+        return True
+    joined_target, joined_other = "".join(target), "".join(other)
+    return bool(set(target) & set(other)) or joined_target in joined_other or joined_other in joined_target
+
+
+def _prior_employment_problem(item: dict[str, Any], derivation: dict[str, Any],
+                              allowed: dict[str, list[Any]]) -> str | None:
+    employer = str(derivation.get("employer") or "")
+    history = [value for key, values in allowed.items() if _COMPANY_KEY_RE.match(key) for value in values
+               if str(value).strip()]
+    if _values(derivation.get("rerun_value")) != _values(item.get("value")):
+        return "prior-employment answer differs from the rule's re-run"
+    if not all(value.startswith("no") for value in _values(item.get("value"))):
+        return "prior-employment answer is not a No"
+    if not employer or not set(_company_words(employer)) <= set(_company_words(item.get("label") or "")):
+        return "prior-employment answer for an employer the question does not name"
+    if not history:
+        return "prior-employment No with no verified employment history"
+    close = [name for name in history if _same_or_lookalike(employer, name)]
+    if close:
+        return f"prior-employment No but {employer!r} matches or resembles verified employer {close[0]!r}"
+    return None
+
+
+def _stored_levels(value: Any) -> dict[str, str]:
+    """``"English (Native)|French (Professional working)"`` -> {"english": "C2", "french": "B2"}."""
+    levels: dict[str, str] = {}
+    for part in str(value).split("|"):
+        match = re.match(r"^\s*([^()]+?)\s*\(([^)]*)\)\s*$", part)
+        if not match:
+            continue
+        text = match.group(2).casefold()
+        code = next((code for word, code in _LEVEL_WORDS if word in text), None)
+        code = code or next((code for code in _CEFR if code.casefold() in text.split()), None)
+        if code:
+            levels[match.group(1).strip().casefold()] = code
+    return levels
+
+
+def _derived_option_problem(item: dict[str, Any], derivation: dict[str, Any]) -> str | None:
+    planned = item.get("value")
+    if _values(derivation.get("rerun_value")) != _values(planned):
+        return "planned value differs from the resolved answer and from the option rule's re-run"
+    options = {normalize(option) for option in derivation.get("options") or []}
+    chosen = _values(planned)
+    if not chosen or not set(chosen) <= options:
+        return "derived answer is not a listed option"
+    if item.get("resolved_key") == "language_proficiency":
+        label = str(item.get("label") or "").casefold()
+        levels = _stored_levels(item.get("resolved_value"))
+        named = [language for language in ("english", "french") if language in label]
+        if not named or any(language not in levels for language in named):
+            return "language option for a language with no stored level"
+        floor = min((levels[language] for language in named), key=_CEFR.index)
+        for value in chosen:
+            match = _CEFR_PREFIX_RE.match(value.upper())
+            if match and _CEFR.index(match.group(1)) <= _CEFR.index(floor):
+                continue
+            if not match and value.startswith("yes") and _CEFR.index(floor) >= _CEFR.index("B2"):
+                continue
+            return f"language option {value!r} is above the stored level ({floor})"
+        return None
+    stored = normalize(item.get("resolved_value"))
+    word = "yes" if stored in {"yes", "y", "true"} else "no" if stored in {"no", "n", "false"} else None
+    if word is None or not all(re.match(rf"{word}\b", value) for value in chosen):
+        return "derived option does not match the stored yes/no answer"
+    return None
 
 
 def owner_answer_map(pairs: Any) -> dict[str, list[Any]]:
