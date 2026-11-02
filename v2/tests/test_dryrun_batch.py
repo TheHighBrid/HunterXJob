@@ -205,13 +205,13 @@ def test_unbacked_or_forbidden_answers_are_reported(item, fragment):
     assert problems and any(fragment in problem["problem"] for problem in problems)
 
 
-OWNER = {"salary_expectation": ["60000"], "start_date": ["Immediately"], "willing_to_relocate": ["No"],
+OWNER = {"salary_expectation": ["51234"], "start_date": ["Immediately"], "willing_to_relocate": ["No"],
          "employment_status": ["Currently employed"], "education_level": ["Bachelor's Degree"],
          "notice_period": ["Two weeks"]}
 
 
 @pytest.mark.parametrize("item", [
-    _fill("q", "60000", "salary_expectation", label="What are your salary expectations for your next role?"),
+    _fill("q", "51234", "salary_expectation", label="What are your salary expectations for your next role?"),
     _fill("q", "Immediately", "start_date", label="When can you start a new role?"),
     _fill("q", "no", "willing_to_relocate", label="Are you willing to relocate?"),
     _fill("q", "Currently employed", "employment_status", label="What is your current employment status?"),
@@ -224,9 +224,9 @@ def test_policy_backed_topic_passes_with_the_exact_stored_answer(item):
 
 @pytest.mark.parametrize("item, owner, fragment", [
     # Stored answer exists but the plan carries a different value.
-    (_fill("q", "70000", "salary_expectation", label="Salary expectations?", resolved_value="60000"), OWNER, "salary"),
+    (_fill("q", "58765", "salary_expectation", label="Salary expectations?", resolved_value="51234"), OWNER, "salary"),
     # Value only in ``allowed`` (e.g. a profile fact or material), not stored by the owner.
-    (_fill("q", "60000", "salary_expectation", label="Salary expectations?"), {}, "salary"),
+    (_fill("q", "51234", "salary_expectation", label="Salary expectations?"), {}, "salary"),
     # A salary field answered from another topic's stored key.
     (_fill("q", "Immediately", "start_date", label="What are your salary expectations?"), OWNER, "salary"),
     # A topic with no policy key stays never-auto-answer even when the owner stored something.
@@ -244,18 +244,18 @@ def test_owner_answer_map_applies_start_date_alias_only_when_unset():
     assert checks.owner_answer_map([("availability_date", "Two weeks")])["start_date"] == ["Two weeks"]
     both = checks.owner_answer_map([("availability_date", "Two weeks"), ("start_date", "Immediately")])
     assert both["start_date"] == ["Immediately"]
-    assert checks.owner_answer_map([("desired_salary", "60000")]) == {"salary_expectation": ["60000"]}
+    assert checks.owner_answer_map([("desired_salary", "51234")]) == {"salary_expectation": ["51234"]}
 
 
 def test_check_planned_answers_uses_seed_keys_for_older_observations():
-    trace = [_fill("q", "60000", "salary_expectation", label="What are your salary expectations?"),
+    trace = [_fill("q", "51234", "salary_expectation", label="What are your salary expectations?"),
              _fill("q2", "Two weeks", "start_date", label="When can you start?")]
-    data = {"plan_trace": trace, "allowed_answers": {"salary_expectation": ["60000"], "availability_date": ["Two weeks"]},
+    data = {"plan_trace": trace, "allowed_answers": {"salary_expectation": ["51234"], "availability_date": ["Two weeks"]},
             "seed": {"answers_stored": ["salary_expectation", "availability_date"]}}
     ok, details = checks.check_planned_answers(data)
     assert ok, details
     # A recorded owner_answers map wins over the seed summary.
-    ok, details = checks.check_planned_answers({**data, "owner_answers": {"salary_expectation": ["60000"]}})
+    ok, details = checks.check_planned_answers({**data, "owner_answers": {"salary_expectation": ["51234"]}})
     assert not ok and any("topic: start_date" in problem["problem"] for problem in details["unbacked"])
 
 
