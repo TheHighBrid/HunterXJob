@@ -8,7 +8,7 @@ from typing import Any
 
 from app import prior_employment
 from app.answer_vault import AnswerVault, FieldRequest, ResolutionStatus
-from app.option_derivation import derive_option
+from app.option_derivation import derive_option, iso_date, single_language_answer
 
 
 class ControlType(str, Enum):
@@ -288,6 +288,20 @@ def plan_fill(controls: list[FormControl], vault: AnswerVault) -> FillPlan:
             continue
         if resolved.status is ResolutionStatus.RESOLVED:
             value = resolved.value
+            language = single_language_answer(control, value, resolved.key)
+            if language is not None:
+                if not language:
+                    blockers.append("ambiguous_question")
+                    items.append(FillPlanItem(control, "review", reason="single-language question below professional level"))
+                    continue
+                value = language
+            if control.control_type is ControlType.DATE:
+                date_value = iso_date(value)
+                if date_value is None:
+                    blockers.append("ambiguous_question")
+                    items.append(FillPlanItem(control, "review", value=value, reason="date field needs a concrete calendar date"))
+                    continue
+                value = date_value
             if control.options:
                 matched = _match_option(control, value)
                 if matched is None:

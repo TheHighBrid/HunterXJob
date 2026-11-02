@@ -6,11 +6,17 @@ Only narrow, explainable rules; anything else stays in review:
 - verified ``language_proficiency`` answers bilingual English+French questions:
   a Yes/No question gets "Yes" only when both languages are at professional
   working level or above, and a CEFR-scale question gets the weaker of the two
-  languages' levels.
+  languages' levels;
+- a single-language fluency question ("Are you fluent in French?") gets a plain
+  "Yes" only when that language is at professional working level or above,
+  otherwise review; never the whole stored language list;
+- date-picker fields only take a concrete calendar date, written as ISO
+  ``YYYY-MM-DD``; relative answers ("2 weeks notice") go to review.
 """
 from __future__ import annotations
 
 import re
+from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -94,3 +100,49 @@ def derive_option(control: FormControl, value: Any, key: str = "") -> Any | None
     if key == "language_proficiency" or "language_proficiency" in control.vault_keys:
         return _bilingual(control, value)
     return _yes_no(control, value)
+
+
+_KNOWN_LANGUAGES = ("english", "french", "spanish", "german", "portuguese", "italian", "mandarin", "arabic")
+_SINGLE_LANGUAGE_RE = re.compile(
+    r"^\s*(?:are you|do you|can you|is your)\b.{0,40}\b(?:fluent|speak|proficient|bilingual|work)\b",
+    re.IGNORECASE,
+)
+
+
+def single_language_answer(control: FormControl, value: Any, key: str = "") -> str | list[str] | None:
+    """Yes for a one-language yes/no fluency question.
+
+    Returns None when the rule does not apply, "" when it applies but the
+    stored level is below professional working (review), else the answer.
+    """
+    if key != "language_proficiency":
+        return None
+    label = " ".join((control.label or "").split()).casefold()
+    named = [lang for lang in _KNOWN_LANGUAGES if re.search(rf"\b{lang}\b", label)]
+    if len(named) != 1 or not _SINGLE_LANGUAGE_RE.search(label):
+        return None
+    level = parse_languages(value).get(named[0])
+    if level is None or _CEFR_ORDER.index(level) < _CEFR_ORDER.index(_PROFESSIONAL):
+        return ""
+    if not control.options:
+        return "Yes"
+    option = _wrap(control, _single_prefixed(control, "yes"))
+    return option if option is not None else ""
+
+
+_DATE_FORMATS = ("%Y-%m-%d", "%B %d, %Y", "%b %d, %Y", "%d %B %Y", "%d %b %Y")
+
+
+def iso_date(value: Any) -> str | None:
+    """``YYYY-MM-DD`` for a concrete, unambiguous date; else None."""
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    text = " ".join(str(value or "").split())
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(text, fmt).replace(tzinfo=UTC).date().isoformat()
+        except ValueError:
+            continue
+    return None
