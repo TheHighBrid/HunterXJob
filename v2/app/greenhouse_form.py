@@ -310,6 +310,11 @@ _PROGRAMMING_LANG_RE = re.compile(
     r"\bjava\b|c\+\+|\bruby\b|golang|\bsql\b|llm ecosystem"
 )
 _CITIZENSHIP_RE = re.compile(r"\bcitizen(?:ship)?\b")
+# "Who referred you / employee's name" asks for a person, not a source.
+_REFERRER_NAME_RE = re.compile(
+    r"referr(?:er|al)'?s? (?:full )?name|name of (?:the |your )?(?:referr\w*|employee)|"
+    r"employee'?s? (?:full )?name|who referred you|referred by"
+)
 
 
 def _rule_key(text: str) -> str | None:
@@ -339,6 +344,8 @@ def classify_question(label: str, job_location: str = "") -> str | None:
     if _CITIZENSHIP_RE.search(text):
         return _country_scoped("citizenship", text, job_location)
     if _PRIOR_EMPLOYMENT_RE.search(text):
+        return None
+    if _REFERRER_NAME_RE.search(text):
         return None
     if _LANGUAGE_RE.search(text) and not _PROGRAMMING_LANG_RE.search(text):
         return "language_proficiency"
