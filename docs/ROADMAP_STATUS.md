@@ -2,7 +2,36 @@
 
 Tracking issue: [#9](https://github.com/TheHighBrid/HunterXJob/issues/9)
 
-Updated: 2026-10-05
+Updated: 2026-11-02
+
+## Live pathway (read first)
+
+Live, supervised job applications currently run through the JobTomatik engine's
+supervised-submit, handoff, evidence and ledger services, not through HunterXJob.
+See [LIVE_PATHWAY.md](LIVE_PATHWAY.md). Everything in this file is about
+HunterXJob: v2 stays dry-run by design, and its live-submit lock does not affect
+the live pathway. How HunterXJob relates to the JobTomatik engine is an open owner
+decision.
+
+## Evidence labels
+
+Status claims use exactly these four labels:
+
+| Label | Meaning |
+|---|---|
+| **production-evidenced** | Seen working on real applications, with a pointer to the evidence (ledger rows, confirmation records or run artifacts). No pointer, no label. |
+| **independently tested** | Covered by automated tests or CI jobs (for example `test`, `gate1`) that a reviewer can re-run, or by a recorded dry-run with saved artifacts. |
+| **repo-only** | The code or data is in `main` but nothing beyond its own unit tests shows it works end to end. |
+| **documented but unverified** | Described in docs or reported by someone, but nobody has checked it against code, tests or evidence. |
+
+| Area | Label | Pointer |
+|---|---|---|
+| Live supervised submissions (owner reports 100+, with CAPTCHA and ambiguous-question handoff and confirmation evidence) | documented but unverified (in this repo) | Runs in JobTomatik, see [LIVE_PATHWAY.md](LIVE_PATHWAY.md). Becomes production-evidenced here once a link to the ledger or evidence export is added. |
+| v2 Gate 1 fixture proof and Gate 2 Greenhouse dry-run | independently tested | CI `gate1` job; PRs #26 and #33 |
+| v2 answer matching (PRs #36, #40, #45) and the batch check (PR #46) | independently tested | CI `test` and `gate1` jobs. Not used by the live pathway yet |
+| Real-form dry-run planning rate (56.5% on the 10-posting re-run) | independently tested | Recorded dry-run batch; artifacts kept outside the repo |
+| Fixture answer coverage (sample forms only) | repo-only | `v2/reports/fixture_answer_coverage.json` |
+| v1 (`backend/`) submit code | repo-only | No handoff or evidence trail |
 
 ## Recovery gates (current scope)
 
@@ -40,7 +69,7 @@ certification setup and the resumable certification flow from PRs #21 to #25
 | Feature flags / kill switch | Ready | Global and per-adapter |
 | Universal form engine | Ready against real Greenhouse forms (plan only) | Text, select, multi-select, file, checkbox, autocomplete; sensitive/legal/voluntary classification; exact option matching |
 | Greenhouse real-form dry-run | Working (read-only) | Real form from the public boards API, with optional headless-browser verification. Fetch failures are flagged, never faked. No sample-form fallback |
-| Greenhouse adapter | `human_reviewed_submit` (catalog label) | Plans against the real form. Nothing fills or submits in a browser yet. Live submit locked |
+| Greenhouse adapter | `human_reviewed_submit` (catalog label) | Plans against the real form. Nothing fills or submits in a browser yet. v2 live submit locked (does not affect the JobTomatik live pathway) |
 | Lever / Ashby | `dry_run` | Read-only real-form dry-runs (Lever public apply page; Ashby public GraphQL queries re-issued as GET). Covered by the real-profile batch |
 | Email / generic | `dry_run` | Same safety gates |
 | Truthful materials | Ready | Verified profile, guarded résumé and cover letter, approval workflow. For finance-domain postings, roles at financial institutions lead the experience list (PR #35); other postings stay reverse-chronological |
@@ -56,7 +85,7 @@ certification setup and the resumable certification flow from PRs #21 to #25
 | Phone remote-control API (v0.4) | Ready | Settings (safe subset, no secrets), reports summary, jobs with score and form status, review approve/reject/resolve, scheduler pause/resume/run, kill switch, backups list. No route can unlock live submission or record a submission. Schema committed as `v2/openapi.json` |
 | Mobile app on v2 (v2.0.0) | Ready | Configurable server URL (Tailscale), API key in secure store, connection test, Dashboard, Jobs, Review, Reports and Settings screens. Types generated from the OpenAPI schema; jest unit tests |
 | v1 `backend/` | Legacy / donor | Nothing depends on it, including the mobile app. Kept for reference; deletion deferred to a later milestone |
-| Unattended live submit | Blocked | Requires `certified_autonomous` + live gate + unattended flag. Continuous run only dry-runs |
+| Unattended live submit (v2) | Blocked | Requires `certified_autonomous` + live gate + unattended flag. Continuous run only dry-runs |
 
 ## Safety that stays on
 
