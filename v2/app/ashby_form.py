@@ -34,6 +34,7 @@ from app.greenhouse_form import (
     looks_like,
     shared_answer_key,
 )
+from app.prior_employment import tag_prior_employer
 
 ASHBY_JOBS_HOST = "jobs.ashbyhq.com"
 ASHBY_GRAPHQL_PATH = "/api/non-user-graphql"
@@ -304,6 +305,7 @@ def parse_ashby_payload(data: dict[str, Any], ref: AshbyJobRef, *, job_location:
     for control in controls:
         first_by_key.setdefault(control.key, control)
     unique = list(first_by_key.values())
+    tag_prior_employer(unique, ref.org)
     return RealForm(
         platform="ashby",
         source="ashby_api",

@@ -159,3 +159,27 @@ def test_client_facing_experience_question_resolved():
     assert len(ans) > 50
     assert "client-facing" in ans.lower()
     assert "profile_client_facing_narrative" in rule
+
+
+def test_blacklisted_wealthsimple_and_1password_rejected():
+    """Verify that jobs from blacklisted companies (Wealthsimple, 1Password, Cohere) are strictly rejected."""
+    ctx = DecisionContext(
+        target_locations=("Ottawa", "Canada"),
+        target_keywords=("analyst", "compliance"),
+        blacklisted_companies=("wealthsimple", "1password", "cohere"),
+    )
+
+    ws_job = JobFacts(title="Compliance Analyst", company="Wealthsimple", location="Ottawa, Canada", description="Compliance role", remote=True)
+    rep_ws = evaluate_job(ws_job, ctx)
+    assert rep_ws.decision is Decision.REJECT
+    assert "blacklisted_company" in rep_ws.vetoes
+
+    op_job = JobFacts(title="Security Analyst", company="1Password", location="Ottawa, Canada", description="Security role", remote=True)
+    rep_op = evaluate_job(op_job, ctx)
+    assert rep_op.decision is Decision.REJECT
+    assert "blacklisted_company" in rep_op.vetoes
+
+    cohere_job = JobFacts(title="Solutions Architect", company="Cohere", location="Ottawa, Canada", description="Architecture role", remote=True)
+    rep_cohere = evaluate_job(cohere_job, ctx)
+    assert rep_cohere.decision is Decision.REJECT
+    assert "blacklisted_company" in rep_cohere.vetoes

@@ -427,6 +427,10 @@ MUTATING_ROUTES = {
     ("POST", "/api/autonomous/run"),
     ("POST", "/api/inbox/match"),
     ("POST", "/api/follow-ups/run"),
+    ("POST", "/api/follow-ups/{task_id}/dispatch"),
+    ("POST", "/api/autofill/evaluate"),
+    ("POST", "/api/autofill/log-application"),
+    ("POST", "/api/telemetry/trace"),
 }
 
 HOSTILE_BODIES = [

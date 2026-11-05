@@ -14,7 +14,7 @@ def test_fixture_answer_coverage_totals_match_snapshot():
     """Example profile + policy answers give stable fill/review/skip across fixtures."""
     totals = report()["totals"]
     assert totals == {
-        "forms": 6, "controls": 132, "fill": 58, "review": 41, "skip": 33, "planned_pct": 43.9,
+        "forms": 6, "controls": 132, "fill": 63, "review": 36, "skip": 33, "planned_pct": 47.7,
     }
     assert SNAPSHOT.is_file(), "commit reports/fixture_answer_coverage.json after regenerating"
     assert json.loads(SNAPSHOT.read_text(encoding="utf-8"))["totals"] == totals

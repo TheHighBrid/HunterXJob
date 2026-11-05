@@ -1,0 +1,15 @@
+INFO:     Started server process [8167]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8011 (Press CTRL+C to quit)
+INFO:     127.0.0.1:58764 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58768 - "POST /api/telemetry/trace?project=allo HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58776 - "POST /api/telemetry/trace?project=allo HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59296 - "GET /api/agent/champion?project=allo HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59536 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59543 - "GET /api/agent/champion?project=allo HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63755 - "GET /api/agent/champion?project=allo HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63757 - "POST /api/telemetry/trace?project=allo HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63952 - "GET /openapi.json HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:63958 - "GET /api/telemetry/trace HTTP/1.1" 405 Method Not Allowed
+INFO:     127.0.0.1:63995 - "POST /api/telemetry/trace?project=fidelis HTTP/1.1" 200 OK

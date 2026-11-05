@@ -130,6 +130,12 @@ class AutonomousRunner:
         if kill_switch_engaged(self.db):
             raise RuntimeError("Autonomous run aborted: global kill-switch is engaged")
 
+        comp_norm = (job.company or "").strip().lower()
+        if self.settings and getattr(self.settings, "blacklisted_company_list", None):
+            blacklisted = {name.lower() for name in self.settings.blacklisted_company_list}
+            if any(b in comp_norm for b in blacklisted):
+                raise RuntimeError(f"Cannot process job: company '{job.company}' is blacklisted")
+
         profile_dict = self.config.profile_data or verified_profile(self.db) or {}
         book = KnowledgeBook(profile_dict)
         out_dir = self.config.output_dir or Path(getattr(self.settings, "artifact_dir", None) or "/tmp/hunterx_autonomous")
@@ -189,8 +195,14 @@ class AutonomousRunner:
             if score < self.config.min_score_threshold:
                 continue
 
-            # 5a. Company-level submission rate limiter (anti-bot cooldown)
             comp_norm = (job.company or "").strip().lower()
+            if self.settings and getattr(self.settings, "blacklisted_company_list", None):
+                blacklisted = {name.lower() for name in self.settings.blacklisted_company_list}
+                if any(b in comp_norm for b in blacklisted):
+                    logger.info("Skipping blacklisted company '%s' for job '%s'", job.company, job.title)
+                    continue
+
+            # 5a. Company-level submission rate limiter (anti-bot cooldown)
             if comp_norm and comp_norm in submitted_companies_in_cycle:
                 logger.info("Deferring %s for company '%s' (company already submitted in this cycle)", job.title, job.company)
                 continue
@@ -212,17 +224,24 @@ class AutonomousRunner:
                     continue
 
             # Process single application
+            job_platform = getattr(job, "platform", "unknown") or "generic"
+            logger.info("▶ Processing [%d/%d] %s at %s (platform: %s)", summary.shortlisted, self.config.max_applications, job.title, job.company, job_platform)
             record = await self._process_job(job, book, out_dir)
             summary.records.append(record)
 
             if record.submitted:
                 summary.submitted_live += 1
+                logger.info("✓ Submitted live: %s at %s (receipt: %s)", job.title, job.company, record.confirmation_receipt or "ok")
                 if comp_norm:
                     submitted_companies_in_cycle.add(comp_norm)
             elif record.status == "dry_run_verified":
                 summary.verified_dry_runs += 1
+                logger.info("✓ Dry run verified: %s at %s", job.title, job.company)
             else:
                 summary.errors += 1
+                logger.warning("✗ Failed (%s): %s at %s - %s", record.status, job.title, job.company, record.error)
+            import sys
+            sys.stdout.flush()
 
         summary.finished_at = datetime.now(UTC).isoformat()
         return summary
@@ -233,87 +252,11 @@ class AutonomousRunner:
         book: KnowledgeBook,
         out_dir: Path,
     ) -> AutonomousApplicationRecord:
+        from improvement_kernel import HunterXJobAdapter
+
         job_dir = out_dir / f"job_{job.id}"
         job_dir.mkdir(parents=True, exist_ok=True)
-
-        # 1. Tailor materials
-        job_ctx = JobContext(
-            title=job.title,
-            company=job.company,
-            location=getattr(job, "location", "") or "",
-            description=job.description or "",
-        )
-        resume_doc = build_resume(book.profile, job_ctx)
-        resume_pdf = job_dir / "tailored_resume.pdf"
-        try:
-            resume_bytes = render_pdf_bytes(resume_doc)
-            resume_pdf.write_bytes(resume_bytes)
-        except Exception:
-            # Fallback for minimal text test environment
-            resume_pdf.write_bytes(b"%PDF-1.4 Minimal Resume")
-
-        letter_doc = build_cover_letter(book.profile, job_ctx, resume_doc)
-        letter_str = cover_letter_text(letter_doc)
-
-        # Validate truth guard
-        resume_violations = check_resume(resume_doc, book.profile)
-        letter_violations = check_cover_letter(letter_doc, book.profile, job_description=job.description or "")
-        violations = resume_violations + letter_violations
-        if violations:
-            return AutonomousApplicationRecord(
-                job_id=job.id,
-                company=job.company,
-                title=job.title,
-                url=job.url,
-                platform=getattr(job, "platform", "unknown"),
-                score=float(job.final_score or 0.0),
-                stage=job.stage,
-                status="truth_guard_rejected",
-                submitted=False,
-                error=f"Truth violations: {violations}",
-            )
-
-        # 2. Fetch Real Form
-        try:
-            real_form = self.form_provider.fetch(job)
-        except Exception as exc:
-            return AutonomousApplicationRecord(
-                job_id=job.id,
-                company=job.company,
-                title=job.title,
-                url=job.url,
-                platform=getattr(job, "platform", "unknown"),
-                score=float(job.final_score or 0.0),
-                stage=job.stage,
-                status="form_fetch_failed",
-                submitted=False,
-                error=str(exc),
-            )
-
-        # 3. Resolve Answers from Knowledge Book
-        answers = book.resolve_answers(real_form.controls)
-        files = {"resume": resume_pdf}
-        labels = {ctrl.key: ctrl.label for ctrl in real_form.controls}
-        required_keys = [
-            ctrl.key
-            for ctrl in real_form.controls
-            if getattr(ctrl, "required", False)
-            and "file" not in str(getattr(ctrl, "control_type", "")).lower()
-            and "hidden" not in str(getattr(ctrl, "control_type", "")).lower()
-        ]
-
-        # 3b. Pre-Submission Truth Guard: strictly enforce candidate verified facts
-        from app.truth_guard import audit_form_answers, enforce_answer_truthfulness
-        violations = audit_form_answers(answers, book.profile, labels=labels)
-        if violations:
-            logger.warning("Truth Guard detected unverified claims for %s: %s", job.title, violations)
-            answers, corrections = enforce_answer_truthfulness(answers, book.profile, labels=labels)
-            for corr in corrections:
-                logger.info("Truth Guard enforced correction: %s", corr)
-
-        # 4. Execute Browser Form Fill & Optional Live Submission (Single Browser Session)
-        sc_path = job_dir / "pre_submit.png"
-        post_sc_path = job_dir / "post_submit.png"
+        platform = getattr(job, "platform", "unknown") or "generic"
 
         can_submit_live = (
             self.config.allow_live_submission
@@ -321,91 +264,147 @@ class AutonomousRunner:
             and is_enabled(self.db, "allow_live_submission")
         )
 
-        fill_res = await fill_application_form(
-            url=real_form.url,
-            answers=answers,
-            files=files,
-            labels=labels,
-            required_fields=required_keys,
-            headless=self.config.headless,
-            headed_pause_ms=self.config.headed_pause_ms,
-            screenshot_path=sc_path,
-            allow_live_submit=can_submit_live,
-            post_submit_screenshot_path=post_sc_path if can_submit_live else None,
-            live_submit_fn=execute_live_submission if can_submit_live else None,
-            captcha_solver=self.captcha_solver if can_submit_live else None,
-        )
-
-        if fill_res.unmatched_fields or fill_res.fields_attempted == 0:
-            err = fill_res.error or (f"Unmatched fields: {fill_res.unmatched_fields}" if fill_res.unmatched_fields else "No form fields detected or attempted on page")
-            job.stage = PipelineStage.review.value
-            self.db.add(
-                PipelineEvent(
-                    job_id=job.id,
-                    from_stage=PipelineStage.ready_to_apply.value,
-                    to_stage=PipelineStage.review.value,
-                    message=f"Form fill held for review: {err[:200]}",
-                )
-            )
-            self.db.commit()
-            return AutonomousApplicationRecord(
-                job_id=job.id,
-                company=job.company,
+        adapter = HunterXJobAdapter(session=self.db, project="hunterxjob")
+        with adapter.start_application_run(
+            job_id=job.id,
+            job_title=job.title,
+            company=job.company,
+            platform=platform,
+            is_dry_run=not can_submit_live,
+        ) as run_ctx:
+            # 1. Tailor materials
+            job_ctx = JobContext(
                 title=job.title,
-                url=job.url,
-                platform=real_form.platform,
-                score=float(job.final_score or 0.0),
-                stage=job.stage,
-                status="fill_failed",
-                submitted=False,
-                error=err,
+                company=job.company,
+                location=getattr(job, "location", "") or "",
+                description=job.description or "",
             )
+            resume_doc = build_resume(book.profile, job_ctx)
+            resume_pdf = job_dir / "tailored_resume.pdf"
+            try:
+                resume_bytes = render_pdf_bytes(resume_doc)
+                resume_pdf.write_bytes(resume_bytes)
+            except Exception:
+                # Fallback for minimal text test environment
+                resume_pdf.write_bytes(b"%PDF-1.4 Minimal Resume")
 
-        # 5. Live Submission or Verified Dry-Run Result Handling
-        if can_submit_live:
-            if fill_res.submitted:
-                job.stage = PipelineStage.submitted.value
-                proof_sha = fill_res.post_submit_screenshot_sha256 or "live_submit_proof"
-                self.db.add(
-                    PipelineEvent(
-                        job_id=job.id,
-                        from_stage=PipelineStage.ready_to_apply.value,
-                        to_stage=PipelineStage.submitted.value,
-                        message="Application submitted autonomously with verified proof",
-                        payload_json=json.dumps({"receipt": fill_res.confirmation_text, "sha256": proof_sha}),
-                    )
+            letter_doc = build_cover_letter(book.profile, job_ctx, resume_doc)
+            letter_str = cover_letter_text(letter_doc)
+
+            # Validate truth guard
+            resume_violations = check_resume(resume_doc, book.profile)
+            letter_violations = check_cover_letter(letter_doc, book.profile, job_description=job.description or "")
+            violations = resume_violations + letter_violations
+            if violations:
+                adapter.trace_truth_guard(
+                    ctx=run_ctx,
+                    question="materials_truth_guard",
+                    selected_answer="unverified_materials_content",
+                    is_verified=False,
+                    is_violation=True,
                 )
-                self.db.commit()
-
-                # Schedule 7 and 14-day follow-up
-                schedule_follow_up(self.db, job.id)
-
+                run_ctx.fail_run("SAFETY_TRUTH_GUARD_VIOLATION", f"Truth violations: {violations}")
                 return AutonomousApplicationRecord(
                     job_id=job.id,
                     company=job.company,
                     title=job.title,
                     url=job.url,
-                    platform=real_form.platform,
+                    platform=platform,
                     score=float(job.final_score or 0.0),
                     stage=job.stage,
-                    status="submitted_live",
-                    submitted=True,
-                    confirmation_receipt=fill_res.confirmation_text,
-                    candidate_id=fill_res.candidate_id,
-                    evidence_sha256=proof_sha,
+                    status="truth_guard_rejected",
+                    submitted=False,
+                    error=f"Truth violations: {violations}",
                 )
-            else:
-                err = fill_res.error or "Submission not confirmed"
+
+            # 2. Fetch Real Form
+            try:
+                real_form = self.form_provider.fetch(job)
+            except Exception as exc:
+                run_ctx.fail_run("WORKFLOW_FORM_FETCH_FAILED", str(exc))
+                return AutonomousApplicationRecord(
+                    job_id=job.id,
+                    company=job.company,
+                    title=job.title,
+                    url=job.url,
+                    platform=platform,
+                    score=float(job.final_score or 0.0),
+                    stage=job.stage,
+                    status="form_fetch_failed",
+                    submitted=False,
+                    error=str(exc),
+                )
+
+            # 3. Resolve Answers from Knowledge Book
+            answers = book.resolve_answers(real_form.controls)
+            files = {"resume": resume_pdf}
+            labels = {ctrl.key: ctrl.label for ctrl in real_form.controls}
+            required_keys = [
+                ctrl.key
+                for ctrl in real_form.controls
+                if getattr(ctrl, "required", False)
+                and "file" not in str(getattr(ctrl, "control_type", "")).lower()
+                and "hidden" not in str(getattr(ctrl, "control_type", "")).lower()
+            ]
+
+            # 3b. Pre-Submission Truth Guard: strictly enforce candidate verified facts
+            from app.truth_guard import audit_form_answers, enforce_answer_truthfulness
+            violations = audit_form_answers(answers, book.profile, labels=labels)
+            if violations:
+                logger.warning("Truth Guard detected unverified claims for %s: %s", job.title, violations)
+                answers, corrections = enforce_answer_truthfulness(answers, book.profile, labels=labels)
+                for corr in corrections:
+                    logger.info("Truth Guard enforced correction: %s", corr)
+
+            # 4. Execute Browser Form Fill & Optional Live Submission (Single Browser Session)
+            sc_path = job_dir / "pre_submit.png"
+            post_sc_path = job_dir / "post_submit.png"
+
+            fill_res = await fill_application_form(
+                url=real_form.url,
+                answers=answers,
+                files=files,
+                labels=labels,
+                required_fields=required_keys,
+                headless=self.config.headless,
+                headed_pause_ms=self.config.headed_pause_ms,
+                screenshot_path=sc_path,
+                allow_live_submit=can_submit_live,
+                post_submit_screenshot_path=post_sc_path if can_submit_live else None,
+                live_submit_fn=execute_live_submission if can_submit_live else None,
+                captcha_solver=self.captcha_solver if can_submit_live else None,
+            )
+
+            # Record telemetry for field fills
+            for k, val in answers.items():
+                adapter.trace_field_fill(
+                    ctx=run_ctx,
+                    field_name=k,
+                    selector_used=labels.get(k, k),
+                    value=str(val),
+                    success=k not in fill_res.unmatched_fields,
+                    error_msg=f"Unmatched field: {k}" if k in fill_res.unmatched_fields else None,
+                )
+
+            if fill_res.unmatched_fields or fill_res.fields_attempted == 0:
+                err = fill_res.error or (f"Unmatched fields: {fill_res.unmatched_fields}" if fill_res.unmatched_fields else "No form fields detected or attempted on page")
                 job.stage = PipelineStage.review.value
                 self.db.add(
                     PipelineEvent(
                         job_id=job.id,
                         from_stage=PipelineStage.ready_to_apply.value,
                         to_stage=PipelineStage.review.value,
-                        message=f"Live submission held for review: {err[:200]}",
+                        message=f"Form fill held for review: {err[:200]}",
                     )
                 )
                 self.db.commit()
+                adapter.complete_application_run(
+                    ctx=run_ctx,
+                    success=False,
+                    fields_filled_ratio=fill_res.fields_attempted / max(1, len(required_keys)),
+                    is_dry_run=not can_submit_live,
+                    error_msg=err,
+                )
                 return AutonomousApplicationRecord(
                     job_id=job.id,
                     company=job.company,
@@ -414,28 +413,117 @@ class AutonomousRunner:
                     platform=real_form.platform,
                     score=float(job.final_score or 0.0),
                     stage=job.stage,
-                    status="submission_failed",
+                    status="fill_failed",
                     submitted=False,
                     error=err,
                 )
-        elif not fill_res.success:
-            return AutonomousApplicationRecord(
-                job_id=job.id,
-                company=job.company,
-                title=job.title,
-                url=job.url,
-                platform=real_form.platform,
-                score=float(job.final_score or 0.0),
-                stage=job.stage,
-                status="fill_failed",
-                submitted=False,
-                error=fill_res.error or "Form fill verification failed",
-            )
-        else:
-            # Verified Dry-Run Mode
-            proof_hash = hashlib.sha256(
-                f"{job.id}:{job.url}:{sorted(answers.items())}".encode()
-            ).hexdigest()
+
+            # 5. Live Submission or Verified Dry-Run Result Handling
+            if can_submit_live:
+                if fill_res.submitted:
+                    job.stage = PipelineStage.submitted.value
+                    proof_sha = fill_res.post_submit_screenshot_sha256 or "live_submit_proof"
+                    self.db.add(
+                        PipelineEvent(
+                            job_id=job.id,
+                            from_stage=PipelineStage.ready_to_apply.value,
+                            to_stage=PipelineStage.submitted.value,
+                            message="Application submitted autonomously with verified proof",
+                            payload_json=json.dumps({"receipt": fill_res.confirmation_text, "sha256": proof_sha}),
+                        )
+                    )
+                    self.db.commit()
+
+                    # Schedule 7 and 14-day follow-up
+                    schedule_follow_up(self.db, job.id)
+
+                    adapter.complete_application_run(
+                        ctx=run_ctx,
+                        success=True,
+                        fields_filled_ratio=1.0,
+                        is_dry_run=False,
+                        receipt_hash=proof_sha,
+                        confirmation_screenshot_uri=str(post_sc_path) if post_sc_path.exists() else None,
+                    )
+
+                    return AutonomousApplicationRecord(
+                        job_id=job.id,
+                        company=job.company,
+                        title=job.title,
+                        url=job.url,
+                        platform=real_form.platform,
+                        score=float(job.final_score or 0.0),
+                        stage=job.stage,
+                        status="submitted_live",
+                        submitted=True,
+                        confirmation_receipt=fill_res.confirmation_text,
+                        candidate_id=fill_res.candidate_id,
+                        evidence_sha256=proof_sha,
+                    )
+                else:
+                    err = fill_res.error or "Submission not confirmed"
+                    job.stage = PipelineStage.review.value
+                    self.db.add(
+                        PipelineEvent(
+                            job_id=job.id,
+                            from_stage=PipelineStage.ready_to_apply.value,
+                            to_stage=PipelineStage.review.value,
+                            message=f"Live submission held for review: {err[:200]}",
+                        )
+                    )
+                    self.db.commit()
+                    adapter.complete_application_run(
+                        ctx=run_ctx,
+                        success=False,
+                        fields_filled_ratio=fill_res.fields_attempted / max(1, len(required_keys)),
+                        is_dry_run=False,
+                        error_msg=err,
+                    )
+                    return AutonomousApplicationRecord(
+                        job_id=job.id,
+                        company=job.company,
+                        title=job.title,
+                        url=job.url,
+                        platform=real_form.platform,
+                        score=float(job.final_score or 0.0),
+                        stage=job.stage,
+                        status="submission_failed",
+                        submitted=False,
+                        error=err,
+                    )
+            elif not fill_res.success:
+                adapter.complete_application_run(
+                    ctx=run_ctx,
+                    success=False,
+                    fields_filled_ratio=fill_res.fields_attempted / max(1, len(required_keys)),
+                    is_dry_run=True,
+                    error_msg=fill_res.error or "Form fill verification failed",
+                )
+                return AutonomousApplicationRecord(
+                    job_id=job.id,
+                    company=job.company,
+                    title=job.title,
+                    url=job.url,
+                    platform=real_form.platform,
+                    score=float(job.final_score or 0.0),
+                    stage=job.stage,
+                    status="fill_failed",
+                    submitted=False,
+                    error=fill_res.error or "Form fill verification failed",
+                )
+            else:
+                # Verified Dry-Run Mode
+                proof_hash = hashlib.sha256(
+                    f"{job.id}:{job.url}:{sorted(answers.items())}".encode()
+                ).hexdigest()
+                adapter.complete_application_run(
+                    ctx=run_ctx,
+                    success=True,
+                    fields_filled_ratio=1.0,
+                    is_dry_run=True,
+                    receipt_hash=proof_hash,
+                    confirmation_screenshot_uri=str(sc_path) if sc_path.exists() else None,
+                )
 
             self.db.add(
                 PipelineEvent(

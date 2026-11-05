@@ -49,8 +49,13 @@ It discovers live job postings, evaluates match scores against your verified pro
 
 ## Multi-Platform & Mobile Release (v1.0.0)
 
-HunterXJob is officially available as an Android APK release, with web dashboard operations and planned native releases across iOS, macOS, and Windows.
+HunterXJob is officially available as an Android APK release, a portable browser extension for desktop browsers, web dashboard operations, and planned native releases across iOS, macOS, and Windows.
 
+* **Portable Browser Extension & Autofill Assistant (`extension/`, `releases/HunterXJob-Extension-v1.0.0.zip`)**:
+  - Embedded Manifest V3 companion for Chrome, Brave, Edge, and Arc.
+  - Quick foreground autofill with **`Alt + Shift + F`** (`⌥ + ⇧ + F` on macOS) on **Indeed**, **LinkedIn (Easy Apply)**, **GC Jobs 🇨🇦**, **Ontario Public Service (OPS)**, **City of Ottawa / Gatineau**, **Canada Job Bank**, and major ATS platforms (**Workday, Greenhouse, Lever, Ashby**).
+  - Strictly non-destructive with **Truth Guard** enforcement and an in-page **Pre-Submission Review Drawer** (`Alt + Shift + R` or on-screen floating HUD) so you review all answers before sending.
+  - Zero-server portable operation (embedded 129 verified facts & 63 answer policies) plus live daemon sync via `./hunterx extension sync`.
 * **Android Native App (`releases/HunterXJob-v1.0.0.apk`)**: Standalone, installable APK package (`com.hunterxjob.app` v1.0.0, SHA-256 verified) ready for direct install and Google Play Store rollout.
 * **Monetization & Tiers**:
   * **Free Hunter Tier**: Multi-board job search, fit scoring, form inspection, and up to **2 applications filled per day** with manual human verification. Full unattended autonomy is locked.

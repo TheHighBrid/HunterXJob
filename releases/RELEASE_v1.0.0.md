@@ -6,7 +6,7 @@
 **Min SDK:** Android 7.0+ (API 24)  
 **Signatures:** Full Scheme V1 (JAR) + Scheme V2 + Scheme V3 (Production Keystore)  
 **Artifact:** [`HunterXJob-v1.0.0.apk`](./HunterXJob-v1.0.0.apk) (82.39 MB)  
-**SHA-256 Checksum:** `37a3653fe48b5b3bcdd64720ee0b0452b6c07259c71eeace6c60f01f8a5e4a75`
+**SHA-256 Checksum:** `743ce72e89d08f6f6489cfc16492e63664d47a7684f597ada370abd6d027814e`
 
 ---
 

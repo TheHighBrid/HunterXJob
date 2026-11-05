@@ -321,6 +321,9 @@ def child_env(run_dir: Path) -> dict[str, str]:
 
 def _child_entry(run_dir: str, variant: str, inject_leak: bool) -> None:
     """Entry point of one spawned run: isolated env, cwd, and output; then one Gate 1 run."""
+    import contextlib
+    with contextlib.suppress(Exception):
+        os.setsid()
     folder = Path(run_dir)
     os.environ.clear()
     os.environ.update(child_env(folder))
@@ -347,7 +350,15 @@ def supervise(child: Any, timeout: float, grace: float = 5.0) -> dict[str, Any]:
         timed_out = child.is_alive()
         if timed_out:
             killed = live_descendants(child.pid)  # snapshot before killing the child breaks the tree
-            child.kill()
+            try:
+                import signal
+                pgid = os.getpgid(child.pid)
+                if pgid != os.getpgrp():
+                    os.killpg(pgid, signal.SIGKILL)
+                else:
+                    child.kill()
+            except (OSError, ProcessLookupError):
+                child.kill()
             child.join(10)
             terminate(killed)
     seen = sampler.processes

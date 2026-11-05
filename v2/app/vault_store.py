@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 
 from sqlalchemy import select
@@ -9,6 +10,8 @@ from app.answer_vault import AnswerRecord, AnswerSource, AnswerVault
 from app.models import AnswerPolicy
 from app.profile import verified_profile
 from app.profile_vault import profile_records
+
+logger = logging.getLogger(__name__)
 
 # Stored policy keys that also populate classifier vault keys when those keys
 # were not set more specifically.
@@ -58,12 +61,25 @@ _POLICY_KEY_ALIASES: dict[str, tuple[str, ...]] = {
     # Consents & Screenings
     "background_check_consent": ("background_check", "criminal_check_consent", "screening_consent"),
     "criminal_check_consent": ("background_check_consent", "background_check"),
-    "interview_recording_consent": ("recording_consent",),
+    "interview_recording_consent": ("recording_consent", "agreement_consent"),
     "recording_consent": ("interview_recording_consent",),
-    "terms_consent": ("disclaimer_and_consent", "terms_agreement", "declaration_consent"),
+    "identity_verification_consent": ("terms_consent", "agreement_consent"),
+    "terms_consent": ("disclaimer_and_consent", "terms_agreement", "declaration_consent", "agreement_consent"),
     "disclaimer_and_consent": ("terms_consent", "terms_agreement"),
+    "agreement_consent": ("terms_consent", "terms_agreement", "identity_verification_consent"),
 
-    # Referral & Source
+    # Salary acceptance
+    "salary_acceptance": ("working_conditions_acceptance", "agreement_consent"),
+
+    # Location & Residence
+    "located_in_canada": ("reside_in_canada", "canadian_citizen", "country_of_residence", "work_authorization_ca"),
+    "reside_in_canada": ("located_in_canada", "canadian_citizen", "country_of_residence", "work_authorization_ca"),
+    "canadian_citizen": ("located_in_canada", "reside_in_canada", "citizenship_ca"),
+    "country_of_residence": ("located_in_canada", "reside_in_canada"),
+
+    # Motivation & Experience
+    "why_company_motivation": ("motivation", "why_company"),
+    "financial_experience": ("banking_experience_years", "fraud_experience", "collections_experience"),
     "referral_source": ("how_heard", "source", "source_channel"),
     "how_heard": ("referral_source", "source"),
 
@@ -252,7 +268,7 @@ def seed_answer_vault_from_policy(
                         note=item.notes or f"master policy v{policy.schema_version}: {item.category}",
                     )
                     seeded_policy += 1
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("Could not load master policy for seeding: %s", exc)
 
     return {"json_seeded": seeded_json, "policy_seeded": seeded_policy, "total": seeded_json + seeded_policy}

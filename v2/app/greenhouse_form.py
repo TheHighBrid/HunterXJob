@@ -36,6 +36,7 @@ from app.form_engine import (
     ControlType,
     FormControl,
 )
+from app.prior_employment import PRIOR_EMPLOYMENT_RE, tag_prior_employer
 
 GREENHOUSE_API_HOST = "boards-api.greenhouse.io"
 GREENHOUSE_EMBED_HOST = "job-boards.greenhouse.io"
@@ -221,7 +222,7 @@ _RESIDENCE_RE = re.compile(
     re.IGNORECASE,
 )
 _CONDITIONAL_RE = re.compile(
-    r"\bif (?:you answered|yes|no|so|applicable|other|\"other\"|\u201cyes|\u201cother)|if [\"\u201c]?other[\"\u201d]? is selected",
+    r"\bif (?:you answered|yes|no|so|other|\"other\"|\u201cyes|\u201cother)|if [\"\u201c]?other[\"\u201d]? is selected",
     re.IGNORECASE,
 )
 _ROLE_LOCATION_RE = re.compile(
@@ -256,10 +257,7 @@ _WORK_AUTH_RE = re.compile(
     r"(?:legally )?(?:eligible|authori[sz]ed|permitted|entitled) to work|work authori[sz]ation|right to work|work permit"
 )
 # "Have you worked for <employer> before?" is employer-specific: never shared.
-_PRIOR_EMPLOYMENT_RE = re.compile(
-    r"previous(?:ly)? (?:worked|employed|been employed)|worked (?:at|for) .* (?:before|previously|in the past)|"
-    r"(?:employed|engaged)[^?]* in the past|consulted for"
-)
+_PRIOR_EMPLOYMENT_RE = PRIOR_EMPLOYMENT_RE
 
 # Ordered rules: (patterns that must all match, canonical key, max label length).
 _KEY_RULES: tuple[tuple[tuple[re.Pattern[str], ...], str, int | None], ...] = (
@@ -268,6 +266,11 @@ _KEY_RULES: tuple[tuple[tuple[re.Pattern[str], ...], str, int | None], ...] = (
     ((re.compile(r"portfolio|personal website|\bwebsite\b"),), "website_url", None),
     ((re.compile(r"pronoun"),), "pronouns", None),
     ((re.compile(r"preferred (?:full |first )?name|name you.?d prefer"),), "preferred_name", None),
+    ((re.compile(r"^(?:your\s+)?legal\s+(?:first|given)\s+name$"),), "first_name", None),
+    ((re.compile(r"^(?:your\s+)?legal\s+(?:last|family)\s+name$|^(?:your\s+)?legal\s+surname$"),), "last_name", None),
+    ((re.compile(r"^(?:your\s+)?full[ -]?name$|^(?:first\s+and\s+last\s+name|legal\s+name)$"),), "full_name", None),
+    # Salary acceptance / alignment (checked before salary expectation so alignment questions aren't trapped in amount)
+    ((re.compile(r"(?:reviewed|aligned|expectations aligned|accept).*(?:salary|compensation|range)|(?:salary|compensation|range).*(?:aligned|alignment|acceptable|accept)"),), "salary_acceptance", None),
     ((re.compile(r"salary|compensation expectation|pay expectation|desired (?:pay|compensation)"),), "salary_expectation", None),
     ((re.compile(r"current (?:company|employer)"),), "current_company", 60),
     ((re.compile(r"current (?:job )?title|current role"),), "current_title", 60),
@@ -286,6 +289,8 @@ _KEY_RULES: tuple[tuple[tuple[re.Pattern[str], ...], str, int | None], ...] = (
         r"consent (?:to|for) (?:a )?(?:background|criminal)|"
         r"(?:background|criminal).{0,40}consent"
     ),), "background_check_consent", None),
+    ((re.compile(r"identity (?:verification|check)|verify your identity|verification.*interview"),), "identity_verification_consent", None),
+    ((re.compile(r"terms (?:and|&) conditions|terms of (?:use|service)"),), "terms_consent", None),
     ((re.compile(
         r"education(?:al)? (?:level|attainment)|highest (?:level of )?education|"
         r"highest degree|degree (?:level|obtained)|level of education"
@@ -295,8 +300,18 @@ _KEY_RULES: tuple[tuple[tuple[re.Pattern[str], ...], str, int | None], ...] = (
     ((re.compile(r"commute|travel to|willing to (?:travel|drive)|distance to|hybrid|on[- ]?site"),
       re.compile(r"ottawa|gatineau|national capital|\bncr\b")), "ottawa_commute", None),
     ((re.compile(r"how did you hear|hear(?:d)? about"),), "referral_source", None),
+    ((re.compile(r"(?:resid|located|\blive\b|based).*(?:canada|in ca\b)|(?:are you in|living in)\s+canada"),), "located_in_canada", None),
     ((re.compile(r"country"), re.compile(r"resid|located|\blive\b|based")), "country_of_residence", None),
     ((re.compile(r"time ?zone"),), "time_zone", None),
+    # Experience and motivation
+    ((re.compile(r"fintech|financial services?|banking experience"),), "financial_experience", None),
+    ((re.compile(r"why\s+(?:are\s+you\s+(?:interested|excited)|(?:do\s+you\s+want\s+to\s+work)|wealthsimple|float|[a-z0-9_-]+)|what\s+interests\s+you\s+about"),), "why_company_motivation", None),
+    ((re.compile(r"underwriting|credit policy|underwrite"),), "direct_underwriting", None),
+    ((re.compile(r"smb lending|small business.*lending|commercial lending"),), "smb_lending", None),
+    ((re.compile(r"how\s+you\s+use\s+sql|\bsql\b.*role|\buse\s+sql\b"),), "sql_skill", None),
+    ((re.compile(r"card fraud|fraud (?:prevention|work|experience|investigation)"),), "fraud_experience", None),
+    ((re.compile(r"require (?:any )?(?:type of )?accommodation"),), "accommodation_required", None),
+    ((re.compile(r"who referred you|name of the person who referred you"),), "current_employee_referral", None),
 )
 
 # Spoken / bilingual language questions. Programming-language prompts must not match.
@@ -589,10 +604,13 @@ def parse_greenhouse_payload(payload: dict[str, Any], ref: GreenhouseJobRef) -> 
     if any(control.control_type is ControlType.UNKNOWN for control in controls):
         warnings.append("form contains field types this engine does not support")
 
+    tag_prior_employer(controls, ref.board)
+    abs_url = str(payload.get("absolute_url") or "").strip()
+    target_url = abs_url if abs_url and "greenhouse.io" in abs_url else ref.embed_url
     return RealForm(
         platform="greenhouse",
         source="greenhouse_api",
-        url=str(payload.get("absolute_url") or ref.embed_url),
+        url=target_url,
         title=str(payload.get("title") or ""),
         controls=controls,
         vault_scopes=ref.vault_scopes,

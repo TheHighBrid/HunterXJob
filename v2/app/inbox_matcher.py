@@ -58,10 +58,10 @@ REJECTION_PATTERNS = [
 ]
 
 ASSESSMENT_PATTERNS = [
-    re.compile(r"complete\s+the\s+following\s+assessment", re.I),
-    re.compile(r"online\s+assessment", re.I),
+    re.compile(r"complete\s+the\s+following\s+.*assessment", re.I),
+    re.compile(r"online\s+assessment|technical\s+assessment|coding\s+assessment", re.I),
     re.compile(r"coding\s+challenge", re.I),
-    re.compile(r"take-home\s+(?:exercise|project|assignment)", re.I),
+    re.compile(r"take-home\s+(?:exercise|project|assignment|assessment|challenge)", re.I),
     re.compile(r"hackerrank\.com|codesignal\.com|codility\.com", re.I),
 ]
 

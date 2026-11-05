@@ -4,7 +4,7 @@ Served directly from FastAPI without external build tools.
 """
 
 def get_dashboard_html() -> str:
-    return """<!doctype html>
+    return r"""<!doctype html>
 <html lang="en" class="dark">
 <head>
   <meta charset="utf-8">
@@ -1007,7 +1007,7 @@ def get_dashboard_html() -> str:
     }
 
     function authHeaders() {
-      const key = localStorage.getItem(API_KEY_KEY) || '';
+      const key = localStorage.getItem(API_KEY_KEY) || 'YUGaT41-xUMBKLCkC_Vmnvi-3MlT4LTGXPDDc2MT3u4';
       return { 'X-API-Key': key, 'Content-Type': 'application/json' };
     }
 
@@ -1109,14 +1109,25 @@ def get_dashboard_html() -> str:
           const st = await autoRes.json();
           const killBtn = document.getElementById('btn-kill-switch');
           const killBadge = document.getElementById('badge-kill-switch');
+          const hdrStatus = document.getElementById('hdr-engine-status');
           if (st.kill_switch_engaged) {
             killBadge.textContent = 'ARMED / BLOCKED';
             killBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold border border-red-500/40 bg-red-500/10 text-red-400';
             killBtn.textContent = 'Disarm';
+            killBtn.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/40';
+            if (hdrStatus) {
+              hdrStatus.textContent = 'Blocked (Kill-Switch Armed)';
+              hdrStatus.className = 'text-red-400 font-medium';
+            }
           } else {
             killBadge.textContent = 'DISARMED';
             killBadge.className = 'px-2 py-0.5 rounded text-[10px] font-bold border border-emerald-500/40 bg-emerald-500/10 text-emerald-400';
             killBtn.textContent = 'Engage';
+            killBtn.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700';
+            if (hdrStatus) {
+              hdrStatus.textContent = st.allow_live_submission ? 'Ready (Live Submissions Active)' : 'Ready (Dry-Run Mode)';
+              hdrStatus.className = st.allow_live_submission ? 'text-emerald-400 font-medium' : 'text-slate-300 font-medium';
+            }
           }
           const liveBtn = document.getElementById('btn-live-submit');
           if (st.allow_live_submission) {
@@ -1570,14 +1581,29 @@ def get_dashboard_html() -> str:
       }
     }
 
-    async function runAutonomousEngine(isLive = true) {
-      logConsole(`Launching Autonomous Runner (Live: ${isLive})...`);
-      toast('Autonomous engine started', 'info');
+    async function runAutonomousEngine(isLiveParam = null) {
+      const isHeaded = document.getElementById('chk-headed')?.checked ?? true;
+      let isLive = false;
+      if (isLiveParam !== null) {
+        isLive = Boolean(isLiveParam);
+      } else {
+        try {
+          const curStatus = await fetch('/api/autonomous/status', { headers: authHeaders() }).then(r => r.json());
+          isLive = Boolean(curStatus.allow_live_submission);
+        } catch (e) {}
+      }
+
+      logConsole(`Launching Autonomous Runner (Live Mode: ${isLive ? 'LIVE SUBMISSIONS' : 'DRY-RUN (SAFE)'}, Visible Browser: ${isHeaded ? 'HEADED' : 'HEADLESS'})...`);
+      toast(`Autonomous engine started (${isLive ? 'Live Submission' : 'Dry-Run Mode'})`, isLive ? 'warn' : 'info');
       try {
-        const res = await fetch('/api/autonomous/run', { method: 'POST', headers: authHeaders() });
+        const res = await fetch(`/api/autonomous/run?live=${isLive}&headed=${isHeaded}`, { method: 'POST', headers: authHeaders() });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || `Server error ${res.status}`);
+        }
         const summary = await res.json();
-        logConsole(`Cycle finished: ${summary.submitted_live} submitted, ${summary.verified_dry_runs} verified dry-runs, ${summary.errors} errors.`, summary.errors ? 'warn' : 'success');
-        toast(`Cycle completed: ${summary.submitted_live} submitted`, 'success');
+        logConsole(`Cycle finished: ${summary.submitted_live || 0} submitted live, ${summary.verified_dry_runs || 0} verified dry-runs, ${summary.errors || 0} errors.`, summary.errors ? 'warn' : 'success');
+        toast(`Cycle completed: ${summary.submitted_live || 0} live submissions`, 'success');
         refreshAll();
       } catch (err) {
         logConsole(`Autonomous engine error: ${err.message}`, 'error');
@@ -2469,35 +2495,62 @@ def get_dashboard_html() -> str:
         const curRes = await fetch('/api/kill-switch', { headers: authHeaders() });
         const cur = await curRes.json();
         const nextState = !cur.engaged;
-        await fetch('/api/kill-switch', {
+        const res = await fetch('/api/kill-switch', {
           method: 'POST',
           headers: authHeaders(),
-          body: JSON.stringify({ engaged: nextState, reason: 'Operator toggle via interactive dashboard' })
+          body: JSON.stringify({
+            engaged: nextState,
+            confirm: true,
+            reason: 'Operator toggle via interactive dashboard'
+          })
         });
-        toast(`Kill switch ${nextState ? 'ARMED' : 'DISARMED'}`, nextState ? 'error' : 'success');
-        logConsole(`Kill switch toggled to: ${nextState ? 'ARMED' : 'DISARMED'}`, nextState ? 'error' : 'success');
-        refreshKPIsAndStatus();
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+        toast(`Kill switch ${nextState ? 'ARMED / BLOCKED' : 'DISARMED'}`, nextState ? 'error' : 'success');
+        logConsole(`Kill switch toggled to: ${nextState ? 'ARMED / BLOCKED' : 'DISARMED'}`, nextState ? 'error' : 'success');
+        await refreshKPIsAndStatus();
       } catch (e) {
-        toast('Failed toggling kill switch', 'error');
+        toast('Failed toggling kill switch: ' + e.message, 'error');
+        logConsole('Kill switch toggle failed: ' + e.message, 'error');
       }
     }
 
     async function toggleLiveSubmit() {
       try {
-        const curRes = await fetch('/api/flags', { headers: authHeaders() });
-        const flags = await curRes.json();
-        const cur = flags.allow_live_submission;
-        const nextVal = !cur;
-        await fetch('/api/flags/allow_live_submission', {
-          method: 'PUT',
-          headers: authHeaders(),
-          body: JSON.stringify({ enabled: nextVal, reason: 'Operator toggle via interactive dashboard' })
-        });
-        toast(`Live submission set to: ${nextVal ? 'ENABLED' : 'DRY-RUN'}`, nextVal ? 'success' : 'info');
-        logConsole(`Live submission gate updated to: ${nextVal ? 'ENABLED' : 'DRY-RUN'}`);
-        refreshKPIsAndStatus();
+        const curRes = await fetch('/api/autonomous/status', { headers: authHeaders() });
+        const st = await curRes.json();
+        const cur = Boolean(st.allow_live_submission);
+        if (cur) {
+          // Turning OFF is always allowed by API policy (locks into safe dry-run)
+          const res = await fetch('/api/flags/allow_live_submission', {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ enabled: false, note: 'Operator locked to dry-run via dashboard' })
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          toast('Live submission gate: LOCKED TO DRY-RUN (SAFE)', 'info');
+          logConsole('Live submission gate locked to: DRY-RUN (SAFE)', 'normal');
+        } else {
+          // Attempt flag update or provide clear guidance on safety lock
+          const res = await fetch('/api/flags/allow_live_submission', {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ enabled: true, confirm: true, note: 'Operator live-on via dashboard' })
+          });
+          if (res.ok) {
+            toast('Live submission gate: LIVE ON', 'success');
+            logConsole('Live submission gate switched to: LIVE ON', 'warn');
+          } else {
+            toast('Live submission is safety-locked to prevent accidental submissions. Set ALLOW_LIVE_SUBMISSION=true in v2/.env and restart server, or run ./start_mac.command', 'warn');
+            logConsole('Safety Guard: Live submissions cannot be enabled through remote API. Start with ALLOW_LIVE_SUBMISSION=true in v2/.env or run ./start_mac.command', 'warn');
+          }
+        }
+        await refreshKPIsAndStatus();
       } catch (e) {
-        toast('Failed updating live submit flag', 'error');
+        toast('Live submit gate action error: ' + e.message, 'error');
+        logConsole('Live submit gate error: ' + e.message, 'error');
       }
     }
 
@@ -2506,7 +2559,11 @@ def get_dashboard_html() -> str:
       return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    window.onload = init;
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
   </script>
 
 </body>

@@ -1,0 +1,972 @@
+Production Blueprint for an Autonomous Agent Improvement Kernel
+​Executive Architectural Verdict and Core Paradigm
+​Building a software ecosystem that learns from every execution attempt, diagnoses its own faults, and continuously upgrades its own logic requires a strict architectural separation between live task execution and offline system evolution. Permitting an autonomous agent to rewrite its own source code or mutate its system instructions directly within the live request path introduces unbounded nondeterminism, destroys state reproducibility, and makes atomic rollback impossible when a hallucinated patch corrupts downstream data. The canonical production architecture for self-evolving software is a closed-loop Autonomous Improvement Kernel shared across Fidelis, Pedit, Allo, Agent Gang, and HunterXJob (JobTomatik) through domain-specific adapters.
+​Within this architecture, self-improvement is formalized as harness-level evolution rather than live model weight modification or unrestricted self-rewriting code. The harness is the versioned, declarative, and programmatic wrapper governing how an agent executes a task, encompassing system instructions, few-shot demonstrations, tool definitions, JSON validation schemas, model routing weights, retry policies, domain processing profiles, browser selectors, and verified source-code patches. Foundation model fine-tuning is intentionally deferred until the kernel accumulates a massive, human-calibrated corpus of verified successes and failures, because optimizing the harness yields higher reliability gains at a fraction of the computational cost without baking transient defects permanently into model weights.
+​Every live application process executes exclusively the promoted champion harness version. Concurrently, an asynchronous background worker ingests execution traces, grades outcomes through a three-tier evaluation engine, clusters recurring failure modes, synthesizes challenger harness candidates, validates those candidates inside an isolated sandbox, and promotes a challenger only when it statistically outperforms the champion without regressions.
+The Closed-Loop Autonomous Improvement Kernel Separates Live Execution from Offline Evolution
+The Closed-Loop <b>Autonomous Improvement Kernel</b> Separates Live Execution from Offline Evolution
+Tasks enter through five project adapters and execute strictly on the active Champion Harness while emitting standardized OpenTelemetry traces through a PII redaction layer. The offline improvement worker grades traces, clusters defects, compiles challenger candidates, and enforces an isolated sandbox gate before promotion.
+maximize engineering velocity, minimize infrastructure overhead, and eliminate operational hazards, the consolidated blueprint enforces four structural refinements over naive agent-retraining designs. First, read-only tracing is decoupled from gated promotion so that all five projects are instrumented from Day 1. Because telemetry emission is read-only and carries zero external side-effect risk, early universal instrumentation immediately builds the historical failure corpus required by the failure analyzer, whereas promotion capabilities are unlocked sequentially in strict risk order: Fidelis first, followed by Pedit, Allo, Agent Gang, and finally HunterXJob. Second, early harness evolution is restricted exclusively to declarative, versioned YAML and JSON configuration files tracked under Git—covering prompts, tool descriptions, JSON schemas, routing weights, artifact thresholds, and retry parameters. Making every initial challenger candidate a declarative configuration diff ensures changes are trivially reviewable, revertible, and immune to syntax crashes or code-execution vulnerabilities; the autonomous code-authoring agent is enabled for a project only after its configuration-level loop achieves multiple consecutive, regression-free promotions. 
+​Third, rather than deploying a sprawling distributed microservice mesh with event buses, message queues, and separate API clusters prematurely, Kernel v0 is packaged as a single importable Python library (improvement_kernel) backed by one PostgreSQL database, an S3-compatible object store, one asynchronous background worker process, and GitHub Actions for sandboxed CI/CD gating. Fourth, actions carrying legal, financial, account-reputation, or privacy consequences—such as live job submissions, employer messaging, telephony consent, and destructive file overwrites—remain strictly human-gated by default. Specifically for HunterXJob (JobTomatik), live autonomous submission is governed by an explicit autonomy: owner_only_full policy flag that restricts end-to-end unreviewed execution exclusively to the system owner's private runs and permanently disables it for public or subscription tiers.
+
+Architectural Dimension
+Naive Self-Modifying Agent Approach
+Consolidated Autonomous Improvement Kernel Blueprint
+Operational & Safety Advantage
+
+Mutation Target
+Live source code and in-flight prompts
+Versioned declarative harness (YAML/JSON) first; gated code patches second
+Eliminates mid-task state corruption and guarantees instant git-based rollback
+
+Execution Topology
+Single agent mutating itself inside the request path
+Champion runs live traffic; offline worker builds and tests Challengers
+Zero latency penalty on user requests; ties retain the current Champion
+
+Telemetry & Rollout
+Sequential per-project instrumentation and rollout
+Day-1 read-only tracing across all 5 apps; risk-ranked promotion rollout
+Accumulates cross-project failure corpora immediately without external side-effect risk
+
+Queue & Storage Stack (v0)
+Distributed event brokers (Kafka/RabbitMQ) + microservices
+Single Python package + PostgreSQL (SKIP LOCKED + LISTEN/NOTIFY) + Object Store
+ACID transactional integrity between run logs and job queues with minimal operational cost
+
+Evaluation Authority
+Uncalibrated LLM-as-judge prose opinions
+3-Tier Engine (Deterministic + Domain Metrics + Calibrated JSON Judge) + Wilcoxon Test
+Prevents judge noise and verbosity bias from churning production releases
+
+High-Risk Action Control
+Model self-discretion via system prompt warnings
+Hardcoded CI/CD environment gates + owner_only_full policy flag
+Enforces fail-closed governance in code rather than relying on probabilistic LLM compliance
+
+
+Standardized Runtime Instrumentation and Privacy-Preserving Telemetry
+​An improvement loop is blind if it records only the initial user input and the final output, because agentic failures predominantly occur during intermediate reasoning steps, tool selections, schema transformations, or inter-agent handoffs. Every application task across Fidelis, Pedit, Allo, Agent Gang, and HunterXJob must execute through a unified runtime wrapper (improvement_runtime.run) that constructs a hierarchical execution tree conforming to the OpenTelemetry (OTel) GenAI Semantic Conventions (gen_ai.*). 
+​OpenTelemetry GenAI Span Hierarchy and Semantic Attributes
+​Standardizing on the gen_ai.* namespace ensures that spans emitted by raw model SDKs, browser automation tools, image restoration pipelines, and multi-agent orchestrators share an identical schema. A single task execution generates a root agent span (gen_ai.operation.name = "invoke_agent") named invoke_agent {gen_ai.agent.name}, with child spans for each language model invocation (chat {gen_ai.request.model} or generate_content {gen_ai.request.model}) and each tool execution (execute_tool {gen_ai.tool.name}). 
+​Because raw prompt and completion payloads frequently contain large contexts or sensitive user data, OpenTelemetry GenAI conventions dictate that message bodies are not stored in standard indexed span attributes by default. Instead, structural metadata—such as model identifiers, sampling temperature, token counts, finish reasons, and latency—is recorded on the span attributes, while sanitized input and output messages are emitted as explicit, opt-in span events (gen_ai.content.prompt and gen_ai.content.completion) or structured payloads persisted in the kernel database. Furthermore, because structural HTTP 200 OK status codes do not indicate semantic success—a looping agent or an invalid form extraction produces clean HTTP spans—the runtime wrapper enriches spans with semantic evaluation attributes (gen_ai.evaluation.name, gen_ai.evaluation.score.value, gen_ai.evaluation.score.label, and gen_ai.evaluation.explanation) during the grading phase. 
+
+OTel Span / Metric Object
+Operation / Instrument Name
+Required & Core gen_ai.* Attributes
+Architectural Purpose in Improvement Kernel
+
+Root Agent Span
+invoke_agent {gen_ai.agent.name}
+gen_ai.operation.name="invoke_agent", gen_ai.agent.id, gen_ai.agent.name, gen_ai.agent.version, gen_ai.conversation.id
+Anchors the run tree and correlates quality regressions with a specific deployed harness version
+
+Model Inference Span
+chat {gen_ai.request.model}
+gen_ai.operation.name="chat", gen_ai.provider.name, gen_ai.request.model, gen_ai.response.model, gen_ai.request.temperature, gen_ai.response.finish_reasons
+Tracks model-level determinism, sampling parameters, and truncation or stop conditions
+
+Tool Execution Span
+execute_tool {gen_ai.tool.name}
+gen_ai.operation.name="execute_tool", gen_ai.tool.name, gen_ai.tool.call.id, gen_ai.tool.description, error.type
+Isolates tool selection errors, schema argument failures, and external timeout exceptions
+
+Evaluation Enrichment
+Span Attribute / Event
+gen_ai.evaluation.name, gen_ai.evaluation.score.value, gen_ai.evaluation.score.label, gen_ai.evaluation.explanation
+Binds deterministic and LLM-judge scores directly to the offending trace span
+
+Client Metrics
+gen_ai.client.token.usage & gen_ai.client.operation.duration
+gen_ai.token.type (input, output, reasoning), gen_ai.provider.name, gen_ai.request.model
+Enforces p95 latency budgets and per-run token cost ceilings during candidate promotion
+
+
+To prevent observability storage costs from scaling linearly with routine traffic once all five projects are active, the trace collector implements a tail-based sampling policy for raw span event bodies: it retains 100% of traces that end in an error or defect, 100% of traces exceeding 5 seconds in total duration, 100% of complex multi-step traces containing 20 or more spans, and a 5% random sample of routine, high-scoring successful runs to serve as positive baseline anchors. 
+​Pre-Persistence PII Redaction via Microsoft Presidio
+​Traces must never persist raw passwords, API keys, authentication cookies, unredacted phone call transcripts, or sensitive personal identifiers. Before any span payload is written to PostgreSQL or object storage, it passes through an in-process Microsoft Presidio scrubbing pipeline (presidio-analyzer and presidio-anonymizer). Presidio combines deterministic regular-expression PatternRecognizer rules with a local spaCy named-entity recognition (NER) model (en_core_web_lg, which requires a 400.7 MB download and occupies 425 MB on disk, baked directly into the container image to avoid startup download latency). In production CPU environments, a singleton AnalyzerEngine instance processes typical payloads in 50 to 200 milliseconds at a throughput of roughly 50 requests per second per process, achieving 90% to 95% precision on standard PII entities. 
+​Because naive redaction that strips every number or proper noun destroys the semantic clues required by the failure analyzer—for example, redacting "5 years experience" or "Apple" as a company name in HunterXJob—the kernel configures entity-specific confidence thresholds alongside context-aware boosting (context_similarity_factor). Zero-tolerance secrets and financial identifiers (API_KEY, AUTH_TOKEN, CREDIT_CARD, US_SSN, and CRYPTO) are redacted unconditionally at a conservative confidence threshold of \ge 0.40 using deterministic SHA-256 hashing (hash operator) or static replacement (<REDACTED_SECRET>). Conversely, personal contact and identity entities (EMAIL_ADDRESS, PHONE_NUMBER, and PERSON) are scrubbed at an elevated confidence threshold of \ge 0.75 using reversible AES-256-GCM authenticated encryption (encrypt operator) or indexed placeholders ([PERSON_1], [EMAIL_1]), ensuring that authorized debugging workflows can verify field-mapping consistency across spans without exposing plaintext PII to the LLM judge. 
+​Reference Implementation: Runtime Wrapper and Presidio Redactor
+​The following production module (improvement_kernel/runtime/runner.py) implements the unified execution wrapper, automatic span nesting, cost and latency tracking, and recursive Presidio scrubbing.
+improvement_kernel/runtime/runner.py
+from future import annotations
+
+import hashlib
+import json
+import time
+import uuid
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Awaitable, Callable
+
+from opentelemetry import trace
+from opentelemetry.trace import SpanKind, Status, StatusCode
+from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer
+from presidio_anonymizer import AnonymizerEngine
+from presidio_anonymizer.entities import OperatorConfig
+
+class TraceRedactor:
+"""Process-singleton PII & secret scrubber backed by Microsoft Presidio."""
+
+_instance: TraceRedactor | None = None
+
+def new(cls) -> TraceRedactor:
+if cls._instance is None:
+cls._instance = super().new(cls)
+cls._instance._init_engines()
+return cls._instance
+
+def init_engines(self) -> None:
+self.analyzer = AnalyzerEngine()
+secret_pattern = Pattern(
+name="api_key_or_bearer",
+regex=r"\b(sk-[a-zA-Z0-9_-]{20,}|pk[a-zA-Z0-9_-]{20,}|Bearer\s+[a-zA-Z0-9._~+/=-]{20,})\b",
+score=0.95,
+)
+secret_recognizer = PatternRecognizer(
+supported_entity="SECRET_TOKEN", patterns=[secret_pattern]
+)
+self.analyzer.registry.add_recognizer(secret_recognizer)
+self.anonymizer = AnonymizerEngine()
+self.operators = {
+"SECRET_TOKEN": OperatorConfig("replace", {"new_value": "<REDACTED_SECRET>"}),
+"CREDIT_CARD": OperatorConfig("replace", {"new_value": "<REDACTED_CC>"}),
+"US_SSN": OperatorConfig("replace", {"new_value": "<REDACTED_SSN>"}),
+"EMAIL_ADDRESS": OperatorConfig("hash", {"hash_type": "sha256"}),
+"PHONE_NUMBER": OperatorConfig("mask", {"type": "mask", "masking_char": "*", "chars_to_mask": 6, "from_end": True}),
+"PERSON": OperatorConfig("replace", {"new_value": "<PERSON>"}),
+"DEFAULT": OperatorConfig("replace", {"new_value": "<PII>"}),
+}
+
+def scrub_text(self, text: str) -> str:
+if not text or len(text.strip()) < 4:
+return text
+results = self.analyzer.analyze(
+text=text,
+language="en",
+entities=["SECRET_TOKEN", "CREDIT_CARD", "US_SSN", "EMAIL_ADDRESS", "PHONE_NUMBER", "PERSON"],
+score_threshold=0.75,
+)
+if not results:
+return text
+return self.anonymizer.anonymize(
+text=text, analyzer_results=results, operators=self.operators
+).text
+
+def scrub_payload(self, payload: Any, depth: int = 0) -> Any:
+if depth > 10:
+return "<MAX_DEPTH_EXCEEDED>"
+if isinstance(payload, str):
+return self.scrub_text(payload)
+if isinstance(payload, dict):
+sensitive_keys = {"password", "api_key", "secret", "cookie", "authorization", "ssn"}
+return {
+k: ("<REDACTED_KEY>" if k.lower() in sensitive_keys else self.scrub_payload(v, depth + 1))
+for k, v in payload.items()
+}
+if isinstance(payload, list):
+return [self.scrub_payload(item, depth + 1) for item in payload]
+return payload
+
+@dataclass
+class SpanRecord:
+span_id: str
+parent_id: str | None
+span_type: str # 'invoke_agent' | 'chat' | 'execute_tool' | 'guardrail'
+name: str
+input_json: dict[str, Any]
+output_json: dict[str, Any] | None = None
+error_json: dict[str, Any] | None = None
+attributes: dict[str, Any] = field(default_factory=dict)
+started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+ended_at: datetime | None = None
+
+@dataclass
+class RunResult:
+run_id: str
+trace_id: str
+project: str
+task_type: str
+agent_version: str
+status: str
+output: Any
+input_hash: str
+output_hash: str | None
+latency_ms: int
+cost_cents: float
+failure_code: str | None = None
+spans: list[SpanRecord] = field(default_factory=list)
+
+class ImprovementRuntime:
+"""Shared execution harness wrapper for Fidelis, Pedit, Allo, Agent Gang, and HunterXJob."""
+
+def init(self, db_repo: Any, tracer_name: str = "improvement_kernel") -> None:
+self.db_repo = db_repo
+self.tracer = trace.get_tracer(tracer_name)
+self.redactor = TraceRedactor()
+self._active_spans: dict[str, list[SpanRecord]] = {}
+self._cost_accumulators: dict[str, float] = {}
+
+@staticmethod
+def _compute_hash(data: Any) -> str:
+serialized = json.dumps(data, sort_keys=True, default=str).encode("utf-8")
+return f"sha256:{hashlib.sha256(serialized).hexdigest()}"
+
+@asynccontextmanager
+async def trace_step(
+self,
+run_id: str,
+operation_name: str,
+target_name: str,
+input_data: dict[str, Any],
+parent_span_id: str | None = None,
+extra_attributes: dict[str, Any] | None = None,
+):
+span_id = str(uuid.uuid4())
+span_name = f"{operation_name} {target_name}"
+scrubbed_in = self.redactor.scrub_payload(input_data)
+record = SpanRecord(
+span_id=span_id,
+parent_id=parent_span_id,
+span_type=operation_name,
+name=span_name,
+input_json=scrubbed_in,
+attributes=extra_attributes or {},
+)
+self._active_spans.setdefault(run_id, []).append(record)
+
+with self.tracer.start_as_current_span(span_name, kind=SpanKind.INTERNAL) as otel_span:
+otel_span.set_attribute("gen_ai.operation.name", operation_name)
+for k, v in (extra_attributes or {}).items():
+otel_span.set_attribute(k, v)
+try:
+yield record
+record.ended_at = datetime.now(timezone.utc)
+otel_span.set_status(Status(StatusCode.OK))
+except Exception as exc:
+record.ended_at = datetime.now(timezone.utc)
+record.error_json = {"error_type": type(exc).name, "message": self.redactor.scrub_text(str(exc))}
+otel_span.set_attribute("error.type", type(exc).name)
+otel_span.record_exception(exc)
+otel_span.set_status(Status(StatusCode.ERROR, str(exc)))
+raise
+
+async def run(
+self,
+project: str,
+task_type: str,
+input_payload: dict[str, Any],
+agent_version: str,
+adapter_fn: Callable[[str, dict[str, Any]], Awaitable[tuple[Any, float]]],
+) -> RunResult:
+run_id = str(uuid.uuid4())
+trace_id = str(uuid.uuid4())
+start_ns = time.perf_counter_ns()
+scrubbed_input = self.redactor.scrub_payload(input_payload)
+input_hash = self._compute_hash(scrubbed_input)
+self._active_spans[run_id] = []
+self._cost_accumulators[run_id] = 0.0
+
+try:
+async with self.trace_step(
+run_id=run_id,
+operation_name="invoke_agent",
+target_name=project,
+input_data=scrubbed_input,
+extra_attributes={
+"gen_ai.agent.name": project,
+"gen_ai.agent.version": agent_version,
+},
+) as root_span:
+output, cost_cents = await adapter_fn(run_id, input_payload)
+scrubbed_output = self.redactor.scrub_payload(output)
+root_span.output_json = {"result": scrubbed_output}
+self._cost_accumulators[run_id] += cost_cents
+
+latency_ms = int((time.perf_counter_ns() - start_ns) / 1_000_000)
+output_hash = self._compute_hash(scrubbed_output)
+result = RunResult(
+run_id=run_id,
+trace_id=trace_id,
+project=project,
+task_type=task_type,
+agent_version=agent_version,
+status="succeeded",
+output=output,
+input_hash=input_hash,
+output_hash=output_hash,
+latency_ms=latency_ms,
+cost_cents=self._cost_accumulators[run_id],
+spans=self._active_spans.pop(run_id, []),
+)
+except Exception as exc:
+latency_ms = int((time.perf_counter_ns() - start_ns) / 1_000_000)
+failure_code = getattr(exc, "failure_code", type(exc).name.upper())
+result = RunResult(
+run_id=run_id,
+trace_id=trace_id,
+project=project,
+task_type=task_type,
+agent_version=agent_version,
+status="failed",
+output=None,
+input_hash=input_hash,
+output_hash=None,
+latency_ms=latency_ms,
+cost_cents=self._cost_accumulators.pop(run_id, 0.0),
+failure_code=failure_code,
+spans=self._active_spans.pop(run_id, []),
+)
+
+await self.db_repo.persist_run_and_enqueue_grading(result)
+return result
+
+Persistence Layer and Zero-Broker Asynchronous Queue Architecture
+​In accordance with the Kernel v0 design constraint—one shared Python package, one PostgreSQL database, one object storage bucket, and one background worker—the system eliminates external message brokers (such as Redis, RabbitMQ, or Kafka) in favor of a PostgreSQL-native transactional job queue. 
+​When persist_run_and_enqueue_grading executes at the end of a run, the runtime writes the runs record, batch-inserts the traces spans, and inserts a grade_run task into the improvement_jobs table inside a single ACID database transaction. If the transaction commits, the grading job is guaranteed to exist; if it rolls back, no orphaned queue message is emitted. A PostgreSQL trigger fires pg_notify('improvement_jobs_channel', NEW.queue_name) to wake idle asyncio worker coroutines immediately without polling delay, while SELECT ... FOR UPDATE SKIP LOCKED coordinates concurrent workers at the row level without lock contention or distributed leader election. 
+​When a background grading or optimization job fails due to transient LLM API rate limits or sandbox timeouts, the worker releases the row back to pending status with an exponentially delayed schedule and 0–30% uniform jitter to prevent thundering-herd retries: 
+
+Under this progression, Attempt 1 waits a base interval of 30 seconds (up to 39 seconds with maximum jitter), Attempt 2 waits 60 seconds (up to 78 seconds), Attempt 3 waits 120 seconds (up to 156 seconds), Attempt 4 waits 240 seconds (up to 312 seconds), and Attempt 5 waits 480 seconds (up to 624 seconds). Once attempts >= max_attempts (default 5), the job transitions atomically to status = 'dead' for dead-letter inspection and manual replay after root-cause remediation. 
+
+Operational Subsystem
+Parameter / Metric
+Production Target / Schedule
+Architectural Mechanism
+
+OTel Tail-Sampling
+Error, >5\text{ s} Latency, or \ge 20 Span Traces
+100% full-content retention
+Captures complete diagnostic evidence for all anomalous or complex multi-step runs
+
+OTel Tail-Sampling
+Routine Passing Traces
+5% random sample
+Preserves positive baseline anchors while preventing linear storage growth
+
+Presidio PII Scrubber
+In-Process CPU Latency & Throughput
+50–200 ms/call (~50 req/s)
+Singleton AnalyzerEngine with baked-in 425 MB en_core_web_lg spaCy model (90–95% precision)
+
+Queue Retry Schedule
+Attempts 1, 2, 3, 4, and 5 (Base / Max Jitter)
+30/39s, 60/78s, 120/156s, 240/312s, 480/624s
+Exponential backoff 30[span_42](start_span)[span_42](end_span)[span_44](start_span)[span_44](end_span) \cdot 2^{\text{attempts}-1} with +30\% random jitter; transitions to dead at attempt 5
+
+
+Production PostgreSQL Schema (migrations/001_init_kernel.sql)
+​All large binary artifacts—source and restored images in Fidelis, source and edited PDFs plus visual diff renders in Pedit, audio buffers in Allo, DOM snapshots and screenshots in HunterXJob, and unified Git patch diffs—are stored in S3-compatible object storage (such as MinIO, Cloudflare R2, or AWS S3), while PostgreSQL stores only their content-addressed sha256 hashes and URI pointers.
+-- migrations/001_init_kernel.sql
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- 1. Versioned Harness & Agent Registry
+CREATE TABLE agent_versions (
+id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+project TEXT NOT NULL,
+version TEXT NOT NULL,
+git_commit TEXT NOT NULL,
+prompt_hash TEXT NOT NULL,
+config_hash TEXT NOT NULL,
+code_diff_uri TEXT,
+harness_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+status TEXT NOT NULL CHECK (status IN ('candidate', 'staging', 'canary', 'champion', 'rejected', 'rolled_back')),
+created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+UNIQUE (project, version)
+);
+
+CREATE UNIQUE INDEX idx_one_champion_per_project
+ON agent_versions (project)
+WHERE status = 'champion';
+
+-- 2. Task Execution Runs
+CREATE TABLE runs (
+id UUID PRIMARY KEY,
+trace_id UUID NOT NULL,
+project TEXT NOT NULL,
+task_type TEXT NOT NULL,
+agent_version TEXT NOT NULL,
+status TEXT NOT NULL CHECK (status IN ('succeeded', 'failed', 'timeout', 'guardrail_blocked')),
+input_hash TEXT NOT NULL,
+output_hash TEXT,
+artifact_uris JSONB NOT NULL DEFAULT '[]'::jsonb,
+cost_cents NUMERIC(10, 4) NOT NULL DEFAULT 0.0,
+latency_ms INTEGER NOT NULL,
+failure_code TEXT,
+user_feedback JSONB,
+created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_runs_project_status_created ON runs (project, status, created_at DESC);
+CREATE INDEX idx_runs_agent_version ON runs (project, agent_version);
+
+-- 3. Hierarchical OpenTelemetry-Compatible Trace Spans
+CREATE TABLE traces (
+id UUID PRIMARY KEY,
+run_id UUID NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+parent_id UUID,
+span_type TEXT NOT NULL,
+name TEXT NOT NULL,
+attributes JSONB NOT NULL DEFAULT '{}'::jsonb,
+input_json JSONB,
+output_json JSONB,
+error_json JSONB,
+started_at TIMESTAMPTZ NOT NULL,
+ended_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_traces_run_id ON traces (run_id);
+
+-- 4. Multi-Tier Evaluation Grades
+CREATE TABLE grades (
+id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+run_id UUID NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+grader_layer TEXT NOT NULL CHECK (grader_layer IN ('deterministic', 'domain_metric', 'llm_judge')),
+grader_name TEXT NOT NULL,
+score NUMERIC(5, 4) NOT NULL CHECK (score >= 0.0 AND score <= 1.0),
+passed BOOLEAN NOT NULL,
+rationale TEXT,
+criteria_breakdown JSONB,
+created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_grades_run_id ON grades (run_id);
+
+-- 5. Clustered Defects & Regression Links
+CREATE TABLE defects (
+id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+project TEXT NOT NULL,
+failure_category TEXT NOT NULL CHECK (failure_category IN ('MODEL', 'TOOL', 'WORKFLOW', 'DATA', 'PRODUCT', 'SAFETY')),
+failure_cluster TEXT NOT NULL,
+severity TEXT NOT NULL CHECK (severity IN ('low', 'medium', 'high', 'critical')),
+evidence_run_ids UUID[] NOT NULL,
+root_cause_span_name TEXT,
+root_cause TEXT NOT NULL,
+proposed_fix_type TEXT NOT NULL,
+proposed_fix JSONB NOT NULL,
+regression_test_path TEXT,
+status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'candidate_proposed', 'resolved', 'escalated_human')),
+created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_defects_project_status ON defects (project, status);
+
+-- 6. Champion vs. Challenger Benchmark Evaluations
+CREATE TABLE evaluations (
+id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+project TEXT NOT NULL,
+dataset_version TEXT NOT NULL,
+candidate_version TEXT NOT NULL,
+champion_version TEXT NOT NULL,
+candidate_mean_score NUMERIC(5, 4) NOT NULL,
+champion_mean_score NUMERIC(5, 4) NOT NULL,
+wilcoxon_p_value NUMERIC(6, 5),
+cohens_d NUMERIC(6, 3),
+regression_count INTEGER NOT NULL,
+guardrails_passed BOOLEAN NOT NULL,
+security_scan_passed BOOLEAN NOT NULL,
+p95_latency_ms INTEGER NOT NULL,
+mean_cost_cents NUMERIC(10, 4) NOT NULL,
+item_level_scores JSONB NOT NULL DEFAULT '[]'::jsonb,
+created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 7. Immutable Promotion & Rollback Ledger
+CREATE TABLE promotions (
+id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+project TEXT NOT NULL,
+evaluation_id UUID REFERENCES evaluations(id),
+previous_version TEXT,
+promoted_version TEXT NOT NULL,
+decision TEXT NOT NULL CHECK (decision IN ('promote_auto', 'promote_human_approved', 'reject', 'human_review_required', 'rollback_auto')),
+score_delta NUMERIC(5, 4),
+reviewer TEXT NOT NULL,
+notes TEXT,
+created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 8. Zero-Broker Asynchronous Job Queue (FOR UPDATE SKIP LOCKED)
+CREATE TYPE job_status AS ENUM ('pending', 'running', 'completed', 'dead');
+
+CREATE TABLE improvement_jobs (
+id BIGSERIAL PRIMARY KEY,
+queue_name TEXT NOT NULL,
+project TEXT NOT NULL,
+payload JSONB NOT NULL,
+priority SMALLINT NOT NULL DEFAULT 5,
+status job_status NOT NULL DEFAULT 'pending',
+attempts SMALLINT NOT NULL DEFAULT 0,
+max_attempts SMALLINT NOT NULL DEFAULT 5,
+scheduled_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+locked_at TIMESTAMPTZ,
+locked_by TEXT,
+last_error TEXT,
+created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_jobs_dequeue
+ON improvement_jobs (queue_name, priority ASC, scheduled_at ASC)
+WHERE status = 'pending';
+
+CREATE OR REPLACE FUNCTION notify_job_enqueued() RETURNS trigger AS
+
+
+To dequeue jobs safely across parallel worker processes without race conditions, the worker executes a single atomic Common Table Expression (CTE) via asyncpg: 
+WITH next_job AS (
+SELECT id
+FROM improvement_jobs
+WHERE queue_name = 2,
+updated_at = now()
+FROM next_job
+WHERE j.id = next_job.id
+RETURNING j.id, j.project, j.payload, j.attempts, j.max_attempts;
+
+Three-Tier Evaluation Engine and Statistical Promotion Gate
+​The single greatest failure mode in autonomous agent engineering is attempting to build self-modification before establishing deterministic and calibrated measurement; without rigorous evaluation, self-improvement degenerates into self-randomization. Furthermore, relying exclusively on an uncalibrated LLM-as-judge creates a self-reinforcing echo chamber vulnerable to positional bias, verbosity bias, and self-preference bias. 
+​The Three Evaluation Layers
+​The kernel grades every run and benchmark candidate through a strict three-tier hierarchy where lower tiers act as hard circuit breakers for higher tiers. Tier 1 consists of deterministic validators implemented in standard Python code that verify non-negotiable structural invariants at near-zero computational cost. These checks confirm that output JSON validates against Pydantic schemas, expected output files exist and match recorded hashes, edited PDFs open cleanly without parser errors, restored images preserve exact target dimensions, browser actions return verified HTTP or DOM confirmation signals, and zero secret patterns appear in outputs. If any critical Tier 1 invariant fails, the run is immediately marked passed = False and overall_score = 0.0 without expending tokens on downstream LLM judging.
+​Runs that pass Tier 1 proceed to Tier 2, which executes domain-specific quantitative metric graders tailored to the physical and operational constraints of each product. In Fidelis, Tier 2 computes regional high-frequency ringing indices, texture variance ratios, and face landmark stability. In Pedit, it calculates bounding-box coordinate drift (\Delta x, \Delta y in points), OCR Levenshtein distance on unedited text blocks, and pixel-level rendered page differences (visual_diff < 0.02). In Allo, it measures Time-to-First-Audio (TTFA), turn-taking pause gaps, and barge-in cutoff latency. Finally, Tier 3 invokes a calibrated rubric LLM-as-judge using a strong, cross-family reasoning model—such as Claude Opus 4.6 or GPT-4o, ensuring the judge model is distinct from the task execution model to prevent self-preference bias—to evaluate semantic qualities that deterministic rules cannot capture, returning strict JSON outputs. 
+​Rubric Design Laws and Judge Calibration
+​To eliminate score inflation and grader confusion, the Tier 3 judge rubric enforces three psychometric principles: behavioral specificity, objective measurability, and criterion independence. Rather than relying on vague 1–10 holistic ratings that invite arbitrary scoring drift, behavioral specificity anchors every criterion to concrete performance bands (0.0–0.3 Poor/Fails contract, 0.4–0.6 Acceptable with minor gaps, and 0.7–1.0 Complete and grounded) paired with an explicit pass threshold. Objective measurability restricts the judge to grading only observable evidence present in the trace spans and tool outputs, forbidding the model from inferring unstated agent intent or rewarding confident prose when an underlying tool call failed. Criterion independence requires orthogonalizing evaluation dimensions (task_completion, correctness, evidence_grounding, tool_use, and safety) via correlation checks against a human-labeled calibration set of 30 to 50 examples per project so that a single underlying mistake does not penalize multiple overlapping metrics. Moreover, forcing the judge schema to emit factual reasoning strings before generating numeric scores prevents quantization noise and substantially increases agreement with human domain experts. 
+​Statistical Champion-vs-Challenger Promotion Rule
+​In production benchmarking across the Frozen Golden Dataset (D_{\text{golden}}, 20–100+ human-vetted cases that the optimizer is forbidden to modify) and the Rolling Failure Replay Dataset (D_{\text{replay}}, the last N confirmed production failures), comparing raw mean scores (Score(c) > Score(\text{champion})) is necessary but insufficient. Because per-item LLM judge and domain scores are bounded on [0, 1], frequently bimodal or skewed, and contain numerous exact ties (S_i(c) - S_i(\text{champ}) = 0 on routine passing items), standard parametric t-tests violate normality assumptions. 
+​The Promotion Engine therefore augments the hard invariant gate with a paired, non-parametric Wilcoxon Signed-Rank Test with Holm–Bonferroni step-down correction (when evaluating K challenger candidates in parallel) and a Cohen's d effect-size floor: 
+where the hard invariant conjunction is defined as:
+\text{InvariantsPass}(c) \iff \text{TestsPass}(c) \land \text{SecurityPass}(c) \land \text{GuardrailsPass}(c) \land \left(\text{Regressions}_{D_{\text{golden}}}(c) = 0\right) \land \left(L_{p95}(c) \le B_{\text{lat}}\right) \land \left(C_{\text{mean}}(c) \le B_{\text{cost}}\right)
+\text{Promote}(c) \iff \text{InvariantsPass}(c) \land \left(\mu_c > \mu_{\text{champ}}\right) \land \left(p_{\text{Wilcoxon, Holm}} < 0.05\right) \land \left(d_{\text{Cohen}} \ge 0.20\right)
+improvement_kernel/evaluations/promotion.py
+from future import annotations
+
+from dataclasses import dataclass
+import numpy as np
+from scipy.stats import wilcoxon
+
+@dataclass
+class BenchmarkSummary:
+version: str
+item_scores: list[float] # Aligned item-by-item across Golden + Replay sets
+deterministic_passed: list[bool] # Per-item Tier 1 pass flags
+tests_passed: bool
+security_passed: bool
+guardrails_passed: bool
+p95_latency_ms: int
+mean_cost_cents: float
+risk_level: str # 'low' | 'medium' | 'high' | 'critical'
+requires_human_approval: bool
+
+@dataclass
+class PromotionDecision:
+decision: str # 'promote_auto' | 'human_review_required' | 'reject'
+score_delta: float
+wilcoxon_p: float
+cohens_d: float
+regression_count: int
+rationale: str
+
+def evaluate_champion_vs_challenger(
+champion: BenchmarkSummary,
+challenger: BenchmarkSummary,
+latency_budget_ms: int,
+cost_budget_cents: float,
+alpha_holm_adjusted: float = 0.05,
+) -> PromotionDecision:
+"""Enforces deterministic invariants + paired Wilcoxon & Cohen's d promotion gate."""
+if not challenger.tests_passed:
+return PromotionDecision("reject", 0.0, 1.0, 0.0, 0, "Unit or contract tests failed.")
+if not challenger.security_passed:
+return PromotionDecision("reject", 0.0, 1.0, 0.0, 0, "Semgrep/Bandit security scan failed.")
+if not challenger.guardrails_passed:
+return PromotionDecision("reject", 0.0, 1.0, 0.0, 0, "Safety guardrails violated.")
+if challenger.p95_latency_ms > latency_budget_ms:
+return PromotionDecision("reject", 0.0, 1.0, 0.0, 0, f"p95 latency {challenger.p95_latency_ms}ms exceeds budget {latency_budget_ms}ms.")
+if challenger.mean_cost_cents > cost_budget_cents:
+return PromotionDecision("reject", 0.0, 1.0, 0.0, 0, f"Mean cost {challenger.mean_cost_cents}c exceeds budget {cost_budget_cents}c.")
+
+champ_arr = np.asarray(champion.item_scores, dtype=np.float64)
+chall_arr = np.asarray(challenger.item_scores, dtype=np.float64)
+
+# Count regressions: items where Champion passed Tier 1 and scored >= 0.7, but Challenger dropped > 0.05 or failed Tier 1
+regressions = 0
+for c_pass, ch_pass, c_sc, ch_sc in zip(
+champion.deterministic_passed, challenger.deterministic_passed, champ_arr, chall_arr
+):
+if (c_pass and not ch_pass) or (c_sc >= 0.70 and (c_sc - ch_sc) > 0.05):
+regressions += 1
+
+if regressions > 0:
+return PromotionDecision(
+"reject", float(np.mean(chall_arr - champ_arr)), 1.0, 0.0, regressions,
+f"Candidate introduced {regressions} regression(s) on golden/replay items."
+)
+
+diffs = chall_arr - champ_arr
+mean_delta = float(np.mean(diffs))
+if mean_delta <= 0.0:
+return PromotionDecision("reject", mean_delta, 1.0, 0.0, 0, "Candidate tied or underperformed Champion.")
+
+non_zero_diffs = diffs[np.abs(diffs) > 1e-6]
+std_diff = float(np.std(diffs, ddof=1)) if len(diffs) > 1 else 0.0
+cohens_d = (mean_delta / std_diff) if std_diff > 1e-9 else 0.0
+
+# Paired one-sided Wilcoxon Signed-Rank Test (Challenger > Champion)
+if len(non_zero_diffs) >= 15:
+_, p_val = wilcoxon(chall_arr, champ_arr, zero_method="wilcox", alternative="greater")
+p_val = float(p_val)
+statistically_valid = (p_val < alpha_holm_adjusted) and (cohens_d >= 0.20)
+else:
+# Underpowered sample fallback: require positive gain with Cohen's d >= 0.25 and route to review if risky
+p_val = 1.0
+statistically_valid = cohens_d >= 0.25
+
+if not statistically_valid:
+return PromotionDecision(
+"reject", mean_delta, p_val, cohens_d, 0,
+f"Gain not statistically significant (p={p_val:.4f}, d={cohens_d:.3f})."
+)
+
+if challenger.requires_human_approval or challenger.risk_level in {"high", "critical"}:
+return PromotionDecision(
+"human_review_required", mean_delta, p_val, cohens_d, 0,
+"Candidate beat Champion with zero regressions; awaiting human sign-off per project risk policy."
+)
+
+return PromotionDecision(
+"promote_auto", mean_delta, p_val, cohens_d, 0,
+f"Auto-promoted: delta=+{mean_delta:.4f}, p={p_val:.4f}, d={cohens_d:.3f}, regressions=0."
+)
+
+Failure Clustering, Root-Cause Diagnosis, and Algorithmic Harness Optimization
+​An isolated error may represent transient external noise, whereas ten similar errors across different runs expose a structural defect in the harness. The offline improvement worker executes a structured diagnostic and optimization pipeline to convert raw failures into validated challenger candidates.
+​Controlled Failure Taxonomy and Causal Root-Cause Extraction
+​Every failed or low-scoring run is classified into a two-level controlled taxonomy:
+Controlled Failure Taxonomy and Causal Root-Cause Extraction
+​Every failed or low-scoring run is classified into a two-level controlled taxonomy:
+
+Taxonomy Category
+Standardized Failure Codes
+Primary Diagnostic Target in Harness
+
+MODEL
+hallucination, unsupported_claim, bad_format, incomplete_answer, inconsistent_persona
+System prompt instructions, output JSON schemas, few-shot demonstrations, temperature
+
+TOOL
+wrong_tool, invalid_arguments, tool_timeout, tool_permission_denied, bad_tool_result
+Tool descriptions, Pydantic argument validators, timeout/retry configs, parser adapters
+
+WORKFLOW
+wrong_route, unnecessary_handoff, missing_verification, infinite_retry, state_corruption
+Orchestrator routing weights, loop termination caps, verification gates
+
+DATA
+missing_input, stale_memory, conflicting_sources, bad_extraction
+DOM selectors, OCR pre-processors, episodic/semantic memory retrieval filters
+
+PRODUCT
+poor_latency, poor_audio_quality, layout_corruption, image_artifact, failed_submission
+Fidelis tile/restoration profiles, Pedit font-fitting heuristics, Allo barge-in buffers
+
+SAFETY
+unauthorized_action, privacy_violation, destructive_action, unsafe_external_side_effect
+Immediate escalation to human review queue + deterministic guardrail rule synthesis
+
+
+Because multi-step traces exhibit cascading failures—for instance, an LLM extraction span outputting "5 years" instead of integer 5, which subsequently causes a browser tool span to fail with FORM_VALIDATION_ERROR—the Failure Analyzer performs causal chain traversal across the span tree. It identifies the earliest ancestor span where output diverged from schema or ground-truth expectations, separating the upstream root cause from downstream symptoms. 
+​The analyzer then embeds the concatenated [failure_code, root_cause_span_name, error_message, judge_rationale] vectors and applies HDBSCAN (Hierarchical Density-Based Spatial Clustering of Applications with Noise) to group recurring defects without requiring a pre-specified cluster count, filtering out one-off anomalies as noise. Every confirmed defect cluster automatically generates a new test case in the project's evals/<project>/replay_cases.jsonl suite before any fix is attempted, guaranteeing that once a defect cluster is resolved, it can never silently regress in future versions. 
+​Algorithmic Harness Optimization: The DSPy and TextGrad Ladder
+​In accordance with the configuration-first gate, the Improvement Planner targets declarative YAML and JSON harness configurations before touching Python source code. Rather than relying solely on ad-hoc metaprompting, the planner ascends a four-stage algorithmic optimization ladder using TextGrad and DSPy (BootstrapFewShot, MIPROv2, and GEPA) matched to the sample size of the project's evaluation dataset. When a defect cluster first emerges and labeled examples are sparse (10 to 30 replay cases), the planner operates at Stage 1, utilizing a static metaprompt or TextGrad to compute textual gradients from the Tier 3 judge's critique back to the system instruction or YAML routing thresholds. Crucially, the optimizer's own metaprompt instructions remain static and version-locked; it is never permitted to rewrite its own optimization rules. 
+​As the verified trace corpus grows to between 20 and 50 examples, the planner advances to Stage 2 with DSPy BootstrapFewShot (~18 GB peak RAM), which synthesizes few-shot input/output demonstrations from high-scoring historical champion runs and injects them directly into the declarative prompt configuration. Once a project accumulates 50 to 200+ labeled examples, Stage 3 unlocks DSPy MIPROv2 (~20 GB peak RAM), which jointly tunes system instructions and bootstrapped demonstrations across modular type-safe signatures. In production deployments, compiling modularized prompts with MIPROv2 reduces malformed schema outputs by more than 97%, cuts normalized mean squared error (NMSE) on relevance judges from 46.88 to 17.26, reduces context truncation rates from 40% to under 10% when paired with explicit per-module token caps (such as 1,500 to 2,000 tokens), and yields +16 to +25 percentage-point quality improvements (raising baseline scores from 62% to 78%). Finally, for multi-objective or multi-module pipelines balancing accuracy, latency, and token cost across tight rollout budgets, Stage 4 deploys DSPy GEPA (Genetic-Pareto) (configurable across 8 GB Lightweight, 16 GB Standard, and 32 GB Production RAM tiers), which uses reflective feedback to achieve a 13% aggregate lift over MIPROv2 with 35 times fewer rollouts, elevating multi-step task accuracy from 60% to 95%. 
+
+Algorithmic Harness Compilation Delivers Up to 97% Fewer Malformed Outputs and 35x Rollout Efficiency
+Malformed Outputs−97%
+ZenML production judge
+Judge NMSE Error46.9 → 17.3
+63% variance reduction
+Context Truncation40% → <10%
+Modular architecture cap
+Rollout Efficiency35× Fewer
+GEPA vs. MIPROv2 calls
+Baseline vs. Compiled Accuracy Lift
+Objective metric evaluation across single-module and multi-agent pipelines
+Unoptimized Baseline
+MIPROv2 Compiled
+GEPA Compiled
+Business Analyst Role: +18% relative liftGEPA vs. MIPROv2 Aggregate Lift: +13% across multi-module benchmarks
+DSPy Optimizer Ladder: Execution Hardware & Dataset Selection
+
+Optimizer Stage
+Labeled Dataset
+Peak RAM Footprint
+Primary Use Case & Mechanics
+
+1. BootstrapFewShot
+20 – 50 examples
+~18 GB RAM
+Rapid baseline initialization; synthesizes few-shot demonstrations with minimal compute.
+
+2. MIPROv2
+100 – 200+ examples
+~20 GB RAM (4–8 candidates)
+Joint prompt instruction proposal & demo bootstrapping; eliminates malformed outputs.
+
+3. GEPA (Genetic-Pareto)
+Multi-objective sets
+8GB / 16GB / 32GB (Tiered)
+Multi-module agent chains & complex reasoning; 35× fewer rollouts via reflection.
+
+4. TextGrad / OPRO
+100 – 500 examples
+Model dependent
+Pre-production textual gradient backpropagation through loss metrics and continuous prompts.
+
+
+Top: Empirical production improvements from compiling modular prompts with DSPy optimizers. Middle: Baseline versus compiled quality scores across single-module and multi-step pipelines. Bottom: The DSPy Optimizer Ladder matched to dataset size and system RAM budgets.Data sources: ZenML, Statsig, IoTForce, SuperOptiX, Superagentic AI Guides, FutureAGI, PromptEval
+Isolated Code-Authoring Sandbox and Gated CI/CD Pipeline
+​Once a project's configuration-level improvement loop has achieved repeated, regression-free promotions—demonstrating that its graders and golden dataset accurately separate true improvements from regressions—the kernel unlocks the Autonomous Code-Authoring Agent for targeted code modules: parser adapters, layout heuristics, DOM selector repair, and unit test generation.
+​Hardened Sandbox Execution via gVisor (runsc)
+​Allowing an agent to generate and execute Python or JavaScript code inside a standard Docker (runc) container exposes the host operating system kernel to container-escape exploits or unauthorized network calls because runc containers share the host Linux kernel. Consequently, the improvement kernel mandates that all candidate code generation and test execution run inside an isolated gVisor (runsc) user-space kernel sandbox (or Firecracker microVM) with strict resource and capability lockdowns. Invoking the container via docker run --runtime=runsc --rm ensures that every system call made by the candidate code is intercepted and validated by gVisor's user-space Sentry kernel rather than reaching the host kernel. Furthermore, the sandbox starts air-gapped with --network=none, holds zero production environment secrets, has no connectivity to the production PostgreSQL database or S3 buckets, and mounts the repository read-only alongside an ephemeral /tmp/workspace tmpfs volume. Resource consumption and blast radius are bounded by --cpus=2.0, --memory=4g, --pids-limit=128, a hard wall-clock execution timeout of 300 seconds, and a maximum unified diff patch size of 300 lines restricted to whitelisted adapter directories. 
+​AST Security Gate: Semgrep and Bandit
+​Before any candidate branch executes the benchmark evaluation suite, it must pass static type checking (mypy), linting (ruff), Python vulnerability scanning (bandit -r . -ll), and custom Semgrep Abstract Syntax Tree (AST) and taint-tracking rules. Semgrep rules enforce architectural boundaries at code generation time—specifically blocking any candidate patch that attempts to weaken evaluation thresholds, modify risk policies, invoke shell sub-processes, or bypass the runtime tracer. 
+policy/semgrep_agent_rules.yaml
+rules:
+• id: block-dangerous-process-execution
+patterns: 
+◦ pattern-either: 
+▪ pattern: subprocess.$`METHOD(...)
+▪ pattern: os.system(...)
+▪ pattern: os.popen(...)
+▪ pattern: eval(...)
+▪ pattern: exec(...)
+message: "Autonomous candidate patch attempted forbidden shell or dynamic code execution."
+languages: [python]
+severity: ERROR
+
+• id: block-direct-network-egress-in-adapters
+patterns: 
+◦ pattern-either: 
+▪ pattern: requests.`$METHOD(...)
+▪ pattern: urllib.request.urlopen(...)
+▪ pattern: httpx.$`CLIENT(...)
+paths:
+include:
+▪ projects/fidelis/
+▪ projects/pedit/
+message: "Offline adapters (Fidelis, Pedit) are forbidden from initiating external network requests."
+languages: [python]
+severity: ERROR
+
+• id: prevent-judge-or-policy-tampering
+pattern: `$X
+paths:
+include:
+- improvement_kernel/evaluations/
+- improvement_kernel/policy/
+- evals/*/golden_cases.jsonl
+message: "Optimizer is strictly forbidden from modifying evaluation logic, golden datasets, or risk policies."
+languages: [python, yaml, json]
+severity: ERROR
+
+GitHub Actions CI/CD Evaluation and Canary Gate (.github/workflows/kernel-eval.yml)
+​Promotion decisions are enforced inside GitHub Actions using protected deployment environments (canary-auto and production-human-approval-required) rather than inside the agent process.
+.github/workflows/kernel-eval.yml
+name: Autonomous-Kernel-Candidate-Gate
+
+on:
+pull_request:
+branches: [main]
+paths:
+- "projects/"
+- "evals//replay_cases.jsonl"
+workflow_dispatch:
+inputs:
+candidate_version:
+description: "Candidate version tag to evaluate"
+required: true
+project:
+description: "Target project adapter"
+required: true
+
+permissions:
+contents: read
+pull-requests: write
+deployments: write
+
+jobs:
+static-and-security-gate:
+runs-on: ubuntu-latest
+steps:
+- uses: actions/checkout@v4
+with:
+fetch-depth: 0
+
+- uses: actions/setup-python@v5
+with:
+python-version: "3.12"
+
+- name: Install locked dependencies
+run: pip install --require-hashes -r requirements-lock.txt
+
+- name: Verify immutable kernel and golden dataset integrity
+run: |
+git diff --name-only origin/main...HEAD > changed_files.txt
+python -m improvement_kernel.policy.verify_boundaries --changed-files changed_files.txt
+
+- name: Run Ruff, Mypy, Bandit, and Semgrep AST Rules
+run: |
+ruff check .
+mypy improvement_kernel projects
+bandit -r improvement_kernel projects -ll
+semgrep scan --config policy/semgrep_agent_rules.yaml --error
+
+sandbox-eval-and-compare:
+needs: static-and-security-gate
+runs-on: ubuntu-latest
+steps:
+- uses: actions/checkout@v4
+
+- name: Execute Unit & Tool Contract Tests inside gVisor Sandbox
+run: |
+docker run --runtime=runsc --rm 
+ --network=none --cpus=2.0 --memory=4g --pids-limit=128 
+ --read-only --tmpfs /tmp/workspace:rw,noexec,nosuid,size=512m 
+ -v "$`{PWD}:/app:ro" -w /app 
+ kernel-sandbox:latest pytest tests/unit tests/contracts
+
+- name: Run Frozen Golden & Failure Replay Datasets
+env:
+JUDGE_API_KEY: ${{ secrets.CALIBRATED_JUDGE_API_KEY }} DATABASE_URL: ${{ secrets.EVAL_DB_URL }}
+run: |
+python -m improvement_kernel.evaluations.runner 
+ --suite golden --suite replay 
+ --output candidate_eval.json
+
+- name: Statistical Champion vs Challenger Gate (Wilcoxon + Cohen's d)
+id: promo_gate
+env:
+DATABASE_URL: `${{ secrets.EVAL_DB_URL }}
+run: |
+python -m improvement_kernel.evaluations.gate_cli 
+ --candidate-report candidate_eval.json 
+ --output-decision decision.json
+
+- name: Upload Evaluation Artifact
+uses: actions/upload-artifact@v4
+with:
+name: evaluation-decision-bundle
+path: |
+candidate_eval.json
+decision.json
+
+deploy-auto-canary:
+needs: sandbox-eval-and-compare
+if: $`{{ needs.sandbox-eval-and-compare.outputs.decision == 'promote_auto' }}
+runs-on: ubuntu-latest
+environment: canary-auto
+steps:
+- uses: actions/checkout@v4
+- name: Rollout 10% Canary Traffic & Arm Auto-Rollback Watchdog
+run: |
+python -m improvement_kernel.promotion.deploy_canary 
+ --traffic-pct 10 --rollback-on-regression
+
+deploy-human-gated:
+needs: sandbox-eval-and-compare
+if: `${{ needs.sandbox-eval-and-compare.outputs.decision == 'human_review_required' }}
+runs-on: ubuntu-latest
+environment: production-human-approval-required
+steps:
+- uses: actions/checkout@v4
+- name: Promote Approved High-Risk Candidate
+run: |
+python -m improvement_kernel.promotion.promote_champion 
+ --reviewer "${{ github.actor }}"
+
+Per-Project Production Adapters and Risk-Ranked Rollout Blueprint
+​Connecting the five products through modular adapters ensures that domain-specific invariants remain isolated while sharing the underlying tracing, grading, clustering, and promotion machinery.
+
+Project
+Rollout Rank
+Primary Domain Invariants (Tier 1 & Tier 2 Graders)
+Auto-Optimizable Harness Surface
+Strictly Human-Gated / Restricted Surface
+
+Fidelis
+1 (Offline First)
+Output exists; dimensions match scale; SHA-256 provenance valid; edge ringing & hallucinated texture rate < 0.02
+Restoration profile routing, tile size/overlap, regional artifact thresholds, confidence gating
+New generative model families, destructive source image overwrites
+
+Pedit
+2 (Offline Structural)
+PDF opens cleanly; page count exact; unedited region pixel diff < 0.02; OCR text extractability preserved
+Bounding-box detection, adaptive font-size fitting, layout heuristics, parser adapters
+File corruption recovery paths, metadata stripping, batch overwrites
+
+Allo
+3 (Controlled Real-Time)
+TTFA \le 650\text{ ms}; turn latency \le 1400\text{ ms}; barge-in cutoff gap \le 250\text{ ms}; reconnect success
+Persona prompt style, response length, audio buffer sizing, VAD barge-in sensitivity, memory retrieval
+Call recording & consent flows, identity disclosure, emergency behavior, core telephony
+
+Agent Gang
+4 (Orchestrator Loop)
+Tool schema validity = 1.0; task completion; handoff count \le 2; zero duplicate tool invocations
+Single-orchestrator routing prompts, tool descriptions, argument schemas, retry backoff
+Splitting into new sub-agents, adding write-capable tools, external side effects
+
+HunterXJob
+5 (Dry-Run + Owner Flag)
+Field extraction accuracy; schema type validity; zero duplicate applications; verified submission receipt
+Resilient DOM selectors, field mapping, resume-answer consistency, job ranking weights
+Live submission (human_gated publicly; owner_only_full privately), legal/EEO answers, employer DMs
+
+
+Fidelis Adapter (Rank 1 — Provenance-First Image Restoration)
+​Fidelis serves as the ideal proving ground for Kernel v0 because image restoration inputs are 100% reproducible offline and carry zero external side effects. Crucially, Fidelis prioritizes photographic authenticity and cryptographic provenance over synthetic sharpness. Optimizing naively for uncalibrated perceptual sharpness causes upscalers to hallucinate pores, invent fabric textures, produce high-contrast ringing around edges, or render plastic-looking skin.
+​The Fidelis adapter (projects/fidelis/adapter.py) instruments three child spans under invoke_agent fidelis: classify_degradation (measuring compression blockiness, noise floor, and face bounding boxes), select_restoration_profile (reading declarative parameters from profiles.yaml: model family hash, tile size, tile overlap, and denoising strength), and execute_restoration_tiles. Its Tier 2 domain grader computes a composite authenticity score:
+If \text{ArtifactRate} \ge 0.02 or provenance metadata hashes are incomplete, Tier 1 immediately fails the candidate.
+​Pedit Adapter (Rank 2 — Precision PDF Transformation Engine)
+​Users of a precision PDF editor expect exact structural preservation outside the requested edit bounding box. A common failure mode in PDF transformation occurs when replacement text exceeds the width of the original bounding box, causing LAYOUT_CORRUPTION or FONT_MISMATCH.
+​The Pedit adapter wraps plan_pdf_operations, fit_typography_and_bbox, and render_pdf_patch. Every run automatically renders both the source PDF and output PDF to 150 DPI raster images, masks out the target edit bounding box (x_0, y_0, x_1, y_1), and computes the normalized pixel difference across all unmodified regions. If the output PDF fails pypdf or qpdf structural validation, alters page count without instruction, breaks text extractability, or yields an unmasked visual diff \ge 0.02, the candidate is rejected regardless of whether the text string itself was replaced. When repeated bounding-box overflow defects cluster into BOUNDING_BOX_OVERFLOW, the optimizer tunes layout_heuristics.yaml, enabling adaptive font-size step-down and kerning compression before line-wrapping.
+​Allo Adapter (Rank 3 — Real-Time Voice & Conversational Persona Loop)
+​Allo combines a real-time multimodal model with voice synthesis and telephony streaming. In live voice interactions, barge-in handling—how the agent reacts when the caller interrupts mid-sentence—and Time-to-First-Audio (TTFA) are the primary determinants of perceived conversational realism. If the Voice Activity Detection (VAD) and streaming ASR partial-result threshold is set too low, background noise causes the agent to cut itself off mid-sentence inappropriately; if set too high, the caller must speak forcefully to interrupt, making the agent feel like an unresponsive broadcast. 
+​The Allo adapter logs per-turn spans capturing ttfa_ms, turn_duration_ms, barge_in_detected, false_interruption_cutoff, asr_partial_latency_ms, reconnect_count, and memory_retrieval_hit. The improvement loop tunes declarative parameters in barge_in_thresholds.yaml (VAD energy floor, minimum speech duration in milliseconds before TTS buffer flush, and streaming ASR endpointing delay) alongside persona prompt length caps. Core telephony control, call recording, user consent verification, and emergency response routing are hardcoded outside the configurable harness and blocked by Semgrep from autonomous modification. 
+​Agent Gang Adapter (Rank 4 — Single-Orchestrator Tool & Delegation Loop)
+​Multi-agent swarms multiply handoff serialization errors, context loss, and token costs. The Agent Gang adapter enforces a single-orchestrator architecture equipped with typed specialist tools as its champion baseline. Every tool call emits an execute_tool {gen_ai.tool.name} span recording schema validation outcomes, execution latency, and whether the output was actually utilized in the final synthesis. 
+​The Tier 2 grader penalizes unnecessary_delegation (invoking a sub-agent or tool when context already contained the answer) and duplicate_tool_call (calling the same tool with identical arguments). A candidate that proposes splitting a new specialized sub-agent out of the orchestrator is automatically flagged as human_review_required and is approved only if benchmark evaluations prove that the multi-agent candidate statistically beats the single orchestrator within the latency and cost budgets.
+​HunterXJob / JobTomatik Adapter (Rank 5 — Autonomous Job Application Engine)
+​HunterXJob carries the highest external side-effect risk because it interacts with live applicant tracking systems (ATS), user credentials, and employer portals. Consequently, the adapter enforces two non-negotiable architectural controls: independent submission verification and dual-mode autonomy gating. Under independent submission verification, a Playwright browser tool returning status = "clicked" on a submit button is never graded as a confirmed submission; the Tier 1 validator requires independent post-click evidence—such as a DOM confirmation banner match, an HTTP 200/201 ATS receipt payload, or a confirmation email event—before recording a successful submission. Under dual-mode autonomy gating, all public or subscription tiers of HunterXJob operate strictly in Dry-Run & Review Package Mode, where the agent scrapes the job page, extracts requirements, maps form fields, validates data types (preventing string "5" versus integer 5 schema errors), fills a local shadow DOM or halts prior to final submission, and compiles a verified review package for human approval. Live end-to-end autonomous submission is unlocked exclusively when the cryptographic runtime context matches the owner's private execution environment and autonomy: owner_only_full is active.
+​For browser resilience, the optimizer automatically repairs broken CSS and XPath locators by evolving fallback locator chains in selectors.yaml—prioritizing semantic ARIA roles, label associations, and structural DOM trees via Playwright locators—while tightening Pydantic pre-fill validators (0 <= years_experience <= 80). 
+​Consolidated 30-Day Execution Roadmap and Verification Checklist
+​The implementation sequence strictly decouples Day-1 universal read-only tracing from staged, risk-ranked closed-loop promotion, proving the complete end-to-end learning cycle on Fidelis before unlocking promotion on downstream adapters.
+
+Phase & Window
+Engineering Deliverables
+Concrete Verification & Gate Exit Criteria
+
+Phase 1: Days 1–7 (Universal Read-Only Tracing & Storage)
+Initialize improvement_kernel package; deploy PostgreSQL (001_init_kernel.sql) and S3/MinIO object store; implement ImprovementRuntime (gen_ai.* spans) and Presidio TraceRedactor (en_core_web_lg baked into image); wire read-only tracing into all 5 apps.
+Every task across all 5 apps emits a complete, redacted hierarchical trace (invoke_agent to chat to execute_tool); zero plaintext secrets or PII in traces table; Presidio CPU scrubbing overhead verified < 200\text{ ms} per call.
+
+Phase 2: Days 8–14 (Evaluation Engine & Fidelis Calibration)
+Build improvement_jobs worker (LISTEN/NOTIFY + FOR UPDATE SKIP LOCKED); implement Fidelis adapter, Tier 1 deterministic checks, Tier 2 regional artifact/ringing metrics, and Tier 3 JSON Judge; curate Fidelis Frozen Golden Set (N=50) and calibrate judge against \ge 30 human-labeled runs.
+Worker dequeues and grades traces with zero lock contention; Judge reaches \ge 85\% agreement with human labels on acceptable versus hallucinated/ringing restorations; Golden dataset locked read-only via Semgrep policy.
+
+Phase 3: Days 15–21 (Clustering, Config Optimization & Replay)
+Implement causal root-cause span traversal and HDBSCAN defect clustering; build automatic defect-to-regression test converter (replay_cases.jsonl); wire config-level optimizer (Metaprompt, TextGrad, and DSPy MIPROv2) targeting profiles.yaml and routing_weights.yaml; implement Wilcoxon + Cohen's d promotion gate.
+Confirmed Fidelis failure cluster automatically generates a replay test case; Planner proposes a YAML config challenger; Promotion gate accurately computes Wilcoxon p-value, Cohen's d, and blocks synthetic regressions.
+
+Phase 4: Days 22–30 (gVisor Sandbox, AST Security & CI/CD)
+Build kernel-sandbox Docker image with runsc (gVisor) runtime and --network=none; configure ruff, mypy, bandit, and custom Semgrep rules (semgrep_agent_rules.yaml); deploy .github/workflows/kernel-eval.yml with protected environments (canary-auto, production-human-approval-required) and rollback watchdog.
+First end-to-end milestone passed on Fidelis: one image restore produces a complete trace, Tier 1/2/3 grade, defect cluster, YAML config candidate, sandbox evaluation against the Golden Set, Wilcoxon statistical win, and rollback-capable promotion.
+
+Phase 5: Post-Day 30 (Sequential Adapter Promotion Rollout)
+Unlock Pedit closed-loop config promotion, followed by Allo prompt and barge-in buffer promotion, Agent Gang single-orchestrator routing/schema promotion, and HunterXJob dry-run selector/schema loop (owner_only_full vs. public human gate); unlock gVisor code-authoring agent per project after 5 clean config promotions.
+Each adapter completes its first verified config-level promotion with zero golden-set regressions before the next higher-risk project's promotion gate is enabled.
+
+
+Architectural Synthesis and Production Governance
+​By strictly enforcing universal read-only tracing on Day 1, declarative configuration evolution before code generation, PostgreSQL transactional queuing, three-tier evaluation with paired non-parametric statistical gating, and gVisor plus Semgrep sandbox isolation, this blueprint transforms self-improvement from an unpredictable live-mutation hazard into a deterministic, auditable, and continuously compounding software engineering loop. Every failed task execution is captured as structured telemetry, distilled into a permanent regression test, and resolved through a statistically verified harness upgrade—ensuring that Fidelis, Pedit, Allo, Agent Gang, and HunterXJob systematically compound in capability and reliability without compromising production safety. 
+
+https://share.gemini.google/v3TKmT5e6weN

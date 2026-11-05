@@ -73,7 +73,17 @@ def _cmd_cycle(_: argparse.Namespace) -> int:
 
 
 def _cmd_autonomous_run(args: argparse.Namespace) -> int:
+    import logging
+    import sys
     import yaml
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)],
+        force=True,
+    )
+
     from app.autonomous_loop import AutonomousConfig, AutonomousRunner
     from app.db import SessionLocal, init_db
 
@@ -85,14 +95,17 @@ def _cmd_autonomous_run(args: argparse.Namespace) -> int:
         if profile_path.is_file():
             profile_data = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
 
-    if getattr(args, "live", False):
+    is_live = bool(getattr(args, "live", False)) or (
+        bool(settings.allow_live_submission) and settings.application_mode == "autonomous"
+    )
+    if is_live:
         settings.allow_live_submission = True
         with SessionLocal() as db:
             from app.flags import set_flag
-            set_flag(db, "allow_live_submission", True, "enabled via --live CLI flag")
+            set_flag(db, "allow_live_submission", True, "enabled via CLI / environment")
 
     config = AutonomousConfig(
-        allow_live_submission=bool(getattr(args, "live", False)),
+        allow_live_submission=is_live,
         min_score_threshold=float(getattr(args, "min_score", 65.0) or 65.0),
         max_applications=int(getattr(args, "limit", 10) or 10),
         headless=not bool(getattr(args, "headed", False)),
@@ -206,7 +219,7 @@ def _cmd_certify(args: argparse.Namespace) -> int:
     print(f"Candidate:         {dossier['candidate']}")
     print("-" * 68)
 
-    for gid, m in dossier["milestones"].items():
+    for _gid, m in dossier["milestones"].items():
         mark = "✓ PASSED" if m["passed"] else "✗ BLOCKED"
         print(f"[{mark}] {m['title']} ({m['score']:.0f}%)")
         for check, passed in m["checks"].items():
@@ -239,7 +252,7 @@ def _cmd_dryrun_new_units(args: argparse.Namespace) -> int:
         cmd.extend(["--pause", str(args.pause)])
     if getattr(args, "out", None):
         cmd.extend(["--out", str(args.out)])
-    return subprocess.run(cmd).returncode
+    return subprocess.run(cmd).returncode  # noqa: S603
 
 
 COMMANDS = {
@@ -287,11 +300,15 @@ def main(argv: list[str] | None = None) -> int:
             command.add_argument("--headed", action="store_true", help="run browser in visible (headed) mode for inspection")
             command.add_argument("--pause", type=int, default=5, help="seconds to pause and inspect the filled form in headed mode (default: 5)")
             command.add_argument("--max-errors", type=int, default=3, help="maximum errors before stopping the cycle (default: 3)")
+    from app.cli_extension import register as register_extension
+    from app.cli_improve import register as register_improve
     from app.cli_profile import register
     from app.cli_vault import register as register_vault
 
     register(sub)
     register_vault(sub)
+    register_improve(sub)
+    register_extension(sub)
     args = parser.parse_args(argv)
     handler = getattr(args, "handler", None) or COMMANDS[args.command][0]
     return handler(args)

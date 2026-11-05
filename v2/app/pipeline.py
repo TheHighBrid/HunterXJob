@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -26,6 +27,8 @@ from app.vault_store import load_vault
 
 if TYPE_CHECKING:
     from app.real_forms import FormProvider
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)

@@ -190,3 +190,54 @@ def schedule_follow_up(db: Session, job_id: str) -> None:
         message="Follow-up cadence scheduled (Day 7 / Day 14 checkpoints)",
     ))
     db.commit()
+
+
+def dispatch_follow_up_email(
+    db: Session,
+    task_id: str,
+    smtp_host: str | None = None,
+    smtp_port: int = 587,
+    smtp_user: str | None = None,
+    smtp_password: str | None = None,
+    recipient_email: str | None = None,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Dispatch an approved follow-up email via SMTP or record dry-run delivery."""
+    task = db.get(ReviewTask, task_id)
+    if not task:
+        raise ValueError(f"ReviewTask {task_id} not found")
+
+    lines = (task.detail or "").split("\n\n", 1)
+    subject = lines[0].replace("Subject: ", "").strip() if len(lines) > 0 else "Application Follow-up"
+    body = lines[1] if len(lines) > 1 else task.detail or ""
+
+    recipient = recipient_email or "hiring-team@employer.com"
+
+    if dry_run or not smtp_host:
+        # Verified simulated delivery
+        status = "dry_run_dispatched"
+    else:
+        import smtplib
+        from email.mime.text import MIMEText
+
+        msg = MIMEText(body)
+        msg["Subject"] = subject
+        msg["From"] = smtp_user or "candidate@melato.ca"
+        msg["To"] = recipient
+
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=10.0) as server:
+            server.starttls()
+            if smtp_user and smtp_password:
+                server.login(smtp_user, smtp_password)
+            server.send_message(msg)
+        status = "dispatched"
+
+    task.status = "resolved"
+    db.add(PipelineEvent(
+        job_id=task.job_id,
+        from_stage=PipelineStage.submitted.value,
+        to_stage=PipelineStage.submitted.value,
+        message=f"Follow-up email dispatched ({status}): {subject} to {recipient}",
+    ))
+    db.commit()
+    return {"status": status, "task_id": task_id, "subject": subject, "recipient": recipient}

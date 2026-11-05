@@ -123,7 +123,6 @@ def profile_answers(profile: VerifiedProfile) -> dict[str, Any]:
                 answers.setdefault("sponsorship_future_required", "No")
     answers.setdefault("remote_workspace", "Yes")
     answers.setdefault("age_requirement", "Yes")
-    answers.setdefault("willing_to_relocate", "Yes")
     answers.setdefault("commute_ability", "Yes")
     answers.setdefault("ottawa_commute", "Yes")
     answers.setdefault("prior_employment", "No")

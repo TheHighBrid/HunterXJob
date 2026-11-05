@@ -49,6 +49,9 @@ async def lifespan(_: FastAPI):
     db = SessionLocal()
     try:
         ensure_flags(db)
+        if settings.allow_live_submission and settings.application_mode == "autonomous":
+            from app.flags import set_flag
+            set_flag(db, "allow_live_submission", True, "enabled via environment (.env)")
         # Phone-edited settings (safe subset only) are layered over .env.
         apply_stored_overrides(db, settings)
     finally:
@@ -220,7 +223,6 @@ def get_agent_champion(
     }
 
 
-@app.post("/api/telemetry/trace")
 @api.post("/api/telemetry/trace")
 async def record_telemetry_trace(
     request: Request,
@@ -492,9 +494,11 @@ def events(job_id: str, db: DbSession) -> list[dict[str, object]]:
 @api.post("/api/autonomous/run")
 def trigger_autonomous_run(db: DbSession, current: CurrentSettings) -> dict[str, object]:
     from app.autonomous_loop import AutonomousConfig, AutonomousRunner
+    from app.flags import is_enabled
 
     try:
-        runner = AutonomousRunner(db, current, AutonomousConfig())
+        live = bool(current.allow_live_submission and is_enabled(db, "allow_live_submission"))
+        runner = AutonomousRunner(db, current, AutonomousConfig(allow_live_submission=live))
         summary = runner.run()
         return {
             "started_at": summary.started_at,

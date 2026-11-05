@@ -24,7 +24,7 @@
     }
   },
   "evidence_ledger": {
-    "ledger_digest": "b6daa8fc7c51db644f06528f3f7026c3633664391dcff7bb433ee539c8f4e102",
+    "ledger_digest": "241ff3e8468089b8881a0d142fb57ea468a196172adf68b68ec32d33f19548a9",
     "records": [
       {
         "company": "cohere",
@@ -229,11 +229,107 @@
         "submitted_at": "2026-10-28 12:44:38.070652",
         "title": "Senior Manager, Strategic Operations",
         "url": "https://jobs.ashbyhq.com/1password/59c03a18-a50d-4ef0-adf5-a0e132024784"
+      },
+      {
+        "company": "wealthsimple",
+        "evidence_snapshot_hash": "90a1dfb80040e825e8fbb3d45b6977ecf9c75429edf610ba8dcd36b2c1159e22",
+        "is_concrete_confirmation": true,
+        "job_id": "e3a2c381-4b23-4be2-bb18-e96feebc514e",
+        "platform": "ashby",
+        "receipt_sha256": "198c06f71d93d1a504f39cdc9555c101f496c68e622d7ef241823620f47e077f",
+        "receipt_snippet": "company.  Overview Application Success  Thanks for applying to Wealthsimple \ud83d\ude4c  Powered by\u00a0  Privacy PolicySecurityVulner",
+        "submitted_at": "2026-10-28 19:56:19.266295",
+        "title": "Senior Lead, Credit Card Growth",
+        "url": "https://jobs.ashbyhq.com/wealthsimple/665ed4e7-72b4-4bb7-8c59-95cdfd381d69"
+      },
+      {
+        "company": "1password",
+        "evidence_snapshot_hash": "e2a356f11c3648363535f58fe7b863c2610b33035a2216fdef68cb86055b1755",
+        "is_concrete_confirmation": true,
+        "job_id": "3e55a63d-0720-43f3-9181-087176e70d68",
+        "platform": "ashby",
+        "receipt_sha256": "a716bc117c094a02befd5cf2a8e3ea7b18f3162a28224c6c3a1758619216e73c",
+        "receipt_snippet": "ank you for your interest in 1Password. We have received your application and are excited that you\u2019ve found your way to",
+        "submitted_at": "2026-10-28 19:58:17.979367",
+        "title": "Sales Engineer (French) SMB",
+        "url": "https://jobs.ashbyhq.com/1password/4ff46f84-a5c9-4232-84b6-1dfa8e737148"
+      },
+      {
+        "company": "cohere",
+        "evidence_snapshot_hash": "ba0bb21982d4626898569ccf5b92f466ec052d7697804406c5e710ab3180a565",
+        "is_concrete_confirmation": true,
+        "job_id": "bf559a3c-c621-48bb-aefc-092a887dfe03",
+        "platform": "ashby",
+        "receipt_sha256": "227f9cd847e072bff423fdda3e49ba411b387c6d317c0489262ac9d1a25912ab",
+        "receipt_snippet": "ce.  Overview Application Success  Your application has been submitted! Thank you for your interest in a career growth o",
+        "submitted_at": "2026-10-28 19:58:54.904199",
+        "title": "Member of Technical Staff, North Modelling (Evals)",
+        "url": "https://jobs.ashbyhq.com/cohere/60de50e9-aba7-4a3a-8cdb-955a456749aa"
+      },
+      {
+        "company": "1password",
+        "evidence_snapshot_hash": "8b72a1682f1eaddaee9d5bce624b71616a46c825563ff4151c9004a2c6a3a206",
+        "is_concrete_confirmation": true,
+        "job_id": "5cde4452-a317-4173-88d8-ce809409476f",
+        "platform": "ashby",
+        "receipt_sha256": "55cbf9b34d3d517f96385fc8b68c66cb81f562f616c25803dee5782f0cddc9f0",
+        "receipt_snippet": "ank you for your interest in 1Password. We have received your application and are excited that you\u2019ve found your way to",
+        "submitted_at": "2026-10-28 22:14:25.109554",
+        "title": "Account Executive - Commercial (Mid-Market), San Francisco/Bay Area",
+        "url": "https://jobs.ashbyhq.com/1password/4c385433-be83-4338-ab0b-11e9fae5402a"
+      },
+      {
+        "company": "jobber",
+        "evidence_snapshot_hash": "d20fa5aabe916da2f03d877b97afc154eacb2c4cc2b990f81224123f4bc4b929",
+        "is_concrete_confirmation": true,
+        "job_id": "04bbd449-db33-4436-b315-a115e0133bab",
+        "platform": "ashby",
+        "receipt_sha256": "e40b11e8dde3e6c091f751e2da9693e8190953f0c9aef02a61cf93b495c60871",
+        "receipt_snippet": "plication Success  Your application was successfully submitted. We'll contact you if there are next steps.  Powered by",
+        "submitted_at": "2026-10-30 17:57:09.264351",
+        "title": "Staff Data Scientist, Applied ML",
+        "url": "https://jobs.ashbyhq.com/jobber/8f77d17e-203e-46c1-b06a-42b7005b94d2"
+      },
+      {
+        "company": "float",
+        "evidence_snapshot_hash": "4b873bbfb4d16f42c1830e1f71b5b081c1b32c7424080de3078fe4ac61b24ac3",
+        "is_concrete_confirmation": true,
+        "job_id": "d6a99b40-5d94-474c-8a9e-f99a552437e0",
+        "platform": "ashby",
+        "receipt_sha256": "8ebee340edaca892e324424aad425452d03729bfddc0d2a9519efde503dfec49",
+        "receipt_snippet": "plication Success  Your application was successfully submitted!  Powered by\u00a0  Privacy PolicySecurityVulnerability Disclo",
+        "submitted_at": "2026-11-01 11:10:32.447481",
+        "title": "Bilingual Product Support Associate",
+        "url": "https://jobs.ashbyhq.com/float/3090cf13-2272-4bfe-b8e6-266761a06105"
+      },
+      {
+        "company": "float",
+        "evidence_snapshot_hash": "b2bff83928afe26274534d569412869b05e9f73777788cd68d777a41a1227fd3",
+        "is_concrete_confirmation": true,
+        "job_id": "5e8350b0-e4a1-4eb2-8822-c86df3748975",
+        "platform": "ashby",
+        "receipt_sha256": "d5fd4299e92e8d3a7c6d261b9f3dd03cc72d81365760eb991e3f73af0df7634e",
+        "receipt_snippet": "plication Success  Your application was successfully submitted!  Powered by\u00a0  Privacy PolicySecurityVulnerability Disclo",
+        "submitted_at": "2026-11-01 11:17:24.488694",
+        "title": "Field Marketing Manager",
+        "url": "https://jobs.ashbyhq.com/float/bb03e751-a491-4ce0-b461-2e5fdbd49863"
+      },
+      {
+        "company": "float",
+        "evidence_snapshot_hash": "421688fce2052a75495038a2e32551364be09fabb9499858cc02ac5e349e8e53",
+        "is_concrete_confirmation": true,
+        "job_id": "a75209f7-b602-48d3-829c-0ee1804f7178",
+        "platform": "ashby",
+        "receipt_sha256": "a063410a2abfa7da75c313a2d90dc24949f81bebf0d484010604c812f8cb4547",
+        "receipt_snippet": "plication Success  Your application was successfully submitted!  Powered by\u00a0  Privacy PolicySecurityVulnerability Disclo",
+        "submitted_at": "2026-11-01 11:22:16.102869",
+        "title": "Acquisition (Sales) Operations Manager",
+        "url": "https://jobs.ashbyhq.com/float/de901777-3565-4e23-8bf8-84ce935fbccc"
       }
     ],
-    "total_verified_submissions": 17
+    "total_verified_submissions": 25
   },
-  "generated_at": "2026-10-28T17:58:39.051520+00:00",
+  "generated_at": "2026-11-05T00:28:33.815669+00:00",
   "milestones": {
     "gate1": {
       "blockers": [],
@@ -264,7 +360,7 @@
         "zero_false_positive_submissions": true
       },
       "metadata": {
-        "credited_submissions": 17,
+        "credited_submissions": 25,
         "distinct_employers": 5,
         "platforms": [
           "ashby"
@@ -306,11 +402,11 @@
   "safety_invariants": {
     "allow_real_application_submit": true,
     "captcha_or_mfa_bypass_attempted": false,
-    "credited_real_submissions": 17,
+    "credited_real_submissions": 25,
     "fail_closed_on_unmatched_required_fields": true,
     "false_submitted_records": 0,
     "uncertain_outcomes_credited_as_submitted": 0
   },
   "schema_version": "hunterx-certification-v2",
-  "source_commit": "fc6bf9a84d8455a54a5b2980dadf220fbd4d6e68"
+  "source_commit": "6b9a85573c3860a840bb7d0172822c2bcc8dd2e6"
 }

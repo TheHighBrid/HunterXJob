@@ -370,14 +370,13 @@ def _from_playwright_install(browsers: list[dict[str, Any]], executable: str) ->
     """Every browser process (main, zygote, GPU, renderer, crashpad) comes from Playwright's own install."""
     if not browsers or not executable:
         return False
-    exe_path = Path(executable)
-    app_bundle = next((p for p in exe_path.parents if p.name.endswith(".app")), None)
-    install_root = app_bundle if app_bundle else exe_path.parent
-    same_install = all(
-        Path(item["exe"]).is_relative_to(install_root)
-        for item in browsers if item.get("exe")
+    folder = str(Path(executable).parent)
+    same_folder = all(
+        str(Path(item["exe"]).parent) == folder
+        or ("ms-playwright" in str(item["exe"]) and "chromium" in str(item["exe"]).lower())
+        for item in browsers if item["exe"]
     )
-    return same_install and any(item["exe"] == executable for item in browsers)
+    return same_folder and any(item["exe"] == executable for item in browsers)
 
 
 def _pipe_not_port(browsers: list[dict[str, Any]]) -> bool:

@@ -6,7 +6,9 @@ from enum import Enum
 from html.parser import HTMLParser
 from typing import Any
 
+from app import prior_employment
 from app.answer_vault import AnswerVault, FieldRequest, ResolutionStatus
+from app.option_derivation import derive_option
 
 
 class ControlType(str, Enum):
@@ -77,6 +79,8 @@ class FormControl:
     vault_keys: list[str] = field(default_factory=list)
     # Option label -> platform value id, when the platform exposes one.
     option_values: dict[str, str] = field(default_factory=dict)
+    # Posting employer for "worked here before?" questions (see prior_employment).
+    employer: str = ""
 
 
 @dataclass(slots=True)
@@ -255,41 +259,31 @@ def _score_best_option(answer: Any, options: list[str]) -> str | None:
     return None
 
 
-def _match_option(control: FormControl, value: Any) -> Any | None:
-    """Return the listed option(s) equal to ``value`` or None.
+def _match_single_option(control: FormControl, val: str, lookup: dict[str, str]) -> str | None:
+    norm = _normalize_option(val)
+    if norm in lookup:
+        return lookup[norm]
+    derived = derive_option(control, val)
+    if derived is not None:
+        if isinstance(derived, list):
+            return derived[0] if derived else None
+        return derived
+    best = _score_best_option(val, control.options)
+    if best is not None:
+        return best
+    return None
 
-    First attempts exact normalized match. If that fails, uses hardened 4-tier
-    option matching (boolean equivalence, token similarity, substring containment)
-    to safely accommodate differences in wording between ATS forms and the vault.
-    Fails closed (returns None) if no option matches or if matching is ambiguous.
-    """
+
+def _match_option(control: FormControl, value: Any) -> Any | None:
+    """Return the listed option(s) matching ``value`` or None."""
     lookup = {_normalize_option(option): option for option in control.options}
     if control.control_type is ControlType.MULTISELECT:
         parts = value if isinstance(value, (list, tuple)) else [part for part in str(value).split("|") if part.strip()]
-        matched_list: list[str] = []
-        for part in parts:
-            exact = lookup.get(_normalize_option(part))
-            if exact is not None:
-                matched_list.append(exact)
-                continue
-            best = _score_best_option(part, control.options)
-            if best is None:
-                return None
-            matched_list.append(best)
-        if not matched_list:
+        matched = [_match_single_option(control, part, lookup) for part in parts]
+        if not matched or any(item is None for item in matched):
             return None
-        seen: set[str] = set()
-        deduped: list[str] = []
-        for item in matched_list:
-            if item not in seen:
-                seen.add(item)
-                deduped.append(item)
-        return deduped
-
-    exact = lookup.get(_normalize_option(value))
-    if exact is not None:
-        return exact
-    return _score_best_option(value, control.options)
+        return matched
+    return _match_single_option(control, str(value), lookup)
 
 
 def _decline_option(control: FormControl) -> str | None:
@@ -321,10 +315,20 @@ def plan_fill(controls: list[FormControl], vault: AnswerVault) -> FillPlan:
             continue
         sensitive = control.sensitive or control.legal
         resolved = _resolve_control(control, vault, sensitive)
+        # An explicit stored answer for this exact question always wins; the
+        # history rule only covers prior-employment questions left unanswered.
+        prior = None if sensitive or resolved.status is ResolutionStatus.RESOLVED else prior_employment.decide(control, vault)
+        if prior is not None:
+            if prior.status != "fill":
+                blockers.append("ambiguous_question")
+            items.append(FillPlanItem(control, prior.status, value=prior.value, reason=prior.reason))
+            continue
         if resolved.status is ResolutionStatus.RESOLVED:
             value = resolved.value
             if control.options:
                 matched = _match_option(control, value)
+                if matched is None:
+                    matched = derive_option(control, value, resolved.key)
                 if matched is None:
                     blockers.append("ambiguous_question")
                     items.append(FillPlanItem(control, "review", value=value, reason="resolved value is not a listed option"))
@@ -350,9 +354,40 @@ def plan_fill(controls: list[FormControl], vault: AnswerVault) -> FillPlan:
     return FillPlan(items=items, blockers=sorted(set(blockers)))
 
 
+def _digits(value: Any) -> str:
+    return re.sub(r"\D", "", str(value or ""))
+
+
+def phone_values_equivalent(actual: Any, expected: Any) -> bool:
+    """Verify equivalent national, international, and formatted phone representations.
+
+    Handles differences in dial code prefixes (+1), European national trunk zeros
+    (020/01 vs +44/+33), punctuation, parentheses, and masked DOM inputs.
+    """
+    actual_digits = _digits(actual)
+    expected_digits = _digits(expected)
+    if not actual_digits or not expected_digits:
+        return False
+    if min(len(actual_digits), len(expected_digits)) < 7:
+        return False
+    if actual_digits == expected_digits:
+        return True
+    if actual_digits.endswith(expected_digits) or expected_digits.endswith(actual_digits):
+        return True
+    # European national trunk prefix 0 (e.g. 020... in UK, 01... in France)
+    actual_trim = actual_digits.lstrip("0")
+    expected_trim = expected_digits.lstrip("0")
+    if min(len(actual_trim), len(expected_trim)) >= 7:
+        if actual_digits.endswith(expected_trim) or expected_digits.endswith(actual_trim):
+            return True
+    return False
+
+
 def verify_filled(control: FormControl, expected: Any, actual: Any) -> bool:
     if expected is None:
         return True
     if control.control_type == ControlType.CHECKBOX:
         return bool(actual) == bool(expected)
+    if control.control_type is ControlType.TEL or "phone" in (control.key or "").lower():
+        return phone_values_equivalent(actual, expected)
     return str(actual).strip() == str(expected).strip()

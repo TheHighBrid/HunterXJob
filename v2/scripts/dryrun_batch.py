@@ -61,6 +61,7 @@ from batch_checks import (
     is_transient,
     material_texts,
     open_check_url,
+    owner_answer_map,
     parse_open_posting,
     run_directory,
     run_extra_checks,
@@ -266,6 +267,7 @@ def seed_application(posting: dict[str, Any], inputs: dict[str, Any], data: dict
                         "answers_stored": [item["key"] for item in inputs["answers"]],
                         "job_stage": job.stage, "application_stage": application.stage}
         data["allowed_answers"] = _allowed_answers(db, application, inputs["answers"])
+        data["owner_answers"] = owner_answer_map((item["key"], item["value"]) for item in inputs["answers"])
         data["decline_policy"] = any(item["key"] == "voluntary_self_identification" and str(item["value"]) == "decline"
                                      for item in inputs["answers"])
         if job.stage != PipelineStage.ready_to_apply.value:
@@ -331,6 +333,9 @@ def batch_env(run_dir: Path) -> dict[str, str]:
 
 
 def _child_entry(run_dir: str, mode: str, posting: dict[str, Any], inputs: dict[str, Any]) -> None:
+    import contextlib
+    with contextlib.suppress(Exception):
+        os.setsid()
     folder = Path(run_dir)
     os.environ.clear()
     os.environ.update(batch_env(folder))

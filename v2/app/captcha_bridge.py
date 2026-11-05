@@ -228,3 +228,90 @@ async def wait_for_user_captcha_resolution(
             return status
         await asyncio.sleep(poll_interval)
     return await detect_captcha(page)
+
+
+class CloudCaptchaSolver:
+    """Production automated cloud CAPTCHA solver plugin.
+
+    Supports 2Captcha, CapSolver, and Anti-Captcha HTTP API protocols:
+    - Submits challenge task (sitekey + page_url).
+    - Polls for completion token.
+    - Injects the resolved token directly into the Playwright DOM.
+    """
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        provider: str = "2captcha",
+        base_url: str | None = None,
+    ) -> None:
+        self.api_key = api_key or ""
+        self.provider = provider.lower()
+        self.base_url = base_url or ("https://api.capsolver.com" if "capsolver" in self.provider else "https://2captcha.com")
+
+    async def solve(self, challenge: CaptchaChallenge, page_url: str, timeout_seconds: float = 90.0) -> str | None:
+        """Resolve a detected challenge using cloud solving service."""
+        if not self.api_key or not challenge.sitekey:
+            logger.warning("CloudCaptchaSolver called without API key or sitekey")
+            return None
+
+        import httpx
+
+        task_type_map = {
+            "recaptcha": "ReCaptchaV2TaskProxyLess",
+            "recaptcha_v2": "ReCaptchaV2TaskProxyLess",
+            "recaptcha_v3": "ReCaptchaV3TaskProxyLess",
+            "hcaptcha": "HCaptchaTaskProxyLess",
+            "turnstile": "AntiTurnstileTaskProxyLess",
+        }
+        task_type = task_type_map.get(challenge.captcha_type or "recaptcha", "ReCaptchaV2TaskProxyLess")
+
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            try:
+                # 1. Create Task
+                create_payload = {
+                    "clientKey": self.api_key,
+                    "task": {
+                        "type": task_type,
+                        "websiteURL": page_url,
+                        "websiteKey": challenge.sitekey,
+                    },
+                }
+                res = await client.post(f"{self.base_url}/createTask", json=create_payload)
+                data = res.json()
+                if data.get("errorId", 0) != 0 or not data.get("taskId"):
+                    logger.error("CloudCaptchaSolver task creation failed: %s", data)
+                    return None
+
+                task_id = data["taskId"]
+                logger.info("CloudCaptchaSolver created task %s for %s", task_id, task_type)
+
+                # 2. Poll for Result
+                start = asyncio.get_event_loop().time()
+                while asyncio.get_event_loop().time() - start < timeout_seconds:
+                    await asyncio.sleep(3.0)
+                    poll_res = await client.post(
+                        f"{self.base_url}/getTaskResult",
+                        json={"clientKey": self.api_key, "taskId": task_id},
+                    )
+                    poll_data = poll_res.json()
+                    status = poll_data.get("status")
+
+                    if status == "ready":
+                        solution = poll_data.get("solution", {})
+                        token = solution.get("gRecaptchaResponse") or solution.get("token") or solution.get("text")
+                        if token:
+                            logger.info("CloudCaptchaSolver resolved token for task %s", task_id)
+                            return token
+                    elif status == "processing":
+                        continue
+                    else:
+                        logger.error("CloudCaptchaSolver polling error: %s", poll_data)
+                        return None
+
+            except Exception as exc:
+                logger.error("CloudCaptchaSolver exception: %s", exc)
+                return None
+
+        return None
+

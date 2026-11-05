@@ -284,11 +284,13 @@ case "$cmd" in
   profile) shift; py_cli profile "$@" ;;
   materials) shift; py_cli materials "$@" ;;
   vault) shift; py_cli vault "$@" ;;
+  improve) shift; py_cli improve "$@" ;;
+  extension) shift; py_cli extension "$@" ;;
   stop) stop_app ;;
   restart) stop_app; start_app ;;
   status) status_app ;;
   doctor) doctor_app ;;
   test) .venv/bin/pytest -q ;;
   logs) tail -n 100 -f logs/api.log ;;
-  *) echo "Usage: ./hunterx {install|start|serve|stop|restart|status|doctor|test|logs|backup [--keep N]|backups|migrate|cycle|autonomous-run|dryrun-new-units|certify|dedup-scan|liveness|api-key|version|openapi [--check]|profile ...|materials ...|service-install|boot-install}" ;;
+  *) echo "Usage: ./hunterx {install|start|serve|stop|restart|status|doctor|test|logs|backup [--keep N]|backups|migrate|cycle|autonomous-run|dryrun-new-units|certify|improve ...|extension {build|sync|info}|dedup-scan|liveness|api-key|version|openapi [--check]|profile ...|materials ...|vault ...|service-install|boot-install}" ;;
 esac

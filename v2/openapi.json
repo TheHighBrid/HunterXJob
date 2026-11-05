@@ -599,6 +599,117 @@
         "title": "DryRunSummaryOut",
         "type": "object"
       },
+      "EvaluateFormIn": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/FieldDescriptorIn"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "platform": {
+            "default": "generic",
+            "title": "Platform",
+            "type": "string"
+          },
+          "url": {
+            "default": "",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "title": "EvaluateFormIn",
+        "type": "object"
+      },
+      "EvaluateFormOut": {
+        "properties": {
+          "answers": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluatedFieldOut"
+            },
+            "title": "Answers",
+            "type": "array"
+          },
+          "fields_evaluated": {
+            "title": "Fields Evaluated",
+            "type": "integer"
+          },
+          "fields_matched": {
+            "title": "Fields Matched",
+            "type": "integer"
+          },
+          "platform": {
+            "title": "Platform",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "platform",
+          "fields_evaluated",
+          "fields_matched",
+          "answers"
+        ],
+        "title": "EvaluateFormOut",
+        "type": "object"
+      },
+      "EvaluatedFieldOut": {
+        "properties": {
+          "confidence": {
+            "default": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "control_type": {
+            "title": "Control Type",
+            "type": "string"
+          },
+          "field_id": {
+            "title": "Field Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "matched_option": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Option"
+          },
+          "review_required": {
+            "default": false,
+            "title": "Review Required",
+            "type": "boolean"
+          },
+          "source": {
+            "default": "unmatched",
+            "title": "Source",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "required": [
+          "field_id",
+          "label",
+          "control_type"
+        ],
+        "title": "EvaluatedFieldOut",
+        "type": "object"
+      },
       "EventOut": {
         "properties": {
           "created_at": {
@@ -722,6 +833,39 @@
         "title": "FactVerifyIn",
         "type": "object"
       },
+      "FieldDescriptorIn": {
+        "properties": {
+          "control_type": {
+            "default": "text",
+            "title": "Control Type",
+            "type": "string"
+          },
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "default": "",
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          }
+        },
+        "title": "FieldDescriptorIn",
+        "type": "object"
+      },
       "FlagIn": {
         "properties": {
           "confirm": {
@@ -767,6 +911,28 @@
           "note"
         ],
         "title": "FlagOut",
+        "type": "object"
+      },
+      "FollowUpDispatchIn": {
+        "properties": {
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "recipient_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipient Email"
+          }
+        },
+        "title": "FollowUpDispatchIn",
         "type": "object"
       },
       "FormFieldOut": {
@@ -2222,6 +2388,49 @@
           "status"
         ],
         "title": "LivenessOut",
+        "type": "object"
+      },
+      "LogApplicationIn": {
+        "properties": {
+          "company": {
+            "title": "Company",
+            "type": "string"
+          },
+          "fields_filled_count": {
+            "default": 0,
+            "title": "Fields Filled Count",
+            "type": "integer"
+          },
+          "location": {
+            "default": "",
+            "title": "Location",
+            "type": "string"
+          },
+          "notes": {
+            "default": "",
+            "title": "Notes",
+            "type": "string"
+          },
+          "platform": {
+            "default": "extension",
+            "title": "Platform",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "company",
+          "url"
+        ],
+        "title": "LogApplicationIn",
         "type": "object"
       },
       "MaterialActionOut": {
@@ -4251,6 +4460,49 @@
         "summary": "Adapters"
       }
     },
+    "/api/agent/champion": {
+      "get": {
+        "description": "Retrieve the current active champion agent configuration.",
+        "operationId": "get_agent_champion_api_agent_champion_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "default": "allo",
+              "title": "Project",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Agent Champion Api Agent Champion Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agent Champion"
+      }
+    },
     "/api/answers": {
       "get": {
         "operationId": "list_answers_api_answers_get",
@@ -4550,6 +4802,116 @@
         ]
       }
     },
+    "/api/autofill/bundle": {
+      "get": {
+        "description": "Return full verified profile, answer policies, and taxonomy in a single payload.",
+        "operationId": "get_autofill_bundle_api_autofill_bundle_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Autofill Bundle Api Autofill Bundle Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Autofill Bundle",
+        "tags": [
+          "autofill"
+        ]
+      }
+    },
+    "/api/autofill/evaluate": {
+      "post": {
+        "description": "Evaluate DOM fields extracted by the extension against verified profile & answer vault.",
+        "operationId": "evaluate_form_fields_api_autofill_evaluate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluateFormIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluateFormOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evaluate Form Fields",
+        "tags": [
+          "autofill"
+        ]
+      }
+    },
+    "/api/autofill/log-application": {
+      "post": {
+        "description": "Log an application completed through the extension into HunterXJob SQLite DB.",
+        "operationId": "log_external_application_api_autofill_log_application_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogApplicationIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Log External Application Api Autofill Log Application Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Log External Application",
+        "tags": [
+          "autofill"
+        ]
+      }
+    },
     "/api/autonomous/run": {
       "post": {
         "operationId": "trigger_autonomous_run_api_autonomous_run_post",
@@ -4836,6 +5198,57 @@
           }
         },
         "summary": "Run Due Follow Ups"
+      }
+    },
+    "/api/follow-ups/{task_id}/dispatch": {
+      "post": {
+        "operationId": "dispatch_follow_up_api_follow_ups__task_id__dispatch_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FollowUpDispatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Dispatch Follow Up Api Follow Ups  Task Id  Dispatch Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dispatch Follow Up"
       }
     },
     "/api/health": {
@@ -6730,6 +7143,49 @@
         "tags": [
           "remote"
         ]
+      }
+    },
+    "/api/telemetry/trace": {
+      "post": {
+        "description": "Receive and evaluate live conversation telemetry traces emitted by client apps.",
+        "operationId": "record_telemetry_trace_api_telemetry_trace_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "default": "allo",
+              "title": "Project",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Record Telemetry Trace Api Telemetry Trace Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Telemetry Trace"
       }
     },
     "/api/vault/catalog": {

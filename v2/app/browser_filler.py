@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from app.form_engine import phone_values_equivalent
 from app.knowledge_book import enforce_length_constraints
 from app.question_catalog import (
     OptionRecord,
@@ -29,6 +30,25 @@ from app.question_catalog import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def get_current_champion_harness(project: str = "hunterxjob") -> dict[str, Any]:
+    """Dynamically fetch the active champion agent harness config in real time without restarting the daemon.
+    
+    Queries the database for the active champion of the specified project. If the database
+    is unavailable or no champion exists, returns an empty configuration dict gracefully.
+    """
+    try:
+        from app.db import SessionLocal
+        from improvement_kernel.storage.db import get_current_champion
+
+        with SessionLocal() as session:
+            champion = get_current_champion(session, project=project)
+            if champion and champion.harness_config:
+                return dict(champion.harness_config)
+    except Exception as exc:
+        logger.debug("Failed fetching active champion harness in real time: %s", exc)
+    return {}
 
 
 @dataclass
@@ -83,10 +103,95 @@ def _file_record(path: Path, key: str) -> FileAttachmentRecord:
     )
 
 
-async def _find_input_for_key(page: Any, key: str, label_hint: str = "", value_hint: Any = None) -> Any:
-    """Find a form control locator using multiple fallback strategies."""
+async def _find_input_for_key(
+    page: Any,
+    key: str,
+    label_hint: str = "",
+    value_hint: Any = None,
+    harness: dict[str, Any] | None = None,
+) -> tuple[Any, str]:
+    """Find a form control locator across top-level page and all embedded iframes."""
+    if harness is None:
+        harness = get_current_champion_harness("hunterxjob")
+
+    frames = [page]
+    if hasattr(page, "frames"):
+        for f in page.frames:
+            if f not in frames:
+                frames.append(f)
+
+    for target in frames:
+        loc, sel = await _find_input_in_target(target, key, label_hint=label_hint, value_hint=value_hint, harness=harness)
+        if loc is not None:
+            return loc, sel
+    return None, ""
+
+
+async def _find_input_in_target(
+    page: Any,
+    key: str,
+    label_hint: str = "",
+    value_hint: Any = None,
+    harness: dict[str, Any] | None = None,
+) -> tuple[Any, str]:
+    """Find a form control locator within a specific page or frame target."""
+    if harness is None:
+        harness = get_current_champion_harness("hunterxjob")
+
     key_parts = key.split("_")
     key_camel = key_parts[0] + "".join(p.capitalize() for p in key_parts[1:]) if len(key_parts) > 1 else key
+
+    # 0. Active Champion Promoted Selector Overrides (Hot-Reloaded in Real Time)
+    if harness and "selectors" in harness:
+        selectors_map = harness.get("selectors", {})
+        promoted_selectors: list[str] = []
+
+        # Check direct key, lower-case, camelCase, and normalized aliases
+        for k in (key, key.lower(), key_camel, key.replace("-", "_")):
+            if k in selectors_map and isinstance(selectors_map[k], list):
+                for s in selectors_map[k]:
+                    if s not in promoted_selectors:
+                        promoted_selectors.append(s)
+
+        # Check global selector overrides
+        global_sels = selectors_map.get("global", {})
+        if isinstance(global_sels, dict):
+            for k in (key, key.lower(), key_camel, key.replace("-", "_")):
+                if k in global_sels and isinstance(global_sels[k], list):
+                    for s in global_sels[k]:
+                        if s not in promoted_selectors:
+                            promoted_selectors.append(s)
+
+        # Check location overrides from active champion
+        if "location" in key.lower() or "location" in (label_hint or "").lower():
+            for loc_k in ("location", "candidate_location", "job_location"):
+                if loc_k in selectors_map and isinstance(selectors_map[loc_k], list):
+                    for s in selectors_map[loc_k]:
+                        if s not in promoted_selectors:
+                            promoted_selectors.append(s)
+
+        for sel in promoted_selectors:
+            try:
+                loc = page.locator(sel)
+                if await loc.count() > 0 and await loc.first.is_visible():
+                    return loc.first, f"champion:{sel}"
+            except Exception:
+                continue
+
+    # Location specialized locator (Ashby _systemfield_location, Greenhouse, Workable)
+    if "location" in key.lower() or "location" in (label_hint or "").lower():
+        loc_candidates = page.locator(
+            "input[id*='_systemfield_location'], input[name*='_systemfield_location'], "
+            "[data-field-path*='location'] input, [data-qa*='location'] input, "
+            "div[class*='location'] input, "
+            "input[placeholder*='Location' i], input[aria-label*='Location' i], "
+            "input[name*='location' i], input[id*='location' i]"
+        )
+        try:
+            if await loc_candidates.count() > 0 and await loc_candidates.first.is_visible():
+                return loc_candidates.first, "specialized:location_input"
+        except Exception:
+            pass
 
     # 0a. Check for button option toggles (e.g. Ashby yes/no buttons)
     if value_hint is not None:
@@ -140,26 +245,34 @@ async def _find_input_for_key(page: Any, key: str, label_hint: str = "", value_h
         except Exception:
             pass
 
-    # 0c. Check for radio group matching key (e.g. Lever cards[...][field0] or Ashby compound {option_id}_{field_id})
+    # 0c. Check for radio or checkbox group matching key (e.g. Lever cards[...][field0], Ashby compound {option_id}_{field_id}, or Greenhouse question_123[] checkboxes)
     for k in (key, key_camel):
-        for sel in (f'input[type="radio"][name="{k}"]', f'input[type="radio"][name*="{k}"]', f'input[type="radio"][id*="{k}"]'):
+        for sel in (
+            f'input[type="radio"][name="{k}"]',
+            f'input[type="radio"][name*="{k}"]',
+            f'input[type="radio"][id*="{k}"]',
+            f'input[type="checkbox"][name="{k}"]',
+            f'input[type="checkbox"][name*="{k}"]',
+            f'input[type="checkbox"][id*="{k}"]',
+        ):
             try:
-                radios = page.locator(sel)
-                r_count = await radios.count()
-                if r_count > 0:
+                elements = page.locator(sel)
+                el_count = await elements.count()
+                if el_count > 0:
                     if value_hint is not None:
                         str_hint = str(value_hint).strip().lower()
-                        for idx in range(r_count):
-                            r = radios.nth(idx)
+                        for idx in range(el_count):
+                            r = elements.nth(idx)
                             label_text = await r.evaluate("""el => {
                                 if (el.labels && el.labels[0]) return el.labels[0].innerText || '';
                                 const parent = el.closest('label') || el.parentElement;
                                 return parent ? parent.innerText || '' : '';
                             }""")
                             val_attr = (await r.get_attribute("value") or "").lower()
-                            if str_hint in label_text.lower() or val_attr == str_hint or (str_hint in ("yes", "true", "1") and val_attr == "yes") or (str_hint in ("no", "false", "0") and val_attr == "no"):
-                                return r, f'radio:{k}={value_hint}'
-                    return radios.first, f'radio:{k}'
+                            if str_hint in label_text.lower() or label_text.lower() in str_hint or val_attr == str_hint or (str_hint in ("yes", "true", "1") and val_attr == "yes") or (str_hint in ("no", "false", "0") and val_attr == "no"):
+                                opt_type = (await r.get_attribute("type")) or "choice"
+                                return r, f'{opt_type}:{k}={value_hint}'
+                    return elements.first, f'choice:{k}'
             except Exception:
                 pass
 
@@ -168,6 +281,11 @@ async def _find_input_for_key(page: Any, key: str, label_hint: str = "", value_h
         loc = page.locator(f'[id="{k}"]')
         try:
             if await loc.count() > 0 and await loc.first.is_visible():
+                tag = await loc.first.evaluate("el => el.tagName.toLowerCase()")
+                if tag not in ("input", "select", "textarea", "button"):
+                    child_input = loc.first.locator('input:not([type="hidden"]), select, textarea, button')
+                    if await child_input.count() > 0:
+                        return child_input.first, f'[id="{k}"] {tag}->input'
                 return loc.first, f'[id="{k}"]'
         except Exception:
             pass
@@ -177,6 +295,11 @@ async def _find_input_for_key(page: Any, key: str, label_hint: str = "", value_h
             loc = page.locator(f'[id="{part}"]')
             try:
                 if await loc.count() > 0 and await loc.first.is_visible():
+                    tag = await loc.first.evaluate("el => el.tagName.toLowerCase()")
+                    if tag not in ("input", "select", "textarea", "button"):
+                        child_input = loc.first.locator('input:not([type="hidden"]), select, textarea, button')
+                        if await child_input.count() > 0:
+                            return child_input.first, f'[id="{part}"] {tag}->input'
                     return loc.first, f'[id="{part}"]'
             except Exception:
                 pass
@@ -234,8 +357,56 @@ async def _find_input_for_key(page: Any, key: str, label_hint: str = "", value_h
     return None, ""
 
 
-async def _find_file_input(page: Any, key: str) -> tuple[Any, str]:
-    """Find the file input for resume or cover letter."""
+async def _find_file_input(page: Any, key: str, harness: dict[str, Any] | None = None) -> tuple[Any, str]:
+    """Find the file input for resume or cover letter across page and embedded iframes."""
+    if harness is None:
+        harness = get_current_champion_harness("hunterxjob")
+
+    frames = [page]
+    if hasattr(page, "frames"):
+        for f in page.frames:
+            if f not in frames:
+                frames.append(f)
+
+    for target in frames:
+        loc, sel = await _find_file_input_in_target(target, key, harness=harness)
+        if loc is not None:
+            return loc, sel
+    return None, ""
+
+
+async def _find_file_input_in_target(page: Any, key: str, harness: dict[str, Any] | None = None) -> tuple[Any, str]:
+    """Find the file input for resume or cover letter in a specific target using champion selectors first."""
+    if harness is None:
+        harness = get_current_champion_harness("hunterxjob")
+
+    # 0. Active Champion Promoted File Selectors (Hot-Reloaded in Real Time)
+    if harness and "selectors" in harness:
+        file_sels: list[str] = []
+        sels_map = harness.get("selectors", {})
+        if key in sels_map and isinstance(sels_map[key], list):
+            file_sels.extend(sels_map[key])
+        global_sels = sels_map.get("global", {})
+        if isinstance(global_sels, dict) and key in global_sels and isinstance(global_sels[key], list):
+            file_sels.extend(global_sels[key])
+        if "resume" in key.lower() or "cv" in key.lower():
+            if "resume" in sels_map and isinstance(sels_map["resume"], list):
+                for s in sels_map["resume"]:
+                    if s not in file_sels:
+                        file_sels.append(s)
+            if isinstance(global_sels, dict) and "resume" in global_sels and isinstance(global_sels["resume"], list):
+                for s in global_sels["resume"]:
+                    if s not in file_sels:
+                        file_sels.append(s)
+
+        for sel in file_sels:
+            try:
+                loc = page.locator(sel)
+                if await loc.count() > 0:
+                    return loc.first, f"champion:{sel}"
+            except Exception:
+                pass
+
     # Try direct id / name / data-qa / data-ui
     loc = page.locator(
         f'input[type="file"][id="{key}"], input[type="file"][name="{key}"], input[type="file"][data-qa*="{key}"], input[type="file"][data-ui*="{key}"]'
@@ -308,9 +479,32 @@ async def _read_back_value(locator: Any, tag: str, control_type: str) -> Any:
         return ""
 
 
-async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -> FieldFillReport:
-    """Locate and fill a single form field, returning a verification report."""
-    locator, selector_used = await _find_input_for_key(page, key, label_hint=label, value_hint=value)
+async def _fill_input_by_heuristics(
+    page: Any,
+    key: str,
+    value: Any,
+    label: str = "",
+    harness: dict[str, Any] | None = None,
+) -> FieldFillReport:
+    """Locate and fill a single form input using active champion selector overrides and heuristics.
+    
+    Dynamically loads the promoted champion harness config in real time without restarting
+    the daemon, executes champion-promoted selector overrides first, and falls back to
+    robust heuristics.
+    """
+    if harness is None:
+        harness = get_current_champion_harness("hunterxjob")
+
+    # Dynamic answer policy fallback if value is empty/None
+    if (value is None or value == "") and harness and "answer_policies" in harness:
+        policies = harness.get("answer_policies", {})
+        norm_key = key.lower().replace("-", "_")
+        for p_k, p_v in policies.items():
+            if p_k == norm_key or p_k in norm_key:
+                value = p_v
+                break
+
+    locator, selector_used = await _find_input_for_key(page, key, label_hint=label, value_hint=value, harness=harness)
     if not locator:
         return FieldFillReport(
             key=key,
@@ -362,9 +556,17 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
             await locator.dispatch_event("change")
 
         elif control_type == "checkbox":
-            bool_val = boolean_value(value) if boolean_value(value) is not None else (
-                value is not False and str(value).strip().lower() not in ("no", "false", "0", "")
+            is_choice_option = (
+                selector_used.startswith("checkbox:")
+                or selector_used.startswith("choice:")
+                or "button[data-option=" in selector_used
             )
+            if is_choice_option:
+                bool_val = True
+            else:
+                bool_val = boolean_value(value) if boolean_value(value) is not None else (
+                    value is not False and str(value).strip().lower() not in ("no", "false", "0", "")
+                )
             try:
                 await locator.scroll_into_view_if_needed()
             except Exception:
@@ -437,23 +639,63 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
             if min_l > 0 or max_l is not None:
                 val_str = enforce_length_constraints(val_str, min_length=min_l, max_length=max_l)
 
-            await locator.fill(val_str)
-            await locator.dispatch_event("input")
-            await locator.dispatch_event("change")
+            is_combobox = False
             try:
                 is_combobox = await locator.evaluate(
-                    "el => el.getAttribute('role') === 'combobox' || (el.className && el.className.includes('autocomplete')) || !!el.closest('[data-field-path*=\"location\"]')"
+                    "el => el.getAttribute('role') === 'combobox' || (el.className && (el.className.includes('autocomplete') || el.className.includes('select__input'))) || !!el.closest('[data-field-path*=\"location\"], .select-shell, .select__container, [class*=\"select__control\"]')"
                 )
-                if is_combobox:
-                    await asyncio.sleep(0.6)
-                    # Check for visible autocomplete suggestion items
-                    opt_loc = page.locator('[role="option"]:visible, .ashby-application-form-autocomplete-option:visible, [role="listbox"] div:visible, [class*="autocomplete-option"]:visible')
+            except Exception:
+                pass
+
+            if is_combobox:
+                try:
+                    await locator.scroll_into_view_if_needed()
+                    await locator.click()
+                    await asyncio.sleep(0.2)
+                    await locator.press_sequentially(val_str, delay=30)
+                except Exception:
+                    await locator.fill(val_str)
+            else:
+                await locator.fill(val_str)
+
+            await locator.dispatch_event("input")
+            await locator.dispatch_event("change")
+
+            if is_combobox:
+                try:
+                    # 1. Target scoped listbox via aria-controls / aria-owns if available
+                    controls_id = None
+                    try:
+                        controls_id = await locator.get_attribute("aria-controls") or await locator.get_attribute("aria-owns")
+                    except Exception:
+                        pass
+
+                    opt_loc = None
+                    if controls_id:
+                        try:
+                            # Use CSS attribute selector to safely handle brackets/colons in ID without DOMException
+                            listbox_loc = page.locator(f'[id="{controls_id}"]')
+                            if await listbox_loc.count() > 0:
+                                opt_loc = listbox_loc.locator('[role="option"]:visible')
+                        except Exception:
+                            opt_loc = None
+
+                    if opt_loc is None or await opt_loc.count() == 0:
+                        opt_loc = page.locator('[role="option"]:visible, .ashby-application-form-autocomplete-option:visible, [class*="autocomplete-option"]:visible, [class*="select__option"]:visible')
+
+                    # Bounded async polling for options to appear (up to 2.0s)
                     opt_count = await opt_loc.count()
+                    if opt_count == 0:
+                        for _ in range(8):
+                            await asyncio.sleep(0.25)
+                            opt_count = await opt_loc.count()
+                            if opt_count > 0:
+                                break
                     if opt_count > 0:
                         is_loc = any(t in key.lower() or t in label.lower() for t in ("location", "city", "address", "reside"))
                         best_match = None
                         best_score = -999.0
-                        str_low = val_str.lower()
+                        str_low = val_str.lower().strip()
 
                         for o_idx in range(opt_count):
                             item = opt_loc.nth(o_idx)
@@ -463,16 +705,43 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
                                 score = 0.0
                                 if any(us in text for us in ("california", "united states", "usa", ", ca", " ca,", " ca ", "us ", ", us", "texas", "new york")):
                                     score -= 1000.0
-                                if "ottawa" in text:
+                                if "nottawa" in text:
+                                    score -= 2000.0
+                                if bool(re.search(r"\bottawa\b", text)):
+                                    score += 500.0
+                                if text.startswith("ottawa"):
                                     score += 500.0
                                 if "ontario" in text or " on," in text or ", on" in text:
                                     score += 250.0
                                 if "canada" in text:
                                     score += 300.0
+                                if text in ("ottawa, ontario, canada", "ottawa, on, canada"):
+                                    score += 1500.0
                                 if str_low in text:
                                     score += 100.0
                             else:
-                                score = 10.0 if str_low in text else 0.0
+                                score = 0.0
+                                if text == str_low:
+                                    score += 1000.0
+                                elif str_low in text:
+                                    score += 500.0
+                                elif text in str_low:
+                                    score += 200.0
+
+                                # Salary range matching in select dropdown
+                                if any(c.isdigit() for c in val_str):
+                                    norm_digits = re.sub(r"[^\d]", "", val_str)
+                                    if norm_digits and len(norm_digits) >= 2:
+                                        val_num = float(norm_digits)
+                                        val_k = int(round(val_num / 1000.0)) if val_num >= 1000 else int(round(val_num))
+                                        nums = [int(n) for n in re.findall(r"\d+", text)]
+                                        if nums:
+                                            has_k = "k" in text
+                                            ranges = nums if has_k else [n // 1000 if n >= 1000 else n for n in nums]
+                                            if len(ranges) == 1 and ((val_k >= ranges[0] and "+" in text) or val_k == ranges[0]):
+                                                score += 500.0
+                                            elif len(ranges) >= 2 and (ranges[0] == val_k or ranges[0] <= val_k <= ranges[1]):
+                                                score += 500.0
 
                             if score > best_score:
                                 best_score = score
@@ -492,8 +761,8 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
                         await locator.press("Escape")
                     except Exception:
                         pass
-            except Exception:
-                pass
+                except Exception:
+                    pass
 
         # Read back for verification
         read_back = await _read_back_value(locator, tag, control_type)
@@ -501,10 +770,13 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
         is_location_field = any(t in key.lower() or t in label.lower() for t in ("location", "city", "address", "reside"))
 
         if control_type == "checkbox":
-            expected_bool = boolean_value(value) if boolean_value(value) is not None else (
-                value is not False and str(value).strip().lower() not in ("no", "false", "0", "")
-            )
-            matched = (read_back == expected_bool)
+            if selector_used.startswith("checkbox:") or selector_used.startswith("choice:"):
+                matched = bool(read_back)
+            else:
+                expected_bool = boolean_value(value) if boolean_value(value) is not None else (
+                    value is not False and str(value).strip().lower() not in ("no", "false", "0", "")
+                )
+                matched = (read_back == expected_bool)
         elif control_type == "radio" or tag == "button":
             matched = (
                 read_back is True
@@ -528,19 +800,25 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
             elif str(read_back).strip() and not any(us in norm_rb for us in ("california", "united states", "usa")):
                 # Any non-empty Canadian location read-back
                 matched = True
+        elif control_type == "tel" or "phone" in key.lower():
+            matched = phone_values_equivalent(read_back, val_str)
         else:
-            # Check for substring, exact match, or normalized match
-            norm_val = normalize_text(value).rstrip(". ")
-            norm_rb = normalize_text(read_back).rstrip(". ")
-            norm_str = normalize_text(val_str).rstrip(". ")
-            matched = (
-                str(val_str).strip().lower() in str(read_back).strip().lower()
-                or str(read_back).strip().lower() in str(val_str).strip().lower()
-                or (norm_str and norm_str in norm_rb)
-                or (norm_rb and norm_rb in norm_str)
-                or (norm_val and norm_val in norm_rb)
-                or (norm_rb and norm_rb in norm_val)
-            )
+            rb_str = str(read_back).strip()
+            vs_str = str(val_str).strip()
+            if not rb_str:
+                matched = False
+            else:
+                norm_val = normalize_text(value).rstrip(". ")
+                norm_rb = normalize_text(read_back).rstrip(". ")
+                norm_str = normalize_text(val_str).rstrip(". ")
+                matched = (
+                    vs_str.lower() in rb_str.lower()
+                    or (len(rb_str) >= 2 and rb_str.lower() in vs_str.lower())
+                    or (norm_str and norm_str in norm_rb)
+                    or (norm_rb and norm_rb in norm_str)
+                    or (norm_val and norm_val in norm_rb)
+                    or (norm_rb and norm_rb in norm_val)
+                )
 
         return FieldFillReport(
             key=key,
@@ -561,6 +839,17 @@ async def _fill_single_field(page: Any, key: str, value: Any, label: str = "") -
             matched=False,
             error=str(exc),
         )
+
+
+async def _fill_single_field(
+    page: Any,
+    key: str,
+    value: Any,
+    label: str = "",
+    harness: dict[str, Any] | None = None,
+) -> FieldFillReport:
+    """Locate and fill a single form field, delegating to _fill_input_by_heuristics."""
+    return await _fill_input_by_heuristics(page, key, value, label=label, harness=harness)
 
 
 async def fill_application_form(
@@ -644,15 +933,30 @@ async def fill_application_form(
                     await page.wait_for_load_state("networkidle", timeout=4000)
                 except Exception:
                     pass
+
+                # If an external wrapper page embeds a Greenhouse application iframe, navigate directly
+                if not any(ats in page.url.lower() for ats in ("greenhouse.io", "ashbyhq.com", "jobs.lever.co")):
+                    try:
+                        gh_iframe = page.locator('iframe[src*="job-boards.greenhouse.io/embed"], iframe[src*="boards.greenhouse.io/embed"], iframe#grnhse_iframe')
+                        if await gh_iframe.count() > 0:
+                            iframe_src = await gh_iframe.first.get_attribute("src")
+                            if iframe_src and iframe_src.startswith("http"):
+                                logger.info("Found embedded Greenhouse iframe %s; navigating directly", iframe_src)
+                                await page.goto(iframe_src, wait_until="domcontentloaded", timeout=timeout_ms)
+                    except Exception:
+                        pass
             except Exception as e:
                 logger.warning("Navigation warning for %s: %s", url, e)
+
+            # Fetch latest promoted champion harness in real time for dynamic selector overrides
+            champion_harness = get_current_champion_harness("hunterxjob")
 
             # 1. Fill regular inputs, selects, and textareas
             for key, val in items_to_fill.items():
                 if val is None or val == "":
                     continue
                 label_hint = labels.get(key, "")
-                report = await _fill_single_field(page, key, val, label=label_hint)
+                report = await _fill_single_field(page, key, val, label=label_hint, harness=champion_harness)
                 # If element wasn't found on the page and required_fields is specified
                 if not report.matched and not report.selector_used:
                     if required_fields is not None and key not in required_fields:
@@ -673,7 +977,7 @@ async def fill_application_form(
                     logger.warning("File for %s does not exist: %s", file_key, file_val)
                     continue
 
-                file_loc, sel_used = await _find_file_input(page, file_key)
+                file_loc, sel_used = await _find_file_input(page, file_key, harness=champion_harness)
                 if file_loc:
                     await file_loc.set_input_files(str(file_path))
                     try:

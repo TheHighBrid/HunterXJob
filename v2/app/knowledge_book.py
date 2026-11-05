@@ -368,6 +368,16 @@ class KnowledgeBook:
                 val = self._match_option("Prefer not to answer", options) or self._match_option("Decline to self-identify", options) or val
             return val, f"catalog:{key}"
 
+        # 12b. Motivation and work environment/culture
+        if key in ("why_company_motivation", "motivation", "work_environment_preference"):
+            val = (
+                "I thrive in a collaborative, transparent, and high-trust work culture that values operational excellence, "
+                "continuous learning, and mutual respect. What motivates me is solving meaningful problems, delivering measurable "
+                "value to clients and team members, and applying my background in financial operations, risk analysis, and customer "
+                "success to achieve shared goals."
+            )
+            return val, f"catalog:{key}"
+
         # 13. Security Clearance (fail-closed truth guard)
         if key == "security_clearance":
             clearance_facts = [
@@ -770,6 +780,32 @@ class KnowledgeBook:
                 opt_digits = re.sub(r"[^\d]", "", opt)
                 if opt_digits == norm_digits:
                     return opt
+
+            # Salary range matching (e.g. 60000 vs 60-70K, 50-60K, 60K+)
+            try:
+                val_num = float(norm_digits)
+                val_k = int(round(val_num / 1000.0)) if val_num >= 1000 else int(round(val_num))
+                best_range_opt = None
+                for opt in options:
+                    nums = [int(n) for n in re.findall(r"\d+", opt)]
+                    if not nums:
+                        continue
+                    has_k = "k" in opt.lower()
+                    ranges = nums if has_k else [n // 1000 if n >= 1000 else n for n in nums]
+                    if len(ranges) == 1:
+                        if "+" in opt and val_k >= ranges[0]:
+                            return opt
+                        elif val_k == ranges[0]:
+                            return opt
+                    elif len(ranges) >= 2:
+                        if ranges[0] == val_k:
+                            return opt
+                        if ranges[0] <= val_k <= ranges[1]:
+                            best_range_opt = opt
+                if best_range_opt:
+                    return best_range_opt
+            except Exception:
+                pass
 
         # Fallbacks for boolean/consent variations
         target_norm = normalize_text(target_str)

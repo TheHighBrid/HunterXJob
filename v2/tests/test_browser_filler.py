@@ -213,3 +213,54 @@ def test_browser_filler_enforces_dom_constraints(fixture_server):
 
     # 4. Check checkbox
     assert result.field_reports["remote_ready"].read_back_value is True
+
+
+def test_runtime_hot_reload_promoted_champion_selectors(fixture_server, tmp_path):
+    """Verify runtime hot-reloading of promoted champion selectors without daemon restart."""
+    from playwright.async_api import async_playwright
+    from app.browser_filler import _fill_input_by_heuristics, get_current_champion_harness
+
+    url = f"{fixture_server}/sample_form.html"
+
+    async def run_test():
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(headless=True)
+            page = await browser.new_page()
+            await page.goto(url)
+
+            # 1. Custom promoted champion selector override
+            custom_harness = {
+                "selectors": {
+                    "first_name": ["input#first_name", "input[name='first_name']"],
+                    "custom_test_key": ["#email"],
+                },
+                "answer_policies": {
+                    "bilingual": "Bilingual / Bilingue",
+                },
+            }
+
+            # 2. Execute _fill_input_by_heuristics with champion harness
+            report = await _fill_input_by_heuristics(
+                page=page,
+                key="first_name",
+                value="PromotedMoe",
+                harness=custom_harness,
+            )
+            assert report.matched is True
+            assert report.read_back_value == "PromotedMoe"
+            assert report.selector_used == "champion:input#first_name"
+
+            # 3. Custom key targeting #email via promoted champion override
+            report_custom = await _fill_input_by_heuristics(
+                page=page,
+                key="custom_test_key",
+                value="moe.alem@example.com",
+                harness=custom_harness,
+            )
+            assert report_custom.matched is True
+            assert report_custom.read_back_value == "moe.alem@example.com"
+            assert report_custom.selector_used == "champion:#email"
+
+            await browser.close()
+
+    asyncio.run(run_test())

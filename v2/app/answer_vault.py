@@ -114,6 +114,21 @@ _KEY_ALIASES = {
     "criminal_check_consent": "background_check_consent",
     "screening_consent": "background_check_consent",
     "recording_consent": "interview_recording_consent",
+    "_systemfield_recording_consent": "interview_recording_consent",
+    "identity_verification": "identity_verification_consent",
+    "identity_verification_consent": "identity_verification_consent",
+
+    # Materials / Resume
+    "_systemfield_resume": "resume",
+    "resume/cv": "resume",
+    "cv": "resume",
+
+    # Standard / Identity
+    "_systemfield_name": "full_name",
+    "_systemfield_email": "email",
+    "_systemfield_phone": "phone",
+    "_systemfield_location": "location",
+    "pronoun": "pronouns",
 
     # Remote Work
     "home_office": "remote_workspace",
