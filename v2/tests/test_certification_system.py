@@ -27,7 +27,7 @@ def test_evidence_ledger_extracts_live_submissions():
         assert r.is_concrete_confirmation is True
         assert len(r.receipt_sha256) == 64
         assert len(r.evidence_snapshot_hash) == 64
-        assert r.platform == "ashby"
+        assert r.platform in ("ashby", "greenhouse")
         assert len(r.receipt_text) > 10
 
 

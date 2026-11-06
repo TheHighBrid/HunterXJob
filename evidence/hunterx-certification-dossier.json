@@ -24,7 +24,7 @@
     }
   },
   "evidence_ledger": {
-    "ledger_digest": "241ff3e8468089b8881a0d142fb57ea468a196172adf68b68ec32d33f19548a9",
+    "ledger_digest": "95945da206ac534f17da5386aaacb9b28b0e75fd9edf84784eacf7d56d9b5436",
     "records": [
       {
         "company": "cohere",
@@ -325,11 +325,47 @@
         "submitted_at": "2026-11-01 11:22:16.102869",
         "title": "Acquisition (Sales) Operations Manager",
         "url": "https://jobs.ashbyhq.com/float/de901777-3565-4e23-8bf8-84ce935fbccc"
+      },
+      {
+        "company": "jobber",
+        "evidence_snapshot_hash": "417635ea68389f7a4d0e3bda611b01bf5e5323832a8407d12580f26761d2fa55",
+        "is_concrete_confirmation": true,
+        "job_id": "22f6d78a-2cc6-4070-9d06-dfdb6e428e0b",
+        "platform": "ashby",
+        "receipt_sha256": "ed6586a360e023cebe8ed02dcad9b020f7036f737c6050ddc65dd13b338316c6",
+        "receipt_snippet": "plication Success  Your application was successfully submitted. We'll contact you if there are next steps.  Powered by",
+        "submitted_at": "2026-11-05 00:55:08.738706",
+        "title": "Key Account Manager",
+        "url": "https://jobs.ashbyhq.com/jobber/b05c0398-039e-49e7-ba52-fc0e7f5521ae"
+      },
+      {
+        "company": "d2l",
+        "evidence_snapshot_hash": "9688bd468216916c4f7ace650d2967f5fbd3b5a11789ab6fa5fa7227b4d307d2",
+        "is_concrete_confirmation": true,
+        "job_id": "0fbc5b7c-09cc-4ecc-b527-5c4fa829c00c",
+        "platform": "greenhouse",
+        "receipt_sha256": "c70f0fe9637bceb7916951240ce000356613b300b381df75b62ecdf7cab4146b",
+        "receipt_snippet": "Thank you for applying!  Our awesome D2L Recruitment team will review your application and let you know if we'll be proc",
+        "submitted_at": "2026-11-05 00:54:30.406334",
+        "title": "Product Support Analyst",
+        "url": "https://www.d2l.com/careers/jobs/?job_id=7696232&gh_jid=7696232"
+      },
+      {
+        "company": "geotab",
+        "evidence_snapshot_hash": "9e0db708b96baa398bebf0488541b9a4c1168a327060cbfafa6284dbe0eac26d",
+        "is_concrete_confirmation": true,
+        "job_id": "4cf3a890-2790-4d49-a469-4cb697c68173",
+        "platform": "greenhouse",
+        "receipt_sha256": "467cdc8f1c1d648a8a99b20b49e7fae77d2167a8292c082b83cf48e1a09bce21",
+        "receipt_snippet": "Thank you for applying! Thank you for your interest in working with Geotab and submitting your application! We are alway",
+        "submitted_at": "2026-11-05 00:56:26.904934",
+        "title": "Senior Connectivity Partnership Manager",
+        "url": "https://job-boards.greenhouse.io/geotab/jobs/5400143008"
       }
     ],
-    "total_verified_submissions": 25
+    "total_verified_submissions": 28
   },
-  "generated_at": "2026-11-05T00:28:33.815669+00:00",
+  "generated_at": "2026-11-06T07:12:10.821928+00:00",
   "milestones": {
     "gate1": {
       "blockers": [],
@@ -360,10 +396,11 @@
         "zero_false_positive_submissions": true
       },
       "metadata": {
-        "credited_submissions": 25,
-        "distinct_employers": 5,
+        "credited_submissions": 28,
+        "distinct_employers": 7,
         "platforms": [
-          "ashby"
+          "ashby",
+          "greenhouse"
         ]
       },
       "milestone_id": "gate2_supervised_live_submissions",
@@ -402,11 +439,11 @@
   "safety_invariants": {
     "allow_real_application_submit": true,
     "captcha_or_mfa_bypass_attempted": false,
-    "credited_real_submissions": 25,
+    "credited_real_submissions": 28,
     "fail_closed_on_unmatched_required_fields": true,
     "false_submitted_records": 0,
     "uncertain_outcomes_credited_as_submitted": 0
   },
   "schema_version": "hunterx-certification-v2",
-  "source_commit": "6b9a85573c3860a840bb7d0172822c2bcc8dd2e6"
+  "source_commit": "2585f2ee4986f967f4490359fc89794b84aa1dff"
 }

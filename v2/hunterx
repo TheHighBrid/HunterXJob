@@ -114,8 +114,12 @@ start_app() {
   echo $! > run/api.pid
 
   for _ in 1 2 3 4 5 6 7 8 9 10; do
-    if command -v curl >/dev/null && curl -fsS "http://${host}:${port}/api/health" >/dev/null 2>&1; then
-      echo "HunterXJob v2 running at http://${host}:${port}"
+    if command -v curl >/dev/null && curl -fsS "http://127.0.0.1:${port}/api/health" >/dev/null 2>&1; then
+      if [ "$host" = "0.0.0.0" ]; then
+        echo "HunterXJob v2 running at http://localhost:${port} (or http://127.0.0.1:${port})"
+      else
+        echo "HunterXJob v2 running at http://${host}:${port}"
+      fi
       return 0
     fi
     sleep 1

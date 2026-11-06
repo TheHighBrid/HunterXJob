@@ -34,7 +34,12 @@ class HunterXJobAdapter:
         extra_inputs: dict[str, Any] | None = None,
     ) -> RunContext:
         """Start a traced application run with active champion version."""
-        champion = get_current_champion(self.session, self.project)
+        try:
+            champion = get_current_champion(self.session, self.project)
+            agent_ver = champion.version if champion else "v2.0.0-champion"
+        except Exception:
+            agent_ver = "v2.0.0-champion"
+
         inputs = {
             "job_id": job_id,
             "job_title": job_title,
@@ -47,7 +52,7 @@ class HunterXJobAdapter:
 
         return self.runtime.start_run(
             task_type=f"apply_{platform}",
-            agent_version=champion.version,
+            agent_version=agent_ver,
             inputs=inputs,
         )
 

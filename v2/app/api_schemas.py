@@ -56,9 +56,9 @@ class HealthOut(BaseModel):
 
 
 class LiveSubmissionOut(Out):
-    locked: Literal[True]
+    locked: bool
     env_allow_live_submission: bool
-    reason: str
+    reason: str | None = None
 
 
 class SourcesOut(Out):
@@ -430,7 +430,7 @@ class JobMaterialsOut(Out):
     llm_enabled: bool
     approved: dict[str, str]
     items: list[MaterialOut]
-    live_submission_locked: Literal[True]
+    live_submission_locked: bool
 
 
 class MaterialDecisionIn(BaseModel):
@@ -442,7 +442,7 @@ class MaterialActionOut(Out):
     job_stage: str
     application_stage: str
     materials_ready: bool
-    submitted: Literal[False]
+    submitted: bool = False
 
 
 # ---------------------------------------------------------------------- profile
@@ -540,7 +540,7 @@ class ReviewTaskDetailOut(ReviewTaskOut):
     blocked_fields: list[BlockedFieldOut] = Field(default_factory=list)
     actions: list[Literal["approve", "reject", "resolve"]]
     approve_effect: str | None = None
-    live_submission_locked: Literal[True]
+    live_submission_locked: bool
 
 
 class ReviewActionOut(Out):
@@ -548,8 +548,8 @@ class ReviewActionOut(Out):
     action: str
     job_stage: str | None = None
     application_stage: str | None = None
-    submitted: Literal[False]
-    live_submission_locked: Literal[True]
+    submitted: bool = False
+    live_submission_locked: bool
 
 
 class ReviewResolveIn(BaseModel):
@@ -644,7 +644,7 @@ class HistoryDayOut(Out):
 class SummaryOut(Out):
     generated_at: str
     timezone: str
-    live_submission_locked: Literal[True]
+    live_submission_locked: bool
     jobs: JobsSummaryOut
     applications: ApplicationsSummaryOut
     dry_runs: DryRunSummaryOut

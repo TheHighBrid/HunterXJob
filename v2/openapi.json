@@ -1783,7 +1783,6 @@
             "type": "string"
           },
           "live_submission_locked": {
-            "const": true,
             "title": "Live Submission Locked",
             "type": "boolean"
           },
@@ -2222,13 +2221,19 @@
             "type": "boolean"
           },
           "locked": {
-            "const": true,
             "title": "Locked",
             "type": "boolean"
           },
           "reason": {
-            "title": "Reason",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
           }
         },
         "required": [
@@ -2451,7 +2456,7 @@
             "type": "boolean"
           },
           "submitted": {
-            "const": false,
+            "default": false,
             "title": "Submitted",
             "type": "boolean"
           }
@@ -3092,12 +3097,11 @@
             "title": "Job Stage"
           },
           "live_submission_locked": {
-            "const": true,
             "title": "Live Submission Locked",
             "type": "boolean"
           },
           "submitted": {
-            "const": false,
+            "default": false,
             "title": "Submitted",
             "type": "boolean"
           },
@@ -3404,7 +3408,6 @@
             "title": "Job Title"
           },
           "live_submission_locked": {
-            "const": true,
             "title": "Live Submission Locked",
             "type": "boolean"
           },
@@ -4301,7 +4304,6 @@
             "$ref": "#/components/schemas/JobsSummaryOut"
           },
           "live_submission_locked": {
-            "const": true,
             "title": "Live Submission Locked",
             "type": "boolean"
           },
@@ -4421,6 +4423,22 @@
   "paths": {
     "/": {
       "get": {
+        "operationId": "dashboard__get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Dashboard"
+      },
+      "head": {
         "operationId": "dashboard__get",
         "responses": {
           "200": {
@@ -5253,6 +5271,23 @@
     },
     "/api/health": {
       "get": {
+        "description": "Liveness probe. Open to everyone; details only for authenticated callers.",
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      },
+      "head": {
         "description": "Liveness probe. Open to everyone; details only for authenticated callers.",
         "operationId": "health_api_health_get",
         "responses": {

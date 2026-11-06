@@ -20,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import Settings
-from app.flags import kill_switch_engaged
+from app.flags import is_enabled, kill_switch_engaged
 from app.material_store import MaterialsError, material_view, materials_for, materials_ready
 from app.material_workflow import REVIEW_REASON, approve_pending
 from app.models import Application, Job, PipelineStage, ReviewTask, iso_utc
@@ -134,7 +134,7 @@ def task_detail(db: Session, task: ReviewTask) -> dict[str, Any]:
         "blocked_fields": blocked_fields,
         "actions": available_actions(db, task),
         "approve_effect": _approve_effect(db, task, job),
-        "live_submission_locked": True,
+        "live_submission_locked": not is_enabled(db, "allow_live_submission"),
     }
 
 
@@ -192,7 +192,7 @@ def _result(db: Session, task: ReviewTask, action: str) -> dict[str, Any]:
         "job_stage": job.stage if job else None,
         "application_stage": application.stage if application else None,
         "submitted": False,
-        "live_submission_locked": True,
+        "live_submission_locked": not is_enabled(db, "allow_live_submission"),
     }
 
 

@@ -30,6 +30,7 @@ from app.api_schemas import (
 )
 from app.config import Settings, get_settings
 from app.db import get_db
+from app.flags import is_enabled
 from app.material_store import MaterialsError, approved, get_material, material_view, materials_for, materials_ready
 from app.material_workflow import GENERATABLE_STAGES, approve_material, generate_for_application, reject_material
 from app.models import Job
@@ -149,7 +150,7 @@ def _job_materials(db: Session, settings: Settings, job: Job) -> dict[str, objec
         "job_id": job.id, "application_id": application.id if application else None, "job_stage": job.stage,
         "can_generate": not blockers, "generate_blockers": blockers, "llm_enabled": settings.materials_llm_enabled,
         "approved": {kind: row.id for kind, row in current.items()},
-        "items": [material_view(row) for row in rows], "live_submission_locked": True,
+        "items": [material_view(row) for row in rows], "live_submission_locked": not is_enabled(db, "allow_live_submission"),
     }
 
 

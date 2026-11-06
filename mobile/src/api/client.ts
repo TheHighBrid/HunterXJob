@@ -157,6 +157,36 @@ export function createClient(getConfig: () => ClientConfig, fetchImpl: FetchLike
     rejectTask: (id: string) => post<ReviewAction>(`/api/review-tasks/${encodeURIComponent(id)}/reject`),
     resolveTask: (id: string, resolution: ReviewResolution = "resolved") =>
       post<ReviewAction>(`/api/review-tasks/${encodeURIComponent(id)}/resolve`, { resolution }),
+    revalidateReviews: (taskIds?: string[]) =>
+      post<{ revalidated: number; remaining_open: number; details: any[] }>("/api/review-tasks/revalidate", {
+        task_ids: taskIds,
+      }),
+
+    // Answer Vault & Policies
+    saveAnswer: (payload: {
+      key: string;
+      value: string;
+      scope?: string;
+      source?: string;
+      note?: string;
+      confidence?: number;
+      sensitive?: boolean;
+    }) => post<{ id: string; key: string; scope: string; source: string }>("/api/answers", payload),
+    listAnswers: (scope?: string) =>
+      request<Array<{ id: string; key: string; value: string; source: string; scope: string; note: string }>>(
+        `/api/answers${scope ? `?scope=${encodeURIComponent(scope)}` : ""}`
+      ),
+    deleteAnswer: (answerId: string) =>
+      request<{ deleted: boolean; id: string; key: string }>(`/api/answers/${encodeURIComponent(answerId)}`, { method: "DELETE" }),
+    vaultCatalog: () =>
+      request<{ catalog_size: number; items: any[]; candidate: any }>("/api/vault/catalog"),
+    simulateVault: (question: string, options?: string[]) =>
+      post<any>("/api/vault/simulate", { question, options }),
+
+    runJobAutonomous: (jobId: string) =>
+      post<{ job_id: string; status: string; submitted: boolean; platform: string; evidence_sha256?: string; error?: string }>(
+        `/api/jobs/${encodeURIComponent(jobId)}/run-autonomous`
+      ),
 
     schedulerStatus: () => request<SchedulerStatus>("/api/scheduler/status"),
     cycles: (limit = 10) => request<Cycle[]>(`/api/scheduler/cycles?limit=${limit}`),

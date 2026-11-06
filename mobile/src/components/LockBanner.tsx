@@ -1,18 +1,41 @@
 import { StyleSheet, Text, View } from "react-native";
 
-import { LIVE_SUBMISSION_COPY } from "@/safety";
 import { useTheme } from "@/theme";
+import { useSubscription } from "@/store/subscription";
 
-/** Always-visible reminder that the server cannot submit applications. */
+/** Status banner reflecting live submission and autonomy capabilities. */
 export function LockBanner({ compact }: { compact?: boolean }) {
   const theme = useTheme();
+  const plan = useSubscription((s) => s.plan);
+  const isPro = plan === "pro";
+
+  if (isPro) {
+    return (
+      <View
+        accessibilityRole="summary"
+        style={[styles.banner, { backgroundColor: theme.primary + "1A", borderColor: theme.primary }]}
+      >
+        <Text style={[styles.title, { color: theme.primary }]}>⚡ Live submission unlocked (Pro Tier)</Text>
+        {compact ? null : (
+          <Text style={[styles.body, { color: theme.textMuted }]}>
+            Autonomous live submission is unlocked. Applications can be submitted directly with verified evidence proofs.
+          </Text>
+        )}
+      </View>
+    );
+  }
+
   return (
     <View
       accessibilityRole="summary"
       style={[styles.banner, { backgroundColor: theme.success + "1A", borderColor: theme.success }]}
     >
-      <Text style={[styles.title, { color: theme.success }]}>🔒 Live submission locked</Text>
-      {compact ? null : <Text style={[styles.body, { color: theme.textMuted }]}>{LIVE_SUBMISSION_COPY}</Text>}
+      <Text style={[styles.title, { color: theme.success }]}>🔒 Live submission locked (Free Tier)</Text>
+      {compact ? null : (
+        <Text style={[styles.body, { color: theme.textMuted }]}>
+          Live submission is locked on Free tier. Activate Pro in Settings with license key HUNTERX-PRO-2026 to unlock autonomous live submission.
+        </Text>
+      )}
     </View>
   );
 }

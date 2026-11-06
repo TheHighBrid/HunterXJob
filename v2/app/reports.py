@@ -73,7 +73,7 @@ def summary(db: Session, settings: Settings, now: datetime | None = None) -> dic
     return {
         "generated_at": now.isoformat(),
         "timezone": settings.timezone,
-        "live_submission_locked": True,
+        "live_submission_locked": not settings.allow_live_submission,
         "jobs": {
             "total": sum(jobs_by_stage.values()),
             "discovered_today": _count(db, select(func.count(Job.id)).where(Job.discovered_at >= since)),

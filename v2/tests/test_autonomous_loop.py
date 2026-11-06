@@ -22,6 +22,8 @@ from app.models import (
     ReviewTask,
 )
 from app.submission_engine import SubmissionResult
+import improvement_kernel.storage.models  # noqa: F401
+from improvement_kernel.storage.models import AgentVersion
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.testclient import TestClient
@@ -34,6 +36,17 @@ def test_db(tmp_path):
     Base.metadata.create_all(engine)
     SessionClass = sessionmaker(bind=engine)
     with SessionClass() as db:
+        db.add(
+            AgentVersion(
+                project="hunterxjob",
+                version="v2.0.0-champion",
+                git_commit="initial",
+                prompt_hash="h1",
+                config_hash="c1",
+                status="champion",
+            )
+        )
+        db.commit()
         yield db
 
 

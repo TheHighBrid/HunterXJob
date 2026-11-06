@@ -29,7 +29,7 @@ type NumberKey = "max_dry_runs_per_day" | "max_applications_per_day" | "min_matc
 
 const NUMBER_FIELDS: { key: NumberKey; label: string; hint: string }[] = [
   { key: "max_dry_runs_per_day", label: "Dry-runs per day", hint: "0-100" },
-  { key: "max_applications_per_day", label: "Applications per day", hint: "0-50 (submission is locked)" },
+  { key: "max_applications_per_day", label: "Applications per day", hint: "0-50 per day (autonomous live submission active)" },
   { key: "min_match_score", label: "Minimum match score", hint: "0-100" },
   { key: "cycle_interval_minutes", label: "Cycle interval (min)", hint: "5-1440" },
   { key: "cycle_max_dry_runs", label: "Dry-runs per cycle", hint: "0-20" },

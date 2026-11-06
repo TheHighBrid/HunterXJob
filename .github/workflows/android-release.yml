@@ -53,9 +53,12 @@ jobs:
       - name: Stage APK outputs
         run: |
           mkdir -p ../apk-out
-          cp android/app/build/outputs/apk/release/app-release.apk ../apk-out/HunterXJob-v1.0.0.apk
+          RELEASE_TAG="${{ github.event.release.tag_name || github.event.inputs.release_tag || github.ref_name || 'v1.1.0' }}"
+          cp android/app/build/outputs/apk/release/app-release.apk "../apk-out/HunterXJob-${RELEASE_TAG}.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk ../apk-out/HunterXJob-latest.apk
           cd ../apk-out
-          sha256sum HunterXJob-v1.0.0.apk > HunterXJob-v1.0.0.apk.sha256
+          sha256sum "HunterXJob-${RELEASE_TAG}.apk" > "HunterXJob-${RELEASE_TAG}.apk.sha256"
+          sha256sum HunterXJob-latest.apk > HunterXJob-latest.apk.sha256
           ls -lh
 
       - name: Attach the APK to the release
@@ -63,5 +66,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          RELEASE_TAG="${{ github.event.release.tag_name || github.event.inputs.release_tag || github.ref_name || 'v1.00.0' }}"
+          RELEASE_TAG="${{ github.event.release.tag_name || github.event.inputs.release_tag || github.ref_name || 'v1.1.0' }}"
           gh release upload "$RELEASE_TAG" ../apk-out/* --clobber

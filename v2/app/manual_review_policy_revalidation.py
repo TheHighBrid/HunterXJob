@@ -118,11 +118,41 @@ def revalidate_single_task(
             can_resolve = True
             resolution_note = f"Answer found in vault for key '{matched_key}'"
 
+        # Also check all blocked_fields in application validation_json
+        if not can_resolve and app and app.validation_json:
+            try:
+                vdata = json.loads(app.validation_json)
+                bfs = vdata.get("blocked_fields") or []
+                if bfs:
+                    blocked_keys = [
+                        (bf.get("key", "") if isinstance(bf, dict) else str(bf)).lower()
+                        for bf in bfs
+                    ]
+                    if blocked_keys and all(
+                        bk in stored_answers or any(bk in sa or sa in bk for sa in stored_answers)
+                        for bk in blocked_keys
+                    ):
+                        can_resolve = True
+                        resolution_note = f"All {len(blocked_keys)} blocked field(s) answered in vault"
+            except Exception:
+                pass
+
     if can_resolve:
         task.status = "resolved"
         task.resolved_at = datetime.now(UTC)
         task.detail = f"{task.detail} [Auto-revalidated: {resolution_note}]"
         db.add(task)
+
+        if app and app.validation_json:
+            try:
+                vdata = json.loads(app.validation_json)
+                vdata["ok"] = True
+                vdata["blocked_fields"] = []
+                vdata["blockers"] = []
+                app.validation_json = json.dumps(vdata)
+                db.add(app)
+            except Exception:
+                pass
 
         promoted = False
         if job and job.stage == PipelineStage.needs_review.value:

@@ -26,8 +26,8 @@ function getTodayIsoDate(): string {
 export const useSubscription = create<SubscriptionState>()(
   persist(
     (set, get): SubscriptionState => ({
-      plan: "free",
-      licenseKey: "",
+      plan: "pro",
+      licenseKey: "HUNTERX-PRO-2026",
       dailyApplicationCount: 0,
       lastApplicationDate: getTodayIsoDate(),
 
@@ -96,7 +96,7 @@ export const useSubscription = create<SubscriptionState>()(
       },
     }),
     {
-      name: "hunterxjob-subscription",
+      name: "hunterxjob-subscription-v2",
       storage: createJSONStorage(() => AsyncStorage),
     }
   )

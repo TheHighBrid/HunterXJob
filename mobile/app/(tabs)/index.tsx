@@ -158,7 +158,7 @@ export default function DashboardScreen() {
         <Text style={[styles.section, { color: theme.textMuted }]}>TODAY</Text>
         <View style={styles.grid}>
           <StatCard label="Dry-runs" value={`${status.today.dry_runs} / ${status.limits.max_dry_runs_per_day}`} hint="daily cap" />
-          <StatCard label="Submissions" value={`${status.today.submissions} / ${status.limits.max_applications_per_day}`} hint="locked: always 0" />
+          <StatCard label="Submissions" value={`${status.today.submissions} / ${status.limits.max_applications_per_day}`} hint="live active (Pro)" />
           <StatCard label="Open reviews" value={String(summary.review.open)} hint="needs you" />
           <StatCard label="New jobs" value={String(summary.jobs.discovered_today)} hint={`${summary.jobs.total} total`} />
         </View>

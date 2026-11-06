@@ -119,12 +119,12 @@ class InboxEmailIn(BaseModel):
     received_at: str | None = None
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 def dashboard() -> str:
     return get_dashboard_html()
 
 
-@app.get("/api/health", response_model=HealthOut, response_model_exclude_none=True)
+@app.api_route("/api/health", methods=["GET", "HEAD"], response_model=HealthOut, response_model_exclude_none=True)
 def health(request: Request, db: DbSession, current: CurrentSettings) -> dict[str, object]:
     """Liveness probe. Open to everyone; details only for authenticated callers."""
     posture = auth_posture(current)
@@ -137,7 +137,7 @@ def health(request: Request, db: DbSession, current: CurrentSettings) -> dict[st
         "mode": current.application_mode,
         "automation_enabled": current.automation_enabled,
         "allow_live_submission": current.allow_live_submission,
-        "live_submission_locked": True,
+        "live_submission_locked": not current.allow_live_submission,
         "continuous_run_enabled": current.continuous_run_enabled,
         "unattended_allowed": decision.allowed,
         "unattended_reason": decision.reason,
@@ -770,7 +770,7 @@ def export_system_diagnostics(db: DbSession, current: CurrentSettings) -> dict[s
             "application_mode": current.application_mode,
             "automation_enabled": current.automation_enabled,
             "allow_live_submission": current.allow_live_submission,
-            "live_submission_locked": True,
+            "live_submission_locked": not current.allow_live_submission,
             "continuous_run_enabled": current.continuous_run_enabled,
             "flags": flags_snapshot(db),
         },
