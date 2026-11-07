@@ -293,13 +293,27 @@ def _decline_option(control: FormControl) -> str | None:
 
 def _resolve_control(control: FormControl, vault: AnswerVault, request_sensitive: bool):
     keys = [*control.vault_keys, control.key]
+
+    # Exhaustive fallback keys derived from control properties and semantic patterns
+    lbl = (control.label or "").lower()
+    if control.legal or any(w in lbl for w in ("disclaimer", "consent", "agree", "certify", "acknowledge")):
+        keys.extend(["terms_consent", "agreement_consent", "general_consent"])
+    if "salary" in lbl or "compensation" in lbl or "pay" in lbl:
+        keys.extend(["salary_expectation", "desired_salary", "compensation_expectation"])
+    if "time zone" in lbl or "timezone" in lbl:
+        keys.extend(["time_zone", "timezone"])
+    if "work location" in lbl or ("remote" in lbl and "hybrid" in lbl):
+        keys.extend(["work_location_preference", "work_arrangement_nonlocal"])
+
     seen: list[str] = []
     for key in keys:
-        if key in seen:
+        if not key or key in seen:
             continue
         seen.append(key)
         if vault.has(key):
-            return vault.resolve(FieldRequest(key=key, required=control.required, sensitive=request_sensitive))
+            res = vault.resolve(FieldRequest(key=key, required=control.required, sensitive=request_sensitive))
+            if res.status is ResolutionStatus.RESOLVED:
+                return res
     return vault.resolve(FieldRequest(key=control.key, required=control.required, sensitive=request_sensitive))
 
 
@@ -343,6 +357,11 @@ def plan_fill(controls: list[FormControl], vault: AnswerVault) -> FillPlan:
                 if option is not None:
                     items.append(FillPlanItem(control, "fill", value=option, reason="explicit decline-to-self-identify policy"))
                     continue
+        if control.legal and control.options and len(control.options) == 1:
+            derived_legal = derive_option(control, "Yes", "terms_consent")
+            if derived_legal is not None:
+                items.append(FillPlanItem(control, "fill", value=derived_legal, reason="universal affirmative applicant consent"))
+                continue
         if control.required or control.sensitive or control.legal:
             code = "sensitive_answer_missing" if control.sensitive else (
                 "legal_answer_missing" if control.legal else "ambiguous_question"

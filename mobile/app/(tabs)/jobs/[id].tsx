@@ -46,8 +46,17 @@ function ScoreBlock({ job }: { job: JobDetail }) {
   );
 }
 
-function FormStatusCard({ status, preview }: { status: FormStatus; preview?: FormPreview }) {
+function FormStatusCard({
+  status,
+  preview,
+  openTaskId,
+}: {
+  status: FormStatus;
+  preview?: FormPreview;
+  openTaskId?: string;
+}) {
   const theme = useTheme();
+  const router = useRouter();
   const color = status.state === "validated" ? theme.success : status.state === "blocked" || status.state === "unavailable" ? theme.warning : theme.textMuted;
   return (
     <Card title="Application form" right={<Badge label={humanize(status.state)} color={color} />}>
@@ -67,6 +76,20 @@ function FormStatusCard({ status, preview }: { status: FormStatus; preview?: For
           </Text>
         </View>
       ))}
+      {status.state === "blocked" || status.blocked_fields.length > 0 ? (
+        <View style={{ marginTop: 8 }}>
+          <PrimaryButton
+            title={openTaskId ? "👉 Answer Questions in Review Studio ›" : "👉 Go to Review Studio ›"}
+            onPress={() => {
+              if (openTaskId) {
+                router.push({ pathname: "/review/[id]", params: { id: openTaskId } });
+              } else {
+                router.push({ pathname: "/(tabs)/review" });
+              }
+            }}
+          />
+        </View>
+      ) : null}
       {status.warnings.length ? <Muted>Warnings: {status.warnings.join("; ")}</Muted> : null}
       {status.last_error ? <Banner tone="warning" message={status.last_error} /> : null}
       {preview ? (
@@ -147,6 +170,14 @@ function OpenTasksCard({ tasks }: { tasks: JobDetail["review_tasks"] }) {
           <Text style={[styles.blockedReason, { color: theme.warning }]}>{humanize(task.reason_code)} ›</Text>
         </Pressable>
       ))}
+      <View style={{ marginTop: 6 }}>
+        <PrimaryButton
+          title="👉 Answer Questions in Review Studio ›"
+          onPress={() => {
+            router.push({ pathname: "/review/[id]", params: { id: tasks[0].id } });
+          }}
+        />
+      </View>
     </Card>
   );
 }
@@ -278,6 +309,8 @@ export default function JobDetailScreen() {
   if (loading && !job) return <ScreenContainer><LoadingView /></ScreenContainer>;
   if (!job) return <ScreenContainer><ErrorView message={error ?? "Job not found."} onRetry={reload} /></ScreenContainer>;
 
+  const openTasks = job.review_tasks.filter((task) => task.status === "open");
+
   return (
     <ScreenContainer>
       <ScrollView
@@ -289,10 +322,10 @@ export default function JobDetailScreen() {
         <JobHeader job={job} />
         <LinkedPostingsCard job={job} onUnlink={unlinkDuplicate} />
         <ScoreCard job={job} />
-        <FormStatusCard status={job.form_status} preview={preview} />
+        <FormStatusCard status={job.form_status} preview={preview} openTaskId={openTasks[0]?.id} />
         {previewError ? <Banner tone="danger" message={previewError} /> : null}
         <PrimaryButton title="Check the live form now (read-only)" variant="secondary" loading={checking} onPress={() => void checkForm()} />
-        <OpenTasksCard tasks={job.review_tasks.filter((task) => task.status === "open")} />
+        <OpenTasksCard tasks={openTasks} />
         <ApplicationCard application={job.application} jobId={job.id} />
         <LivenessCard job={job} onCheck={checkLiveness} />
         <TimelineCard events={job.events} />

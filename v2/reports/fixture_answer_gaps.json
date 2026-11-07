@@ -1,7 +1,7 @@
 {
   "totals": {
-    "review": 36,
-    "skip": 33
+    "review": 30,
+    "skip": 32
   },
   "by_category": [
     {
@@ -33,18 +33,18 @@
       "required": 5
     },
     {
-      "name": "legal_consent",
-      "total": 8,
-      "review": 7,
+      "name": "sensitive_self_id",
+      "total": 4,
+      "review": 3,
       "skip": 1,
-      "required": 7
+      "required": 0
     },
     {
-      "name": "sensitive_self_id",
-      "total": 5,
-      "review": 4,
-      "skip": 1,
-      "required": 1
+      "name": "legal_consent",
+      "total": 2,
+      "review": 2,
+      "skip": 0,
+      "required": 2
     },
     {
       "name": "option_mismatch",
@@ -84,18 +84,18 @@
       "required": 2
     },
     {
-      "name": "select",
-      "total": 17,
-      "review": 15,
-      "skip": 2,
-      "required": 14
-    },
-    {
       "name": "textarea",
       "total": 16,
       "review": 6,
       "skip": 10,
       "required": 6
+    },
+    {
+      "name": "select",
+      "total": 12,
+      "review": 10,
+      "skip": 2,
+      "required": 9
     },
     {
       "name": "file",
@@ -117,13 +117,6 @@
       "review": 2,
       "skip": 1,
       "required": 2
-    },
-    {
-      "name": "checkbox",
-      "total": 2,
-      "review": 1,
-      "skip": 1,
-      "required": 1
     }
   ],
   "controls": [
@@ -202,14 +195,6 @@
     {
       "form": "greenhouse/asana_8165477.json",
       "status": "review",
-      "category": "sensitive_self_id",
-      "type": "select",
-      "required": true,
-      "label": "Asana is seeking the below information for the exclusive and limited purpose of "
-    },
-    {
-      "form": "greenhouse/asana_8165477.json",
-      "status": "review",
       "category": "legal_consent",
       "type": "select",
       "required": true,
@@ -222,22 +207,6 @@
       "type": "text",
       "required": true,
       "label": "If you answered \u201cYes,\u201d please list the U.S. government entity you worked for. If"
-    },
-    {
-      "form": "greenhouse/asana_8165477.json",
-      "status": "review",
-      "category": "legal_consent",
-      "type": "select",
-      "required": true,
-      "label": "By agreeing here: (1) I certify that the information I provided to Asana in conn"
-    },
-    {
-      "form": "greenhouse/asana_8165477.json",
-      "status": "review",
-      "category": "legal_consent",
-      "type": "checkbox",
-      "required": true,
-      "label": "Consent to processing of voluntary demographic data"
     },
     {
       "form": "greenhouse/d2l_7696196.json",
@@ -320,14 +289,6 @@
       "label": "If someone from D2L referred you to this role, please help us thank them by list"
     },
     {
-      "form": "greenhouse/d2l_7696196.json",
-      "status": "review",
-      "category": "legal_consent",
-      "type": "select",
-      "required": true,
-      "label": "Have you read and agree to the below Disclaimer and Consent?"
-    },
-    {
       "form": "greenhouse/gitlab_8556658002.json",
       "status": "review",
       "category": "documents",
@@ -393,14 +354,6 @@
     },
     {
       "form": "greenhouse/gitlab_8556658002.json",
-      "status": "review",
-      "category": "legal_consent",
-      "type": "select",
-      "required": true,
-      "label": "Are you subject to any employment agreements and/or post-employment restrictions"
-    },
-    {
-      "form": "greenhouse/gitlab_8556658002.json",
       "status": "skip",
       "category": "sensitive_self_id",
       "type": "text",
@@ -462,14 +415,6 @@
       "type": "text",
       "required": false,
       "label": "Other website"
-    },
-    {
-      "form": "ats/lever_apply.html",
-      "status": "skip",
-      "category": "legal_consent",
-      "type": "checkbox",
-      "required": false,
-      "label": "consent[marketing]"
     },
     {
       "form": "ats/lever_apply.html",
@@ -590,14 +535,6 @@
       "type": "textarea",
       "required": true,
       "label": "What does delivering exceptional client service mean to you?"
-    },
-    {
-      "form": "ats/ashby_form_advisor.json",
-      "status": "review",
-      "category": "legal_consent",
-      "type": "select",
-      "required": true,
-      "label": "Interview Recording Consent"
     },
     {
       "form": "ats/ashby_form_advisor.json",

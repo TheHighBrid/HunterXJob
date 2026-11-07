@@ -7,6 +7,14 @@ Only narrow, explainable rules; anything else stays in review:
   a Yes/No question gets "Yes" only when both languages are at professional
   working level or above, and a CEFR-scale question gets the weaker of the two
   languages' levels.
+- compensation / salary range questions evaluate candidate target / minimum
+  compensation against option brackets (e.g. 60-70K for $65,000 / $60,000);
+- time zone questions normalize candidate Eastern Time / America/Toronto / EST
+  to platform option formats (e.g. 'GMT-5 :Eastern Standard Time (EST)');
+- work location questions match remote preferences for non-local roles
+  (e.g. 'Remote Canada' or 'Remote within Canada');
+- legal disclaimer and consent declarations resolve to universal affirmative
+  options (e.g. 'Yes' or 'I agree').
 """
 from __future__ import annotations
 
@@ -102,8 +110,294 @@ def _bilingual(control: FormControl, value: Any) -> Any | None:
     return None
 
 
+# ---------------------------------------------------------------------------
+# Compensation & Salary Range Normalization
+# ---------------------------------------------------------------------------
+
+def _parse_salary_number(s: Any) -> float | None:
+    if s is None:
+        return None
+    cleaned = str(s).strip().lower().replace(",", "").replace("$", "")
+    m = re.search(r"(\d+(?:\.\d+)?)\s*k\b", cleaned)
+    if m:
+        return float(m.group(1)) * 1000.0
+    m = re.search(r"\b\d+(?:\.\d+)?\b", cleaned)
+    if m:
+        return float(m.group(0))
+    return None
+
+
+def _parse_salary_bounds(opt: str) -> tuple[float, float] | None:
+    text = opt.strip().lower().replace(",", "").replace("$", "")
+    # Plus / and above / +100k / 100k+ / over 100k
+    plus_m = re.search(
+        r"(?:\+|over|above|more than)\s*(\d+(?:\.\d+)?)\s*(k)?|(\d+(?:\.\d+)?)\s*(k)?\s*(?:\+|\band above\b|\bor more\b)",
+        text,
+    )
+    if plus_m:
+        num = plus_m.group(1) or plus_m.group(3)
+        is_k = bool(plus_m.group(2) or plus_m.group(4))
+        val = float(num) * (1000.0 if (is_k or float(num) < 1000) else 1.0)
+        return (val, float("inf"))
+    # Range "30-40k", "60-70k", "90k-100k", "50000 - 60000", "50000 to 60000"
+    range_m = re.search(r"(\d+(?:\.\d+)?)\s*(k)?\s*(?:-|–|—|to)\s*(\d+(?:\.\d+)?)\s*(k)?", text)
+    if range_m:
+        low_num = float(range_m.group(1))
+        high_num = float(range_m.group(3))
+        has_k = bool(range_m.group(2) or range_m.group(4)) or "k" in text
+        multiplier = 1000.0 if (has_k or high_num < 1000) else 1.0
+        return (low_num * multiplier, high_num * multiplier)
+    # Under / less than
+    under_m = re.search(r"(?:under|less than|<)\s*(\d+(?:\.\d+)?)\s*(k)?", text)
+    if under_m:
+        num = float(under_m.group(1))
+        has_k = bool(under_m.group(2)) or "k" in text
+        multiplier = 1000.0 if (has_k or num < 1000) else 1.0
+        return (0.0, num * multiplier)
+    # Exact single number option like "$65,000" or "65000"
+    single_num = _parse_salary_number(text)
+    if single_num is not None:
+        return (single_num, single_num)
+    return None
+
+
+def _salary_range(control: FormControl, value: Any) -> Any | None:
+    target_salary = _parse_salary_number(value)
+    if target_salary is None or not control.options:
+        return None
+
+    # Parse bounds for each option
+    parsed: list[tuple[str, tuple[float, float]]] = []
+    for opt in control.options:
+        b = _parse_salary_bounds(opt)
+        if b is not None:
+            parsed.append((opt, b))
+
+    if not parsed:
+        return None
+
+    # Look for exact bracket match (low <= target <= high)
+    matches = [opt for opt, (low, high) in parsed if low <= target_salary <= high]
+    if len(matches) == 1:
+        return _wrap(control, matches[0])
+    if len(matches) > 1:
+        # If on boundary (e.g. 60,000 matches [50k, 60k] and [60k, 70k]), pick the bracket where it is the lower bound
+        upper_tier = [opt for opt, (low, high) in parsed if low == target_salary]
+        if len(upper_tier) == 1:
+            return _wrap(control, upper_tier[0])
+        return _wrap(control, matches[0])
+
+    # If target is above all listed brackets, pick the highest open-ended tier
+    above = [opt for opt, (low, high) in parsed if high == float("inf") and target_salary >= low]
+    if len(above) == 1:
+        return _wrap(control, above[0])
+
+    # Fallback to closest option whose lower bound is acceptable
+    viable = [opt for opt, (low, high) in parsed if high >= target_salary]
+    if viable:
+        viable.sort(key=lambda o: _parse_salary_bounds(o)[0])
+        return _wrap(control, viable[0])
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Time Zone Normalization
+# ---------------------------------------------------------------------------
+
+_TZ_PATTERNS: dict[str, re.Pattern[str]] = {
+    "eastern": re.compile(r"eastern|\best\b|\bedt\b|toronto|new_york|gmt[- ]?0?5\b|utc[- ]?0?5\b", re.IGNORECASE),
+    "central": re.compile(r"central|\bcst\b|\bcdt\b|chicago|winnipeg|gmt[- ]?0?6\b|utc[- ]?0?6\b", re.IGNORECASE),
+    "mountain": re.compile(r"mountain|\bmst\b|\bmdt\b|denver|edmonton|calgary|gmt[- ]?0?7\b|utc[- ]?0?7\b", re.IGNORECASE),
+    "pacific": re.compile(r"pacific|\bpst\b|\bpdt\b|vancouver|los_angeles|gmt[- ]?0?8\b|utc[- ]?0?8\b", re.IGNORECASE),
+    "atlantic": re.compile(r"atlantic|\bast\b|\badt\b|halifax|gmt[- ]?0?4\b|utc[- ]?0?4\b", re.IGNORECASE),
+    "newfoundland": re.compile(r"newfoundland|\bnst\b|\bndt\b|st_johns|gmt[- ]?0?3:?30\b", re.IGNORECASE),
+}
+
+_TZ_EXCLUSIONS: dict[str, re.Pattern[str]] = {
+    "eastern": re.compile(r"european|australian|arabia|\beet\b|\baest\b|\baedt\b", re.IGNORECASE),
+    "central": re.compile(r"european|australian|african|\bcet\b|\bacst\b|\bacdt\b|\bcat\b", re.IGNORECASE),
+    "mountain": re.compile(r"australian|\bacst\b", re.IGNORECASE),
+    "pacific": re.compile(r"australian|\bapt\b", re.IGNORECASE),
+    "atlantic": re.compile(r"brazil", re.IGNORECASE),
+    "newfoundland": re.compile(r"$^"),
+}
+
+
+def _timezone(control: FormControl, value: Any) -> Any | None:
+    if not control.options:
+        return None
+    val_str = str(value or "").strip().lower()
+
+    # Identify candidate's time zone family
+    zone_family = None
+    for family, pat in _TZ_PATTERNS.items():
+        if pat.search(val_str):
+            zone_family = family
+            break
+    if not zone_family:
+        return None
+
+    family_pat = _TZ_PATTERNS[zone_family]
+    exclusion_pat = _TZ_EXCLUSIONS.get(zone_family)
+    candidates = [
+        opt for opt in control.options
+        if family_pat.search(opt) and (exclusion_pat is None or not exclusion_pat.search(opt))
+    ]
+    if len(candidates) == 1:
+        return _wrap(control, candidates[0])
+    if len(candidates) > 1:
+        # Prefer options with matching GMT offset, city, or exact abbreviation
+        for sub in ("gmt-5", "gmt -5", "utc-5", "utc -5", "(est)", "toronto", "new_york", "eastern standard"):
+            narrowed = [c for c in candidates if sub in c.lower()]
+            if len(narrowed) == 1:
+                return _wrap(control, narrowed[0])
+        return _wrap(control, candidates[0])
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Work Location & Arrangement Normalization
+# ---------------------------------------------------------------------------
+
+def _work_location(control: FormControl, value: Any) -> Any | None:
+    if not control.options:
+        return None
+    val_str = str(value or "").strip().lower()
+    is_remote = "remote" in val_str
+    wants_canada = "canada" in val_str or "ca" in val_str
+
+    if is_remote:
+        # 1. Look for options with 'remote' and 'canada' (e.g. 'Remote within Canada', 'Remote Canada')
+        if wants_canada:
+            can_opts = [
+                o for o in control.options
+                if "remote" in o.lower() and ("canada" in o.lower() or "within canada" in o.lower())
+            ]
+            if len(can_opts) == 1:
+                return _wrap(control, can_opts[0])
+        # 2. General remote option (excluding hybrid/neither)
+        rem_opts = [
+            o for o in control.options
+            if "remote" in o.lower() and "hybrid" not in o.lower() and "neither" not in o.lower()
+        ]
+        if len(rem_opts) == 1:
+            return _wrap(control, rem_opts[0])
+
+    if "hybrid" in val_str:
+        hyb_opts = [o for o in control.options if "hybrid" in o.lower()]
+        if len(hyb_opts) == 1:
+            return _wrap(control, hyb_opts[0])
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Legal / Consent / Disclaimer Normalization
+# ---------------------------------------------------------------------------
+
+def _consent_and_disclaimer(control: FormControl, value: Any) -> Any | None:
+    if not control.options:
+        return None
+    val_str = str(value or "").strip().lower()
+    is_affirmative = val_str in _YES or any(t in val_str for t in ("agree", "consent", "acknowledge", "accept"))
+
+    # If the form only provides a single affirmative option, e.g. ['Yes'] or ['I agree']
+    if len(control.options) == 1:
+        single_opt = control.options[0].strip().lower()
+        if single_opt in _YES or _AGREE_PATTERNS.search(single_opt):
+            return _wrap(control, control.options[0])
+
+    if is_affirmative:
+        # Look for explicit Yes
+        opt_yes = _single_prefixed(control, "yes")
+        if opt_yes is not None:
+            return _wrap(control, opt_yes)
+        # Look for agree/consent/acknowledge options
+        agree_opts = [o for o in control.options if _AGREE_PATTERNS.search(o)]
+        if len(agree_opts) == 1:
+            return _wrap(control, agree_opts[0])
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Main Option Derivation Dispatcher
+# ---------------------------------------------------------------------------
+
 def derive_option(control: FormControl, value: Any, key: str = "") -> Any | None:
     """Listed option(s) implied by ``value`` under the rules above, or None."""
-    if key == "language_proficiency" or "language_proficiency" in control.vault_keys:
-        return _bilingual(control, value)
-    return _yes_no(control, value)
+    lookup_keys = {key.lower(), control.key.lower(), *(k.lower() for k in control.vault_keys)}
+    label_lower = (control.label or "").lower()
+
+    # 1. Bilingual language proficiency
+    if "language_proficiency" in lookup_keys or "language" in lookup_keys:
+        bilingual_res = _bilingual(control, value)
+        if bilingual_res is not None:
+            return bilingual_res
+
+    # 2. Compensation & Salary range
+    if (
+        any("salary" in k or "compensation" in k or "pay" in k for k in lookup_keys)
+        or "salary" in label_lower
+        or "compensation" in label_lower
+    ):
+        sal_res = _salary_range(control, value)
+        if sal_res is not None:
+            return sal_res
+
+    # 3. Time zone
+    if (
+        "time_zone" in lookup_keys
+        or "timezone" in lookup_keys
+        or "time zone" in label_lower
+        or "timezone" in label_lower
+    ):
+        tz_res = _timezone(control, value)
+        if tz_res is not None:
+            return tz_res
+
+    # 4. Work location & Arrangement
+    if (
+        any("location" in k or "arrangement" in k or "remote" in k or "commute" in k for k in lookup_keys)
+        or "work location" in label_lower
+        or "remote" in label_lower
+        or "hybrid" in label_lower
+    ):
+        loc_res = _work_location(control, value)
+        if loc_res is not None:
+            return loc_res
+
+    # 5. Consent & Legal disclaimer
+    if (
+        control.legal
+        or any("consent" in k or "terms" in k or "disclaimer" in k or "agreement" in k for k in lookup_keys)
+        or _AGREE_PATTERNS.search(label_lower)
+        or "disclaimer" in label_lower
+    ):
+        consent_res = _consent_and_disclaimer(control, value)
+        if consent_res is not None:
+            return consent_res
+
+    # 6. Fallback to general Yes/No matching
+    yn_res = _yes_no(control, value)
+    if yn_res is not None:
+        return yn_res
+
+    # 7. Final fallback: try category matchers based on options structure
+    if any(re.search(r"\b\d+k\b|\b\d+-\d+k\b|\$\d+", opt, re.I) for opt in control.options):
+        sal_res = _salary_range(control, value)
+        if sal_res is not None:
+            return sal_res
+
+    if any(re.search(r"gmt[-+]|utc[-+]|eastern|pacific|central|mountain", opt, re.I) for opt in control.options):
+        tz_res = _timezone(control, value)
+        if tz_res is not None:
+            return tz_res
+
+    if any("remote" in opt.lower() for opt in control.options):
+        loc_res = _work_location(control, value)
+        if loc_res is not None:
+            return loc_res
+
+    return None

@@ -147,7 +147,7 @@ function InteractiveBlockedFieldsCard({
         key: fieldKey,
         value: val,
         scope: saveToVault[fieldKey] !== false ? "global" : "job",
-        source: "mobile_interactive_review",
+        source: "user",
         note: `Answered in mobile review for ${fieldLabel || fieldKey}`,
       });
       setSavedKeys((prev) => ({ ...prev, [fieldKey]: val }));

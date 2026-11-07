@@ -117,7 +117,8 @@ _POLICY_KEY_ALIASES: dict[str, tuple[str, ...]] = {
     "onsite_or_hybrid_local": ("ottawa_commute", "commute_ability", "local_commute"),
     "onsite_or_hybrid_nonlocal": ("relocation", "nonlocal_commute"),
     "work_arrangement_local": ("work_arrangement", "work_model"),
-    "work_arrangement_nonlocal": ("remote_only",),
+    "work_arrangement_nonlocal": ("remote_only", "work_location_preference"),
+    "work_location_preference": ("work_arrangement_nonlocal", "work_arrangement", "remote_only"),
     "postal_code": ("zip_code", "postal", "postalcode"),
 
     # Languages & Bilingual
@@ -157,10 +158,20 @@ def load_vault(db: Session, scope: str | Iterable[str] = "global", *, profile: b
         records.extend(profile_records(verified_profile(db)))
     aliases: list[AnswerRecord] = []
     for row in rows:
-        try:
-            source = AnswerSource(row.source)
-        except ValueError:
-            source = AnswerSource.IMPORTED
+        source_str = (row.source or "user").lower()
+        if source_str in {"user", "mobile_interactive_review", "interactive_review", "owner", "manual"}:
+            source = AnswerSource.USER
+        elif source_str in {"policy", "master_policy"}:
+            source = AnswerSource.POLICY
+        elif source_str in {"resume"}:
+            source = AnswerSource.RESUME
+        elif source_str in {"generated"}:
+            source = AnswerSource.GENERATED
+        else:
+            try:
+                source = AnswerSource(row.source)
+            except ValueError:
+                source = AnswerSource.IMPORTED
         record = AnswerRecord(key=row.key, value=row.value, source=source, confidence=row.confidence, note=row.note)
         records.append(record)
         for alias in _POLICY_KEY_ALIASES.get(row.key, ()):

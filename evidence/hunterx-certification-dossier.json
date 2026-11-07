@@ -24,7 +24,7 @@
     }
   },
   "evidence_ledger": {
-    "ledger_digest": "95945da206ac534f17da5386aaacb9b28b0e75fd9edf84784eacf7d56d9b5436",
+    "ledger_digest": "834dbb05f1e2851a031ee53fe1c6ba9d828cffe16e8255cb2ae9a06f68153e46",
     "records": [
       {
         "company": "cohere",
@@ -339,18 +339,6 @@
         "url": "https://jobs.ashbyhq.com/jobber/b05c0398-039e-49e7-ba52-fc0e7f5521ae"
       },
       {
-        "company": "d2l",
-        "evidence_snapshot_hash": "9688bd468216916c4f7ace650d2967f5fbd3b5a11789ab6fa5fa7227b4d307d2",
-        "is_concrete_confirmation": true,
-        "job_id": "0fbc5b7c-09cc-4ecc-b527-5c4fa829c00c",
-        "platform": "greenhouse",
-        "receipt_sha256": "c70f0fe9637bceb7916951240ce000356613b300b381df75b62ecdf7cab4146b",
-        "receipt_snippet": "Thank you for applying!  Our awesome D2L Recruitment team will review your application and let you know if we'll be proc",
-        "submitted_at": "2026-11-05 00:54:30.406334",
-        "title": "Product Support Analyst",
-        "url": "https://www.d2l.com/careers/jobs/?job_id=7696232&gh_jid=7696232"
-      },
-      {
         "company": "geotab",
         "evidence_snapshot_hash": "9e0db708b96baa398bebf0488541b9a4c1168a327060cbfafa6284dbe0eac26d",
         "is_concrete_confirmation": true,
@@ -361,11 +349,23 @@
         "submitted_at": "2026-11-05 00:56:26.904934",
         "title": "Senior Connectivity Partnership Manager",
         "url": "https://job-boards.greenhouse.io/geotab/jobs/5400143008"
+      },
+      {
+        "company": "d2l",
+        "evidence_snapshot_hash": "9688bd468216916c4f7ace650d2967f5fbd3b5a11789ab6fa5fa7227b4d307d2",
+        "is_concrete_confirmation": true,
+        "job_id": "0fbc5b7c-09cc-4ecc-b527-5c4fa829c00c",
+        "platform": "greenhouse",
+        "receipt_sha256": "c70f0fe9637bceb7916951240ce000356613b300b381df75b62ecdf7cab4146b",
+        "receipt_snippet": "Thank you for applying!  Our awesome D2L Recruitment team will review your application and let you know if we'll be proc",
+        "submitted_at": "2026-11-05 00:54:30.406334",
+        "title": "Product Support Analyst",
+        "url": "https://www.d2l.com/careers/jobs/?job_id=7696232&gh_jid=7696232"
       }
     ],
     "total_verified_submissions": 28
   },
-  "generated_at": "2026-11-06T07:12:10.821928+00:00",
+  "generated_at": "2026-11-07T01:10:06.667511+00:00",
   "milestones": {
     "gate1": {
       "blockers": [],
@@ -445,5 +445,5 @@
     "uncertain_outcomes_credited_as_submitted": 0
   },
   "schema_version": "hunterx-certification-v2",
-  "source_commit": "2585f2ee4986f967f4490359fc89794b84aa1dff"
+  "source_commit": "5ba5af3424d3e32aec65e7a3dbe625da4fa79833"
 }

@@ -290,7 +290,18 @@ _KEY_RULES: tuple[tuple[tuple[re.Pattern[str], ...], str, int | None], ...] = (
         r"(?:background|criminal).{0,40}consent"
     ),), "background_check_consent", None),
     ((re.compile(r"identity (?:verification|check)|verify your identity|verification.*interview"),), "identity_verification_consent", None),
-    ((re.compile(r"terms (?:and|&) conditions|terms of (?:use|service)"),), "terms_consent", None),
+    ((re.compile(
+        r"terms (?:and|&) conditions|terms of (?:use|service)|"
+        r"disclaimer|read and agree|acknowledge and agree|"
+        r"below disclaimer and consent|applicant (?:declaration|agreement)|"
+        r"certif(?:y|ication).*true and (?:accurate|complete)|"
+        r"declaration and consent|privacy notice and consent"
+    ),), "terms_consent", None),
+    ((re.compile(
+        r"which work location|work location.*(?:work|suit)|preferred work location|"
+        r"work (?:arrangement|preference|model)|remote.*hybrid|hybrid.*remote|"
+        r"remote within canada"
+    ),), "work_location_preference", None),
     ((re.compile(
         r"education(?:al)? (?:level|attainment)|highest (?:level of )?education|"
         r"highest degree|degree (?:level|obtained)|level of education"
@@ -362,15 +373,28 @@ def classify_question(label: str, job_location: str = "") -> str | None:
     return _rule_key(text)
 
 
+_ALLOWED_LEGAL_KEYS = frozenset({
+    "background_check_consent",
+    "identity_verification_consent",
+    "terms_consent",
+    "general_consent",
+    "privacy_consent",
+    "disclaimer_consent",
+    "agreement_consent",
+    "drug_screening_consent",
+    "credit_check_consent",
+})
+
+
 def shared_answer_key(label: str, job_location: str = "") -> str | None:
     """Canonical vault key for a form question, respecting legal fail-closed rules.
 
-    Most legal declarations stay per-question. Background-check consent may
-    share an explicit policy answer from the vault.
+    Recognized standard candidate declarations and consents share an explicit
+    policy answer from the vault. Unknown or employer-specific legal terms fail closed.
     """
     classified = classify_question(label, job_location)
     if _looks_like(label, LEGAL_PATTERNS):
-        return classified if classified == "background_check_consent" else None
+        return classified if classified in _ALLOWED_LEGAL_KEYS else None
     return classified
 
 

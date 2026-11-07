@@ -4,46 +4,46 @@
       "name": "greenhouse/asana_8165477.json",
       "platform": "greenhouse",
       "controls": 25,
-      "fill": 11,
-      "review": 8,
+      "fill": 14,
+      "review": 5,
       "skip": 6,
-      "planned_pct": 44.0
+      "planned_pct": 56.0
     },
     {
       "name": "greenhouse/d2l_7696196.json",
       "platform": "greenhouse",
       "controls": 23,
-      "fill": 12,
-      "review": 4,
+      "fill": 13,
+      "review": 3,
       "skip": 7,
-      "planned_pct": 52.2
+      "planned_pct": 56.5
     },
     {
       "name": "greenhouse/gitlab_8556658002.json",
       "platform": "greenhouse",
       "controls": 22,
-      "fill": 11,
-      "review": 6,
+      "fill": 12,
+      "review": 5,
       "skip": 5,
-      "planned_pct": 50.0
+      "planned_pct": 54.5
     },
     {
       "name": "ats/lever_apply.html",
       "platform": "lever",
       "controls": 23,
-      "fill": 13,
+      "fill": 14,
       "review": 4,
-      "skip": 6,
-      "planned_pct": 56.5
+      "skip": 5,
+      "planned_pct": 60.9
     },
     {
       "name": "ats/ashby_form_advisor.json",
       "platform": "ashby",
       "controls": 25,
-      "fill": 11,
-      "review": 7,
+      "fill": 12,
+      "review": 6,
       "skip": 7,
-      "planned_pct": 44.0
+      "planned_pct": 48.0
     },
     {
       "name": "ats/ashby_form_engineer.json",
@@ -58,9 +58,9 @@
   "totals": {
     "forms": 6,
     "controls": 132,
-    "fill": 63,
-    "review": 36,
-    "skip": 33,
-    "planned_pct": 47.7
+    "fill": 70,
+    "review": 30,
+    "skip": 32,
+    "planned_pct": 53.0
   }
 }

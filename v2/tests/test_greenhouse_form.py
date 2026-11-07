@@ -110,9 +110,9 @@ def test_extracts_standard_custom_location_demographic_and_consent_fields():
     assert sponsorship.options == ["Yes", "No"]
     assert sponsorship.vault_keys[-1] == "sponsorship_ca"
     assert sponsorship.sensitive
-    # employer-specific and legal questions get no shared key
+    # employer-specific questions get no shared key, standard consent gets terms_consent
     assert controls["question_68886299"].vault_keys == ["question_68886299"]
-    assert controls["question_68886303"].legal and controls["question_68886303"].vault_keys == ["question_68886303"]
+    assert controls["question_68886303"].legal and controls["question_68886303"].vault_keys == ["question_68886303", "terms_consent"]
     assert controls["question_68886300"].legal and controls["question_68886300"].sensitive  # export control / citizenship
     # conditional follow-up is never shared
     assert controls["question_68886297"].vault_keys == ["question_68886297"]
@@ -192,9 +192,9 @@ def test_classify_question_covers_common_autofill_patterns():
     assert classify_question(
         "Are you subject to any employment agreements and/or post-employment restrictions with your current employer?"
     ) is None
-    # Background-check consent may share a policy key even though it is legal.
+    # Background-check and terms/disclaimer consent share policy keys even though they are legal.
     assert shared_answer_key("Do you consent to a background check?") == "background_check_consent"
-    assert shared_answer_key("Have you read and agree to the below Disclaimer and Consent?") is None
+    assert shared_answer_key("Have you read and agree to the below Disclaimer and Consent?") == "terms_consent"
 
 
 def test_unknown_field_type_is_unsupported_and_blocks():
@@ -231,9 +231,10 @@ def test_maps_vault_answers_onto_real_form_and_normalizes_option_case():
     assert filled["question_64283527"] == "Yes"  # "yes" matched to the listed option label
     assert filled["question_64283526"] == ["C1: Full professional proficiency", "C2: Bilingual/Native speaker"]
     assert filled["question_64283530"] == "70K+"
+    assert filled["question_64283538"] == "Yes"  # disclaimer and consent affirmative resolution
     review = {item.control.key for item in plan.items if item.status == "review"}
-    # unmapped required custom questions and the legal consent still stop the plan
-    assert {"question_64283529", "question_64283531", "question_65529047", "question_64283538"} <= review
+    # unmapped required custom questions still stop the plan
+    assert {"question_64283529", "question_64283531", "question_65529047"} <= review
     assert plan.ready is False
 
 
@@ -254,8 +255,8 @@ def test_sensitive_answer_from_resume_is_not_accepted():
 
 def test_option_not_listed_goes_to_review():
     form = _form("d2l_7696196.json", D2L)
-    plan = plan_fill(form.controls, _vault(**IDENTITY, salary_expectation="85000"))
-    item = next(item for item in plan.items if item.control.key == "question_64283530")
+    plan = plan_fill(form.controls, _vault(**IDENTITY, willing_to_relocate="Maybe in a few years"))
+    item = next(item for item in plan.items if item.control.key == "question_64283528")
     assert item.status == "review" and "not a listed option" in item.reason
 
 
