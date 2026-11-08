@@ -104,13 +104,13 @@ def revalidate_single_task(
         task_detail = task.detail or ""
         # Match against known catalog keys or answers
         catalog_keys = {
-            item["key"]: item.get("canonical_question", "")
+            (item.get("canonical_key") or item.get("key")): (item.get("label") or item.get("canonical_question", ""))
             for item in QUESTION_CATALOG
-            if isinstance(item, dict) and "key" in item
+            if isinstance(item, dict) and (item.get("canonical_key") or item.get("key"))
         }
         matched_key = None
         for k in stored_answers:
-            if k in task_detail.lower() or (catalog_keys.get(k, "").lower() in task_detail.lower()):
+            if k in task_detail.lower() or (catalog_keys.get(k, "") and catalog_keys.get(k, "").lower() in task_detail.lower()):
                 matched_key = k
                 break
 
@@ -118,22 +118,43 @@ def revalidate_single_task(
             can_resolve = True
             resolution_note = f"Answer found in vault for key '{matched_key}'"
 
-        # Also check all blocked_fields in application validation_json
+        # Also check all blocked_fields in application validation_json using stored_answers + KnowledgeBook
         if not can_resolve and app and app.validation_json:
             try:
+                from app.knowledge_book import KnowledgeBook
+                kb = KnowledgeBook.from_database(db)
                 vdata = json.loads(app.validation_json)
                 bfs = vdata.get("blocked_fields") or []
                 if bfs:
-                    blocked_keys = [
-                        (bf.get("key", "") if isinstance(bf, dict) else str(bf)).lower()
-                        for bf in bfs
-                    ]
-                    if blocked_keys and all(
-                        bk in stored_answers or any(bk in sa or sa in bk for sa in stored_answers)
-                        for bk in blocked_keys
-                    ):
+                    all_resolved = True
+                    for bf in bfs:
+                        if isinstance(bf, dict):
+                            bk = (bf.get("key") or bf.get("name") or "").lower()
+                            blabel = bf.get("label") or bf.get("question") or bk
+                            btype = bf.get("field_type") or bf.get("type") or "text"
+                            bopts = bf.get("options") or []
+                        else:
+                            bk = str(bf).lower()
+                            blabel = str(bf)
+                            btype = "text"
+                            bopts = []
+                        if bk and (bk in stored_answers or any(bk in sa or sa in bk for sa in stored_answers)):
+                            continue
+                        res_field = kb.resolve_field(
+                            label=blabel,
+                            field_name=bk,
+                            field_type=btype,
+                            options=bopts,
+                            required=True,
+                            company=job.company if job else None,
+                            role_title=job.title if job else None,
+                        )
+                        if not res_field.resolved:
+                            all_resolved = False
+                            break
+                    if all_resolved:
                         can_resolve = True
-                        resolution_note = f"All {len(blocked_keys)} blocked field(s) answered in vault"
+                        resolution_note = f"All {len(bfs)} blocked field(s) resolved via Answer Vault / KnowledgeBook"
             except Exception:
                 pass
 

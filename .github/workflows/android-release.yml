@@ -1,17 +1,15 @@
 name: Android Release Build & Publish
 
 on:
-  release:
-    types: [published, created]
   push:
     tags:
       - 'v*'
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag to attach APK to (e.g. v1.00.0)'
+        description: 'Release tag to attach APK to (e.g. v1.2.0)'
         required: false
-        default: 'v1.00.0'
+        default: 'v1.2.0'
 
 permissions:
   contents: write
@@ -66,5 +64,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          RELEASE_TAG="${{ github.event.release.tag_name || github.event.inputs.release_tag || github.ref_name || 'v1.1.0' }}"
+          RELEASE_TAG="${{ github.event.inputs.release_tag || github.ref_name || 'v1.2.0' }}"
+          gh release view "$RELEASE_TAG" >/dev/null 2>&1 || gh release create "$RELEASE_TAG" --title "HunterXJob ${RELEASE_TAG}" --notes "HunterXJob ${RELEASE_TAG} Android Release"
           gh release upload "$RELEASE_TAG" ../apk-out/* --clobber

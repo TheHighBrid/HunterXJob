@@ -17,6 +17,8 @@ import { formatRelativeToNow, humanize } from "@/utils/format";
 function TaskRow({ task }: { task: ReviewTask }) {
   const theme = useTheme();
   const open = task.status === "open";
+  const isUncertain = task.reason_code === "submission_confirmation_uncertain";
+  const badgeColor = !open ? theme.textFaint : isUncertain ? theme.uncertain : theme.warning;
   const router = useRouter();
   return (
     <Pressable
@@ -28,14 +30,19 @@ function TaskRow({ task }: { task: ReviewTask }) {
         styles.row,
         {
           backgroundColor: theme.surface,
-          borderColor: open ? theme.warning + "66" : theme.border,
+          borderColor: open ? badgeColor + "66" : theme.border,
+          borderLeftColor: open ? badgeColor : theme.border,
+          borderLeftWidth: open ? 4 : 1,
           opacity: pressed ? 0.85 : 1,
         },
       ]}
     >
       <View style={styles.head}>
-        <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
-          <Badge label={humanize(task.reason_code)} color={open ? theme.warning : theme.textFaint} />
+        <View style={{ flexDirection: "row", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          <Badge
+            label={isUncertain ? "Unconfirmed Submit" : humanize(task.reason_code)}
+            color={badgeColor}
+          />
           {task.company ? (
             <Text style={[styles.companyBadge, { color: theme.textMuted }]}>
               {task.company}
@@ -48,7 +55,9 @@ function TaskRow({ task }: { task: ReviewTask }) {
         {task.title}
       </Text>
       <View style={styles.footerRow}>
-        <Text style={[styles.meta, { color: theme.primary }]}>Tap to answer questions & resolve ›</Text>
+        <Text style={[styles.meta, { color: isUncertain ? theme.uncertain : theme.primary }]}>
+          {isUncertain ? "Tap to verify submission & clear hold ›" : "Tap to answer questions & resolve ›"}
+        </Text>
         {!open ? <Badge label={humanize(task.status)} color={theme.textMuted} /> : null}
       </View>
     </Pressable>
@@ -65,10 +74,12 @@ export default function ReviewQueueScreen() {
     setRevalidating(true);
     try {
       const res = await api.revalidateReviews();
-      if (res.revalidated > 0) {
-        notify("Vault Recheck", `Resolved ${res.revalidated} review tasks! Remaining open: ${res.remaining_open}`);
+      const resolvedCount = res.resolved ?? res.revalidated ?? 0;
+      const remainingCount = res.retained ?? res.remaining_open ?? 0;
+      if (resolvedCount > 0) {
+        notify("Vault Recheck", `Resolved ${resolvedCount} review task(s)! Remaining open: ${remainingCount}`);
       } else {
-        notify("Vault Recheck", "No open tasks could be auto-resolved with current vault answers.");
+        notify("Vault Recheck", `Checked ${res.examined ?? 0} open task(s). Remaining open: ${remainingCount}.`);
       }
       await refresh();
     } catch (err) {

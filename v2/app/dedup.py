@@ -394,6 +394,14 @@ def duplicate_guard(db: Session, job: Job, action: str) -> str | None:
     if submitted:
         return f"already submitted to role {submitted[0]}; refusing to {action.replace('_', '-')} again"
 
+    # If a live submission outcome is unconfirmed (submission_uncertain), block automatic submit retry to prevent duplicates
+    if action == "submit":
+        uncertain = db.execute(
+            select(Job.id).where(Job.id.in_(others | {job.id}), Job.stage == PipelineStage.submission_uncertain.value)
+        ).first()
+        if uncertain:
+            return f"submission outcome for role {uncertain[0]} is unconfirmed (submission_uncertain); inspect evidence and clear hold before retrying"
+
     if not others:
         return None
     if action == "prepare":

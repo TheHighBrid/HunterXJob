@@ -252,5 +252,24 @@ def reject_task(db: Session, task_id: str) -> dict[str, Any]:
 
 def resolve_task(db: Session, task_id: str, resolution: Resolution = "resolved") -> dict[str, Any]:
     task = _open_task(db, task_id)
+    job = _task_job(db, task)
+    application = _task_application(db, task, job)
+    if (
+        resolution == "resolved"
+        and task.reason_code == "submission_confirmation_uncertain"
+        and job is not None
+        and job.stage == PipelineStage.submission_uncertain.value
+    ):
+        transition(
+            db,
+            job,
+            PipelineStage.ready_to_apply,
+            "owner verified submission was not received; cleared unconfirmed hold for retry",
+        )
+        if application is not None:
+            application.stage = PipelineStage.ready_to_apply.value
+            application.last_error = None
+            db.add(application)
+            db.commit()
     _close(db, task, resolution)
     return _result(db, task, resolution)

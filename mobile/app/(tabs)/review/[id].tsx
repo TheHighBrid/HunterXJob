@@ -133,7 +133,22 @@ function InteractiveBlockedFieldsCard({
   const [revalidating, setRevalidating] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  if (!fields.length) return null;
+  const effectiveFields: BlockedField[] =
+    fields.length > 0
+      ? fields
+      : ["ambiguous_question", "legal_answer_missing", "sensitive_answer_missing", "unsupported_control"].includes(task.reason_code)
+        ? [
+            {
+              key: task.title.replace(/^Answer required.*?:\s*/i, "").toLowerCase().replace(/[^a-z0-9_]+/g, "_") || "custom_question",
+              label: task.title,
+              section: "application",
+              required: true,
+              reason: task.detail || humanize(task.reason_code),
+            },
+          ]
+        : [];
+
+  if (!effectiveFields.length) return null;
 
   async function handleSaveAnswer(fieldKey: string, fieldLabel: string) {
     const val = (answers[fieldKey] || "").trim();
@@ -164,11 +179,12 @@ function InteractiveBlockedFieldsCard({
     setFeedback(null);
     try {
       const res = await api.revalidateReviews([task.id]);
-      if (res.revalidated > 0) {
+      const resolvedCount = res.resolved ?? res.revalidated ?? 0;
+      if (resolvedCount > 0) {
         setFeedback("✓ Task resolved! Application automatically promoted to Ready to Apply.");
         notify("Review Resolved", "All questions satisfied against Vault. Job promoted to Ready to Apply!");
       } else {
-        setFeedback("Rechecked against Vault. Some questions still require answers.");
+        setFeedback("Rechecked against Vault. Save an answer above or click Mark as Resolved below.");
       }
       await onRevalidated();
     } catch (err) {
@@ -181,9 +197,10 @@ function InteractiveBlockedFieldsCard({
   return (
     <Card
       title="Interactive Question Studio (JobTomatik)"
+      accentColor={theme.warning}
       right={
         <Badge
-          label={`${fields.length} Need Answer`}
+          label={`${effectiveFields.length} Need Answer`}
           color={theme.warning}
         />
       }
@@ -197,7 +214,7 @@ function InteractiveBlockedFieldsCard({
       ) : null}
 
       <View style={{ gap: 16, marginTop: 4 }}>
-        {fields.map((field) => {
+        {effectiveFields.map((field) => {
           const suggestions = getSuggestionChips(field.key, field.label || "");
           const currentVal = answers[field.key] ?? "";
           const isSaving = savingKeys[field.key];
@@ -339,15 +356,33 @@ function TaskMaterialsCard({ task }: { task: ReviewTaskDetail }) {
 type ActionsProps = Pick<ReturnType<typeof useReviewActions>, "busy" | "run" | "runAutonomous"> & { task: ReviewTaskDetail };
 
 function ActionsCard({ task, busy, run, runAutonomous }: ActionsProps) {
+  const theme = useTheme();
   if (task.status !== "open") return <Muted>Closed {formatDateTime(task.resolved_at)}.</Muted>;
+
+  const isUncertain = task.reason_code === "submission_confirmation_uncertain";
+
   return (
-    <Card title="Review Actions">
+    <Card title="Review Actions" accentColor={isUncertain ? theme.uncertain : theme.primary}>
+      {isUncertain ? (
+        <View style={{ gap: 8, marginBottom: 6 }}>
+          <Muted>
+            ⚠️ Duplicate Submission Safeguard: Confirm whether the employer received this application before re-queuing.
+          </Muted>
+          <PrimaryButton
+            title="✅ Verified NOT Received — Clear Hold & Re-Queue"
+            variant="success"
+            loading={busy === "resolve"}
+            disabled={!!busy}
+            onPress={() => void run("resolve")}
+          />
+        </View>
+      ) : null}
       {task.approve_effect ? <Muted>Approve action: {task.approve_effect}</Muted> : null}
       <View style={styles.actions}>
         {task.actions.includes("approve") ? (
           <PrimaryButton title="Approve Application" loading={busy === "approve"} disabled={!!busy} onPress={() => void run("approve")} />
         ) : null}
-        {task.job ? (
+        {task.job && !isUncertain ? (
           <PrimaryButton
             title="⚡ Run Autonomous Apply Now"
             variant="primary"
@@ -359,7 +394,9 @@ function ActionsCard({ task, busy, run, runAutonomous }: ActionsProps) {
         {task.actions.includes("reject") ? (
           <PrimaryButton title="Reject Application" variant="danger" loading={busy === "reject"} disabled={!!busy} onPress={() => void run("reject")} />
         ) : null}
-        <PrimaryButton title="Mark as Resolved" variant="secondary" loading={busy === "resolve"} disabled={!!busy} onPress={() => void run("resolve")} />
+        {!isUncertain ? (
+          <PrimaryButton title="Mark as Resolved" variant="secondary" loading={busy === "resolve"} disabled={!!busy} onPress={() => void run("resolve")} />
+        ) : null}
       </View>
     </Card>
   );

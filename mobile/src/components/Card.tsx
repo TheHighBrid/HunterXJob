@@ -3,14 +3,31 @@ import { StyleSheet, Text, View, type ViewStyle } from "react-native";
 
 import { useTheme } from "@/theme";
 
-export function Card({ title, right, children, style }: PropsWithChildren<{ title?: string; right?: ReactNode; style?: ViewStyle }>) {
+export function Card({
+  title,
+  right,
+  accentColor,
+  children,
+  style,
+}: PropsWithChildren<{ title?: string; right?: ReactNode; accentColor?: string; style?: ViewStyle }>) {
   const theme = useTheme();
   const hasHeader = (title !== undefined && title !== "") || (right !== undefined && right !== null);
   return (
-    <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }, style]}>
+    <View
+      style={[
+        styles.card,
+        {
+          backgroundColor: theme.surface,
+          borderColor: accentColor ? accentColor + "66" : theme.border,
+          borderLeftColor: accentColor ?? theme.border,
+          borderLeftWidth: accentColor ? 4 : 1,
+        },
+        style,
+      ]}
+    >
       {hasHeader ? (
-        <View style={styles.header}>
-          {title ? <Text style={[styles.title, { color: theme.textMuted }]}>{title}</Text> : <View />}
+        <View style={[styles.header, { borderBottomColor: theme.borderSubtle }]}>
+          {title ? <Text style={[styles.title, { color: accentColor ?? theme.textMuted }]}>{title}</Text> : <View />}
           {right}
         </View>
       ) : null}

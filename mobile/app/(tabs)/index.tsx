@@ -77,6 +77,31 @@ export default function DashboardScreen() {
     }, "Cycle started. Pull to refresh for results.");
   }
 
+  async function runAutonomousBatchNow() {
+    await act(
+      "auto_batch",
+      async () => {
+        const res = await api.runAutonomousBatch();
+        notify(
+          "Autonomous Batch Complete",
+          `Considered ${res.candidates_considered} · Dry-runs verified: ${res.verified_dry_runs} · Submitted live: ${res.submitted_live}`
+        );
+      }
+    );
+  }
+
+  async function recheckVaultNow() {
+    await act(
+      "recheck_vault",
+      async () => {
+        const res = await api.revalidateReviews();
+        const resolved = res.resolved ?? res.revalidated ?? 0;
+        const retained = res.retained ?? res.remaining_open ?? 0;
+        notify("Answer Vault Recheck", `Auto-resolved ${resolved} task(s). Remaining open: ${retained}.`);
+      }
+    );
+  }
+
   if (loading && !data) return <ScreenContainer><LoadingView label="Contacting server…" /></ScreenContainer>;
   if (!data) {
     return (
@@ -90,6 +115,12 @@ export default function DashboardScreen() {
   }
 
   const { status, summary, cycles } = data;
+  const byStage = summary.jobs.by_stage ?? {};
+  const readyCount = byStage.ready_to_apply ?? 0;
+  const submittedCount = (byStage.submitted ?? 0) + (byStage.confirmed ?? 0);
+  const needsReviewCount = (byStage.needs_review ?? 0) + (byStage.review ?? 0);
+  const uncertainCount = byStage.submission_uncertain ?? 0;
+
   const schedulerState = status.kill_switch
     ? { label: "Stopped (kill switch)", color: theme.danger }
     : status.paused
@@ -109,6 +140,83 @@ export default function DashboardScreen() {
         {error ? <Banner tone="danger" message={`Showing the last data: ${error}`} /> : null}
         <LockBanner compact />
         <PlanBadge onUpgradePress={() => router.push("/settings")} />
+
+        <Card
+          title="Autonomous Application Command Deck"
+          accentColor={theme.primary}
+          right={<Badge label="v1.2 Live Engine" color={theme.success} />}
+        >
+          <Muted>
+            Execute autonomous browser applications, auto-resolve review questions with your Answer Vault, or inspect synchronized pipeline states below.
+          </Muted>
+          <PrimaryButton
+            title="🚀 Run Autonomous Application Batch Now"
+            variant="primary"
+            loading={busy === "auto_batch"}
+            disabled={status.kill_switch || !!busy}
+            onPress={() => void runAutonomousBatchNow()}
+          />
+          <View style={styles.buttons}>
+            <View style={{ flex: 1 }}>
+              <PrimaryButton
+                title="⚡ Recheck Reviews"
+                variant="secondary"
+                loading={busy === "recheck_vault"}
+                disabled={!!busy}
+                onPress={() => void recheckVaultNow()}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <PrimaryButton
+                title="🧠 Answer Vault ›"
+                variant="secondary"
+                onPress={() => {
+                  router.push("/(tabs)/vault");
+                }}
+              />
+            </View>
+          </View>
+        </Card>
+
+        <Text style={[styles.section, { color: theme.textMuted }]}>SYNCHRONIZED PIPELINE STATE (TAP TO FILTER)</Text>
+        <View style={styles.grid}>
+          <StatCard
+            label="Ready to Apply"
+            value={String(readyCount)}
+            hint="verified & queued ›"
+            accentColor={theme.primary}
+            onPress={() => {
+              router.push({ pathname: "/(tabs)/jobs", params: { stage: "ready_to_apply" } });
+            }}
+          />
+          <StatCard
+            label="Submitted ✓"
+            value={String(submittedCount)}
+            hint="confirmed by ATS ›"
+            accentColor={theme.success}
+            onPress={() => {
+              router.push({ pathname: "/(tabs)/jobs", params: { stage: "submitted" } });
+            }}
+          />
+          <StatCard
+            label="Review Required"
+            value={String(needsReviewCount)}
+            hint="needs answer ›"
+            accentColor={theme.warning}
+            onPress={() => {
+              router.push("/(tabs)/review");
+            }}
+          />
+          <StatCard
+            label="Unconfirmed Hold"
+            value={String(uncertainCount)}
+            hint="duplicate guard ›"
+            accentColor={theme.uncertain}
+            onPress={() => {
+              router.push({ pathname: "/(tabs)/jobs", params: { stage: "submission_uncertain" } });
+            }}
+          />
+        </View>
 
         <Card
           title="Kill switch"

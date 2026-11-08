@@ -386,16 +386,82 @@ class AutonomousRunner:
                     error_msg=f"Unmatched field: {k}" if k in fill_res.unmatched_fields else None,
                 )
 
+            # Ensure an Application row exists and stays synchronized with job state
+            application = self.db.execute(select(Application).where(Application.job_id == job.id)).scalar_one_or_none()
+            if application is None:
+                application = Application(
+                    job_id=job.id,
+                    stage=job.stage,
+                    mode="autonomous" if can_submit_live else "dry_run",
+                    adapter_name=real_form.platform,
+                    adapter_maturity="certified_autonomous" if can_submit_live else "dry_run",
+                )
+                self.db.add(application)
+                self.db.flush()
+
             if fill_res.unmatched_fields or fill_res.fields_attempted == 0:
+                from app.evidence import record_evidence
+                from app.review_queue import open_task
+                from app.models import ReviewTask
+
                 err = fill_res.error or (f"Unmatched fields: {fill_res.unmatched_fields}" if fill_res.unmatched_fields else "No form fields detected or attempted on page")
-                job.stage = PipelineStage.review.value
+                prev_stage = job.stage
+                job.stage = PipelineStage.needs_review.value
+                application.stage = PipelineStage.needs_review.value
+                application.last_error = err
+                blocked_items = [
+                    {
+                        "key": k,
+                        "label": labels.get(k, k),
+                        "section": "application",
+                        "required": k in required_keys,
+                        "reason": f"Unmatched field during browser form fill ({k})",
+                    }
+                    for k in (fill_res.unmatched_fields or [])
+                ]
+                form_summary = real_form.summary() if hasattr(real_form, "summary") else {"source": real_form.source, "url": real_form.url, "fields_total": len(real_form.controls)}
+                application.validation_json = json.dumps(
+                    {
+                        "ok": False,
+                        "form": form_summary,
+                        "blockers": ["ambiguous_question"] if fill_res.unmatched_fields else ["form_fetch_failed"],
+                        "blocked_fields": blocked_items,
+                        "planned": answers,
+                    },
+                    default=str,
+                )
                 self.db.add(
                     PipelineEvent(
                         job_id=job.id,
-                        from_stage=PipelineStage.ready_to_apply.value,
-                        to_stage=PipelineStage.review.value,
+                        from_stage=prev_stage,
+                        to_stage=PipelineStage.needs_review.value,
                         message=f"Form fill held for review: {err[:200]}",
                     )
+                )
+                existing_open = self.db.execute(
+                    select(ReviewTask).where(ReviewTask.job_id == job.id, ReviewTask.status == "open")
+                ).scalars().first()
+                if existing_open is None:
+                    detail_lines = [f"- [application] {b['label']} ({b['key']}, {'required' if b['required'] else 'optional'}): {b['reason']}" for b in blocked_items]
+                    open_task(
+                        self.db,
+                        reason_code="ambiguous_question" if fill_res.unmatched_fields else "form_fetch_failed",
+                        title=f"Missing or unmatched fields on {job.title}",
+                        detail=f"Blockers: ambiguous_question\n" + ("\n".join(detail_lines) if detail_lines else err),
+                        application=application,
+                        job=job,
+                        url=job.url,
+                    )
+                record_evidence(
+                    self.db,
+                    application,
+                    kind="dry_run_review",
+                    confirmation_text=f"Form fill stopped for review: {err[:200]}",
+                    final_url=job.url,
+                    screenshot_path=str(sc_path) if sc_path.exists() else None,
+                    payload={"unmatched_fields": fill_res.unmatched_fields, "planned": answers},
+                    adapter_name=real_form.platform,
+                    update_application=False,
                 )
                 self.db.commit()
                 adapter.complete_application_run(
@@ -419,19 +485,51 @@ class AutonomousRunner:
                 )
 
             # 5. Live Submission or Verified Dry-Run Result Handling
+            form_summary = real_form.summary() if hasattr(real_form, "summary") else {"source": real_form.source, "url": real_form.url, "fields_total": len(real_form.controls)}
             if can_submit_live:
+                from app.evidence import record_evidence
+                from app.review_queue import open_task
+                from app.models import ReviewTask
+
+                application.attempts = (application.attempts or 0) + 1
+                application.mode = "autonomous"
                 if fill_res.submitted:
+                    prev_stage = job.stage
                     job.stage = PipelineStage.submitted.value
+                    application.stage = PipelineStage.submitted.value
+                    application.last_error = None
+                    application.answers_json = json.dumps(answers, default=str)
+                    application.validation_json = json.dumps(
+                        {"ok": True, "fields": list(answers.keys()), "form": form_summary, "submitted": True},
+                        default=str,
+                    )
                     proof_sha = fill_res.post_submit_screenshot_sha256 or "live_submit_proof"
                     self.db.add(
                         PipelineEvent(
                             job_id=job.id,
-                            from_stage=PipelineStage.ready_to_apply.value,
+                            from_stage=prev_stage,
                             to_stage=PipelineStage.submitted.value,
                             message="Application submitted autonomously with verified proof",
                             payload_json=json.dumps({"receipt": fill_res.confirmation_text, "sha256": proof_sha}),
                         )
                     )
+                    record_evidence(
+                        self.db,
+                        application,
+                        kind="submission",
+                        confirmation_text=fill_res.confirmation_text or "Application submitted successfully",
+                        candidate_id=fill_res.candidate_id,
+                        final_url=job.url,
+                        screenshot_path=str(post_sc_path) if post_sc_path.exists() else None,
+                        payload={"answers": answers, "sha256": proof_sha},
+                        adapter_name=real_form.platform,
+                    )
+                    # Auto-close any open review tasks for this submitted job
+                    for open_t in self.db.execute(
+                        select(ReviewTask).where(ReviewTask.job_id == job.id, ReviewTask.status == "open")
+                    ).scalars():
+                        open_t.status = "auto_closed"
+                        open_t.resolved_at = datetime.now(UTC)
                     self.db.commit()
 
                     # Schedule 7 and 14-day follow-up
@@ -462,15 +560,57 @@ class AutonomousRunner:
                     )
                 else:
                     err = fill_res.error or "Submission not confirmed"
-                    job.stage = PipelineStage.review.value
+                    prev_stage = job.stage
+                    job.stage = PipelineStage.submission_uncertain.value
+                    application.stage = PipelineStage.submission_uncertain.value
+                    application.last_error = err
+                    application.answers_json = json.dumps(answers, default=str)
+                    application.validation_json = json.dumps(
+                        {
+                            "ok": False,
+                            "form": form_summary,
+                            "blockers": ["submission_confirmation_uncertain"],
+                            "blocked_fields": [],
+                            "planned": answers,
+                            "last_error": err,
+                        },
+                        default=str,
+                    )
                     self.db.add(
                         PipelineEvent(
                             job_id=job.id,
-                            from_stage=PipelineStage.ready_to_apply.value,
-                            to_stage=PipelineStage.review.value,
+                            from_stage=prev_stage,
+                            to_stage=PipelineStage.submission_uncertain.value,
                             message=f"Live submission held for review: {err[:200]}",
                         )
                     )
+                    record_evidence(
+                        self.db,
+                        application,
+                        kind="submission",
+                        confirmation_text=err,
+                        final_url=job.url,
+                        screenshot_path=str(post_sc_path) if post_sc_path.exists() else (str(sc_path) if sc_path.exists() else None),
+                        payload={"answers": answers, "error": err},
+                        adapter_name=real_form.platform,
+                    )
+                    existing_open = self.db.execute(
+                        select(ReviewTask).where(ReviewTask.job_id == job.id, ReviewTask.status == "open")
+                    ).scalars().first()
+                    if existing_open is None:
+                        open_task(
+                            self.db,
+                            reason_code="submission_confirmation_uncertain",
+                            title=f"Unconfirmed submission for {job.title} at {job.company}",
+                            detail=(
+                                f"Live submission outcome was not confirmed ({err}). "
+                                "Inspect post-submit screenshot evidence before retrying to avoid duplicate applications."
+                            ),
+                            application=application,
+                            job=job,
+                            url=job.url,
+                            hold=False,
+                        )
                     self.db.commit()
                     adapter.complete_application_run(
                         ctx=run_ctx,
@@ -492,12 +632,17 @@ class AutonomousRunner:
                         error=err,
                     )
             elif not fill_res.success:
+                err = fill_res.error or "Form fill verification failed"
+                application.last_error = err
+                application.stage = PipelineStage.needs_review.value
+                job.stage = PipelineStage.needs_review.value
+                self.db.commit()
                 adapter.complete_application_run(
                     ctx=run_ctx,
                     success=False,
                     fields_filled_ratio=fill_res.fields_attempted / max(1, len(required_keys)),
                     is_dry_run=True,
-                    error_msg=fill_res.error or "Form fill verification failed",
+                    error_msg=err,
                 )
                 return AutonomousApplicationRecord(
                     job_id=job.id,
@@ -509,10 +654,12 @@ class AutonomousRunner:
                     stage=job.stage,
                     status="fill_failed",
                     submitted=False,
-                    error=fill_res.error or "Form fill verification failed",
+                    error=err,
                 )
             else:
                 # Verified Dry-Run Mode
+                from app.evidence import record_evidence
+
                 proof_hash = hashlib.sha256(
                     f"{job.id}:{job.url}:{sorted(answers.items())}".encode()
                 ).hexdigest()
@@ -523,6 +670,24 @@ class AutonomousRunner:
                     is_dry_run=True,
                     receipt_hash=proof_hash,
                     confirmation_screenshot_uri=str(sc_path) if sc_path.exists() else None,
+                )
+                application.last_error = None
+                application.answers_json = json.dumps(answers, default=str)
+                application.validation_json = json.dumps(
+                    {"ok": True, "fields": list(fill_res.field_reports.keys()), "form": form_summary},
+                    default=str,
+                )
+                application.stage = PipelineStage.ready_to_apply.value
+                record_evidence(
+                    self.db,
+                    application,
+                    kind="dry_run",
+                    confirmation_text="Autonomous browser dry-run verified successfully",
+                    final_url=job.url,
+                    screenshot_path=str(sc_path) if sc_path.exists() else None,
+                    payload={"dry_run_hash": proof_hash, "fields_filled": len(fill_res.field_reports)},
+                    adapter_name=real_form.platform,
+                    update_application=False,
                 )
 
             self.db.add(

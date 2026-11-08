@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
@@ -17,13 +17,12 @@ import { formatRelativeToNow, formatScore, humanize } from "@/utils/format";
 
 const STAGE_FILTERS: { label: string; stage?: string }[] = [
   { label: "All" },
+  { label: "Ready to Apply", stage: "ready_to_apply" },
+  { label: "Review Required", stage: "needs_review" },
+  { label: "Unconfirmed Submit", stage: "submission_uncertain" },
+  { label: "Submitted ✓", stage: "submitted" },
   { label: "Shortlisted", stage: "shortlisted" },
-  { label: "Ready", stage: "ready_to_apply" },
-  { label: "Needs review", stage: "needs_review" },
-  { label: "Validated", stage: "validated" },
-  { label: "Review", stage: "review" },
   { label: "Rejected", stage: "rejected" },
-  { label: "Duplicates", stage: "duplicate" },
   { label: "Closed", stage: "closed" },
 ];
 
@@ -31,39 +30,62 @@ function JobRow({ job }: { job: Job }) {
   const theme = useTheme();
   const router = useRouter();
   const linked = linkedLabel(job);
+  const accent = stageColor(theme, job.stage);
   return (
     <Pressable
       accessibilityRole="button"
       onPress={() => {
         router.push({ pathname: "/jobs/[id]", params: { id: job.id } });
       }}
-      style={({ pressed }) => [styles.row, { backgroundColor: theme.surface, borderColor: theme.border, opacity: pressed ? 0.85 : 1 }]}>
-        <View style={[styles.score, { borderColor: matchScoreColor(theme, job.score) }]}>
-          <Text style={[styles.scoreText, { color: matchScoreColor(theme, job.score) }]}>{formatScore(job.score)}</Text>
+      style={({ pressed }) => [
+        styles.row,
+        {
+          backgroundColor: theme.surface,
+          borderColor: theme.border,
+          borderLeftColor: accent,
+          borderLeftWidth: 4,
+          opacity: pressed ? 0.85 : 1,
+        },
+      ]}
+    >
+      <View style={[styles.score, { borderColor: matchScoreColor(theme, job.score), backgroundColor: matchScoreColor(theme, job.score) + "14" }]}>
+        <Text style={[styles.scoreText, { color: matchScoreColor(theme, job.score) }]}>{formatScore(job.score)}</Text>
+      </View>
+      <View style={{ flex: 1, gap: 4 }}>
+        <Text style={[styles.title, { color: theme.text }]} numberOfLines={2}>{job.title}</Text>
+        <Text style={[styles.meta, { color: theme.textMuted }]} numberOfLines={1}>
+          {job.company} · {job.location || "—"}
+        </Text>
+        <View style={styles.badges}>
+          <Badge label={humanize(job.stage)} color={accent} />
+          {job.open_review_tasks ? (
+            <Badge
+              label={job.stage === "submission_uncertain" ? "Hold active" : `${job.open_review_tasks} review`}
+              color={job.stage === "submission_uncertain" ? theme.uncertain : theme.warning}
+            />
+          ) : null}
+          <Badge label={sourceLabel(job.source)} color={theme.info} />
+          {linked ? <Badge label={linked} color={theme.textMuted} /> : null}
+          <LivenessBadge status={livenessBadgeStatus(job)} />
+          <Text style={[styles.when, { color: theme.textFaint }]}>{formatRelativeToNow(job.discovered_at)}</Text>
         </View>
-        <View style={{ flex: 1, gap: 3 }}>
-          <Text style={[styles.title, { color: theme.text }]} numberOfLines={2}>{job.title}</Text>
-          <Text style={[styles.meta, { color: theme.textMuted }]} numberOfLines={1}>
-            {job.company} · {job.location || "—"}
-          </Text>
-          <View style={styles.badges}>
-            <Badge label={humanize(job.stage)} color={stageColor(theme, job.stage)} />
-            {job.open_review_tasks ? <Badge label={`${job.open_review_tasks} review`} color={theme.warning} /> : null}
-            <Badge label={sourceLabel(job.source)} color={theme.info} />
-            {linked ? <Badge label={linked} color={theme.textMuted} /> : null}
-            <LivenessBadge status={livenessBadgeStatus(job)} />
-            <Text style={[styles.when, { color: theme.textFaint }]}>{formatRelativeToNow(job.discovered_at)}</Text>
-          </View>
-        </View>
+      </View>
     </Pressable>
   );
 }
 
 export default function JobsScreen() {
   const theme = useTheme();
+  const params = useLocalSearchParams<{ stage?: string }>();
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
-  const [stage, setStage] = useState<string | undefined>(undefined);
+  const [stage, setStage] = useState<string | undefined>(params.stage || undefined);
+
+  useEffect(() => {
+    if (params.stage !== undefined) {
+      setStage(params.stage || undefined);
+    }
+  }, [params.stage]);
 
   useEffect(() => {
     const timer = setTimeout(() => {

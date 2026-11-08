@@ -568,8 +568,14 @@ def get_vault_catalog() -> dict[str, object]:
 
 
 @api.post("/api/jobs/{job_id}/run-autonomous")
-def run_job_autonomous(job_id: str, db: DbSession, current: CurrentSettings) -> dict[str, object]:
+def run_job_autonomous(
+    job_id: str,
+    db: DbSession,
+    current: CurrentSettings,
+    dry_run: bool = False,
+) -> dict[str, object]:
     from app.autonomous_loop import AutonomousConfig, AutonomousRunner
+    from app.flags import is_enabled
     from app.models import Job
 
     job = db.get(Job, job_id)
@@ -577,7 +583,8 @@ def run_job_autonomous(job_id: str, db: DbSession, current: CurrentSettings) -> 
         raise HTTPException(404, f"Job {job_id} not found")
 
     try:
-        runner = AutonomousRunner(db, current, AutonomousConfig())
+        live = bool(not dry_run and current.allow_live_submission and is_enabled(db, "allow_live_submission"))
+        runner = AutonomousRunner(db, current, AutonomousConfig(allow_live_submission=live))
         record = runner.run_job(job)
         return {
             "job_id": record.job_id,

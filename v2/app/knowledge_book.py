@@ -84,7 +84,7 @@ DEFAULT_SCREENING_PATTERNS: list[tuple[re.Pattern[str], Any, str]] = [
     # Non-compete / restrictive covenants
     (re.compile(r"non-compete|restrictive\s+covenant|conflict\s+of\s+interest", re.I), "No", "non_compete_default"),
     # Current residence in Canada / location residency
-    (re.compile(r"currently\s+reside\s+in\s+canada|permanently\s+reside.*canada", re.I), "Yes", "reside_in_canada_default"),
+    (re.compile(r"(?:currently\s+|permanently\s+)?(?:reside|located|living|based)\s+in\s+canada", re.I), "Yes", "reside_in_canada_default"),
     # Shift / business hours alignment
     (re.compile(r"comfortable\s+working\s+a\s+schedule|aligned\s+with\s+these\s+business\s+hours", re.I), "Yes", "business_hours_consent"),
     # Communication medium consent
@@ -225,11 +225,30 @@ class KnowledgeBook:
                     val = self._match_option(val, options) or val
                 return val, f"catalog:{key}"
 
-        # 3. Citizenship / residency
+        # 3. Citizenship / residency / Canadian location
         if key == "citizenship_residency":
             val = "Canadian citizen" if options and any("Canadian" in o for o in options) else "Canada"
             if options:
-                val = self._match_option(val, options) or val
+                val = self._match_option(val, options) or self._match_option("Yes", options) or val
+            return val, f"catalog:{key}"
+        if key in ("located_in_canada", "reside_in_canada", "canada_residency"):
+            val = "Yes"
+            if options:
+                val = self._match_option("Yes", options) or self._match_option("Canada", options) or val
+            return val, f"catalog:{key}"
+        if key in ("work_location_preference", "work_arrangement_preference"):
+            from app.option_derivation import derive_option
+            val = "Remote Canada"
+            if options:
+                derived = derive_option("work_location_preference", val, options)
+                val = derived or self._match_option("Ottawa", options) or self._match_option("Remote Canada", options) or self._match_option("Remote", options) or val
+            return val, f"catalog:{key}"
+        if key == "timezone":
+            from app.option_derivation import derive_option
+            val = "Eastern Time"
+            if options:
+                derived = derive_option("timezone", val, options)
+                val = derived or self._match_option("Eastern", options) or val
             return val, f"catalog:{key}"
 
         # 4. Standard consents & verifications
@@ -246,6 +265,7 @@ class KnowledgeBook:
             "export_control_eligibility",
             "commute_ability",
             "remote_workspace",
+            "remote_comfort",
             "schedule_hours",
             "on_call_availability",
             "rehire_eligibility",
@@ -254,7 +274,8 @@ class KnowledgeBook:
         ):
             val = "Yes"
             if options:
-                val = self._match_option(val, options) or val
+                from app.option_derivation import derive_option
+                val = derive_option("terms_consent", val, options) or self._match_option(val, options) or val
             return val, f"catalog:{key}"
 
         # 5. Non-compete, prior employment/app/interview, termination, relocation assistance
@@ -277,9 +298,10 @@ class KnowledgeBook:
 
         # 7. Compensation
         if key == "salary_expectation":
-            desired = str(self.preferences.get("desired_salary", "") or "60000")
+            desired = str(self.preferences.get("desired_salary", "") or "65000")
             if options:
-                desired = self._match_option(desired, options) or desired
+                from app.option_derivation import derive_option
+                desired = derive_option("salary_expectation", desired, options) or self._match_option(desired, options) or desired
             return desired, f"catalog:{key}"
         if key == "hourly_rate_expectation":
             rate = str(self.preferences.get("hourly_rate", "") or "38")
@@ -555,7 +577,7 @@ class KnowledgeBook:
 
         # 5. Salary expectation (only for open-ended text/number fields without custom choice options)
         if not options and re.search(r"salary|compensation|expected\s+rate|annual\s+salary", text, re.I):
-            desired = self.preferences.get("desired_salary", "") or "60000"
+            desired = self.preferences.get("desired_salary", "") or "65000"
             return desired, "preference_salary"
 
         # 6. Start date / availability

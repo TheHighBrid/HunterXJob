@@ -13,7 +13,7 @@ import { ScreenContainer } from "@/components/ScreenContainer";
 import { ErrorView, LoadingView } from "@/components/StatusViews";
 import { linkedLabel, livenessBadgeStatus, sourceLabel } from "@/discovery";
 import { useApiResource } from "@/hooks/useApiResource";
-import { confirmAsync } from "@/lib/confirm";
+import { confirmAsync, notify } from "@/lib/confirm";
 import { useSubscription, MAX_DAILY_FREE_APPLICATIONS } from "@/store/subscription";
 import { matchScoreColor, stageColor, useTheme } from "@/theme";
 import { formatDateTime, formatScore, humanize } from "@/utils/format";
@@ -21,10 +21,12 @@ import { formatDateTime, formatScore, humanize } from "@/utils/format";
 const FORM_STATE_COPY: Record<FormStatus["state"], string> = {
   no_application: "Not shortlisted yet, so no form has been checked.",
   not_checked: "The application form hasn't been dry-run yet.",
-  validated: "Dry-run passed: every field was resolved. Nothing was submitted.",
-  unavailable: "The real form couldn't be loaded. See the review task.",
-  blocked: "The dry-run stopped: some answers need you.",
-  in_progress: "A dry-run started but hasn't finished.",
+  validated: "Dry-run verified: every required field resolved cleanly from your Profile & Answer Vault.",
+  unavailable: "The real form couldn't be loaded automatically. See the review task or use manual handoff.",
+  blocked: "Form pre-check paused: one or more questions require your answer in Review Studio.",
+  in_progress: "A form check started and is currently in progress.",
+  submission_uncertain:
+    "Hold active: A live submission was attempted, but post-submit confirmation was not verified on the ATS page (e.g., CAPTCHA challenge). Verify before retrying to prevent duplicate applications.",
 };
 
 function ScoreBlock({ job }: { job: JobDetail }) {
@@ -57,14 +59,25 @@ function FormStatusCard({
 }) {
   const theme = useTheme();
   const router = useRouter();
-  const color = status.state === "validated" ? theme.success : status.state === "blocked" || status.state === "unavailable" ? theme.warning : theme.textMuted;
+  const color =
+    status.state === "validated"
+      ? theme.success
+      : status.state === "submission_uncertain"
+        ? theme.uncertain
+        : status.state === "blocked" || status.state === "unavailable"
+          ? theme.warning
+          : theme.textMuted;
   return (
-    <Card title="Application form" right={<Badge label={humanize(status.state)} color={color} />}>
+    <Card
+      title="Application Form Status"
+      accentColor={color}
+      right={<Badge label={humanize(status.state)} color={color} />}
+    >
       <Muted>{FORM_STATE_COPY[status.state]}</Muted>
       {status.source ? <Row label="Source" value={humanize(status.source)} /> : null}
       {status.fields_total != null ? <Row label="Fields" value={`${status.fields_total} total · ${status.fields_required ?? "?"} required`} /> : null}
       {status.fields_filled != null ? <Row label="Resolved" value={String(status.fields_filled)} valueColor={theme.success} /> : null}
-      {status.blockers.length ? <Row label="Blockers" value={status.blockers.map(humanize).join(", ")} valueColor={theme.warning} /> : null}
+      {status.blockers.length ? <Row label="Blockers" value={status.blockers.map(humanize).join(", ")} valueColor={color} /> : null}
       {status.blocked_fields.map((field) => (
         <View key={field.key} style={[styles.blocked, { borderColor: theme.border }]}>
           <Text style={[styles.blockedLabel, { color: theme.text }]}>
@@ -80,6 +93,7 @@ function FormStatusCard({
         <View style={{ marginTop: 8 }}>
           <PrimaryButton
             title={openTaskId ? "👉 Answer Questions in Review Studio ›" : "👉 Go to Review Studio ›"}
+            variant="warning"
             onPress={() => {
               if (openTaskId) {
                 router.push({ pathname: "/review/[id]", params: { id: openTaskId } });
@@ -103,6 +117,234 @@ function FormStatusCard({
           ))}
         </View>
       ) : null}
+    </Card>
+  );
+}
+
+function ExecutionCommandCard({
+  job,
+  openTasks,
+  refresh,
+}: {
+  job: JobDetail;
+  openTasks: JobDetail["review_tasks"];
+  refresh: () => Promise<void>;
+}) {
+  const theme = useTheme();
+  const router = useRouter();
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [execBanner, setExecBanner] = useState<{ tone: "info" | "warning" | "danger"; text: string } | null>(null);
+
+  const isUncertain =
+    job.stage === "submission_uncertain" ||
+    job.application?.stage === "submission_uncertain" ||
+    job.form_status.state === "submission_uncertain";
+  const isSubmitted =
+    job.stage === "submitted" ||
+    job.stage === "confirmed" ||
+    job.application?.stage === "submitted" ||
+    job.application?.stage === "confirmed";
+  const isNeedsReview =
+    job.stage === "needs_review" ||
+    job.stage === "review" ||
+    job.form_status.state === "blocked";
+
+  const uncertainTask = openTasks.find((t) => t.reason_code === "submission_confirmation_uncertain") ?? openTasks[0];
+
+  async function handleRunAutonomous(dryRun: boolean) {
+    setBusyAction(dryRun ? "dry_run" : "submit_live");
+    setExecBanner(null);
+    try {
+      const res = await api.runJobAutonomous(job.id, dryRun);
+      await refresh();
+      if (res.submitted) {
+        setExecBanner({
+          tone: "info",
+          text: `✓ Live application submitted on ${res.platform}! Evidence SHA256: ${(res.evidence_sha256 || "").slice(0, 12)}`,
+        });
+        notify("Application Submitted 🎉", `Submitted to ${job.company} (${res.platform}).`);
+      } else if (res.status === "dry_run_verified") {
+        setExecBanner({
+          tone: "info",
+          text: `✓ Browser dry-run verified all fields cleanly on ${res.platform}. Stage: ${humanize(res.stage || "ready_to_apply")}.`,
+        });
+        notify("Dry-Run Verified ✓", `All fields on ${job.company} filled and verified cleanly.`);
+      } else {
+        setExecBanner({
+          tone: "warning",
+          text: `Execution finished with status "${humanize(res.status)}"${res.error ? `: ${res.error}` : ""}`,
+        });
+        notify("Execution Status", `${humanize(res.status)}${res.error ? ` — ${res.error}` : ""}`);
+      }
+    } catch (err) {
+      const msg = describeError(err);
+      setExecBanner({ tone: "danger", text: msg });
+      notify("Execution Failed", msg);
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleClearUncertainHold(resolution: "resolved" | "dismissed") {
+    if (!uncertainTask) return;
+    setBusyAction(resolution);
+    setExecBanner(null);
+    try {
+      await api.resolveTask(uncertainTask.id, resolution);
+      await refresh();
+      if (resolution === "resolved") {
+        setExecBanner({
+          tone: "info",
+          text: "✓ Unconfirmed submission hold cleared! Job and Application returned to Ready to Apply.",
+        });
+        notify("Hold Cleared", "Application returned to Ready to Apply.");
+      } else {
+        setExecBanner({
+          tone: "info",
+          text: "Hold dismissed.",
+        });
+      }
+    } catch (err) {
+      setExecBanner({ tone: "danger", text: describeError(err) });
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handlePrepareMaterials() {
+    setBusyAction("materials");
+    setExecBanner(null);
+    try {
+      const res = await api.generateMaterials(job.id);
+      for (const m of res.items ?? []) {
+        if (m.status === "draft") {
+          await api.approveMaterial(m.id, "Approved from Job Command Deck");
+        }
+      }
+      await refresh();
+      setExecBanner({
+        tone: "info",
+        text: "✓ Tailored résumé and cover letter generated and approved!",
+      });
+    } catch (err) {
+      setExecBanner({ tone: "danger", text: describeError(err) });
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  const accent = isSubmitted
+    ? theme.success
+    : isUncertain
+      ? theme.uncertain
+      : isNeedsReview
+        ? theme.warning
+        : theme.primary;
+
+  return (
+    <Card
+      title="Application Execution & Command Deck"
+      accentColor={accent}
+      right={<Badge label={humanize(job.stage)} color={accent} />}
+    >
+      <Row
+        label="Synchronized State"
+        value={`Job: ${humanize(job.stage)} · App: ${humanize(job.application?.stage ?? job.stage)}`}
+        valueColor={accent}
+      />
+      <Row
+        label="Materials & Resume"
+        value={job.application?.materials_ready ? "Approved & Ready ✓" : "Needs Generation / Approval"}
+        valueColor={job.application?.materials_ready ? theme.success : theme.warning}
+      />
+      <Row
+        label="Form Verification"
+        value={humanize(job.form_status.state)}
+        valueColor={
+          job.form_status.state === "validated"
+            ? theme.success
+            : job.form_status.state === "submission_uncertain"
+              ? theme.uncertain
+              : theme.textMuted
+        }
+      />
+      <Row label="Recorded Attempts" value={String(job.application?.attempts ?? 0)} />
+
+      {execBanner ? <Banner tone={execBanner.tone} message={execBanner.text} /> : null}
+
+      {isUncertain ? (
+        <View style={[styles.holdBox, { backgroundColor: theme.uncertain + "14", borderColor: theme.uncertain }]}>
+          <Text style={[styles.holdTitle, { color: theme.uncertain }]}>
+            ⚠️ Unconfirmed Live Submission Hold (Duplicate Protection)
+          </Text>
+          <Muted>
+            {job.application?.last_error ||
+              "A headless submission was attempted, but the ATS confirmation page was not verified (e.g., Lever hCaptcha challenge on submit button). Automatic retries are locked until you confirm whether the employer received it."}
+          </Muted>
+          {uncertainTask ? (
+            <View style={{ gap: 8, marginTop: 6 }}>
+              <PrimaryButton
+                title="✅ Verified Not Received — Clear Hold & Re-Queue"
+                variant="success"
+                loading={busyAction === "resolved"}
+                disabled={!!busyAction}
+                onPress={() => void handleClearUncertainHold("resolved")}
+              />
+              <PrimaryButton
+                title="📌 Dismiss Hold (Handled Manually)"
+                variant="secondary"
+                loading={busyAction === "dismissed"}
+                disabled={!!busyAction}
+                onPress={() => void handleClearUncertainHold("dismissed")}
+              />
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      {isNeedsReview && openTasks.length > 0 ? (
+        <PrimaryButton
+          title={`👉 Answer Blocked Question(s) in Review Studio (${openTasks.length}) ›`}
+          variant="warning"
+          onPress={() => {
+            router.push({ pathname: "/review/[id]", params: { id: openTasks[0].id } });
+          }}
+        />
+      ) : null}
+
+      {!isSubmitted && !isUncertain ? (
+        <View style={{ gap: 8, marginTop: 4 }}>
+          <PrimaryButton
+            title="🚀 Submit Application Now (Autonomous Live)"
+            variant="primary"
+            loading={busyAction === "submit_live"}
+            disabled={!!busyAction}
+            onPress={() => void handleRunAutonomous(false)}
+          />
+          <PrimaryButton
+            title="🧪 Run Browser Dry-Run Verification"
+            variant="secondary"
+            loading={busyAction === "dry_run"}
+            disabled={!!busyAction}
+            onPress={() => void handleRunAutonomous(true)}
+          />
+          {!job.application?.materials_ready ? (
+            <PrimaryButton
+              title="✨ Generate & Approve Tailored Résumé + Cover Letter"
+              variant="secondary"
+              loading={busyAction === "materials"}
+              disabled={!!busyAction}
+              onPress={() => void handlePrepareMaterials()}
+            />
+          ) : null}
+        </View>
+      ) : null}
+
+      <PrimaryButton
+        title="🌐 Open Live ATS Posting in Browser (Manual Handoff)"
+        variant="secondary"
+        onPress={() => void Linking.openURL(job.url)}
+      />
     </Card>
   );
 }
@@ -320,17 +562,17 @@ export default function JobDetailScreen() {
         {error ? <Banner tone="danger" message={error} /> : null}
         <QuotaCard />
         <JobHeader job={job} />
-        <LinkedPostingsCard job={job} onUnlink={unlinkDuplicate} />
-        <ScoreCard job={job} />
+        <ExecutionCommandCard job={job} openTasks={openTasks} refresh={refresh} />
+        <OpenTasksCard tasks={openTasks} />
         <FormStatusCard status={job.form_status} preview={preview} openTaskId={openTasks[0]?.id} />
         {previewError ? <Banner tone="danger" message={previewError} /> : null}
-        <PrimaryButton title="Check the live form now (read-only)" variant="secondary" loading={checking} onPress={() => void checkForm()} />
-        <OpenTasksCard tasks={openTasks} />
+        <PrimaryButton title="🔍 Inspect Live ATS Form Schema (Read-Only)" variant="secondary" loading={checking} onPress={() => void checkForm()} />
         <ApplicationCard application={job.application} jobId={job.id} />
+        <ScoreCard job={job} />
+        <LinkedPostingsCard job={job} onUnlink={unlinkDuplicate} />
         <LivenessCard job={job} onCheck={checkLiveness} />
         <TimelineCard events={job.events} />
         <DescriptionCard description={job.description} />
-        <PrimaryButton title="Open posting in browser" variant="secondary" onPress={() => void Linking.openURL(job.url)} />
       </ScrollView>
     </ScreenContainer>
   );
@@ -348,6 +590,8 @@ const styles = StyleSheet.create({
   blocked: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 6, gap: 2 },
   blockedLabel: { fontSize: 14, fontWeight: "600" },
   blockedReason: { fontSize: 12, lineHeight: 17 },
+  holdBox: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 8, marginTop: 4 },
+  holdTitle: { fontSize: 14, fontWeight: "800" },
   task: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 8, gap: 2 },
   event: { gap: 2 },
   eventStage: { fontSize: 13, fontWeight: "700" },

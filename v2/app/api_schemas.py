@@ -287,7 +287,7 @@ class BlockedFieldOut(Out):
 
 
 class FormStatusOut(Out):
-    state: Literal["no_application", "not_checked", "validated", "unavailable", "blocked", "in_progress"]
+    state: Literal["no_application", "not_checked", "validated", "unavailable", "blocked", "in_progress", "submission_uncertain"]
     source: str | None = None
     fields_total: int | None = None
     fields_required: int | None = None

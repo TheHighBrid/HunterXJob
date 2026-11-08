@@ -459,10 +459,11 @@ async def _read_back_value(locator: Any, tag: str, control_type: str) -> Any:
               const root = el.closest(
                 '[data-field-path],[data-field],.field-wrapper,.select__container,.select-container,' +
                 '[class*="select__control"],[class*="select-container"],' +
-                '[class*="field-wrapper"],[class*="application-field"]'
-              ) || el.parentElement;
+                '[class*="field-wrapper"],[class*="application-field"],' +
+                '[class*="fieldEntry"],[class*="field-entry"],[class*="location"]'
+              ) || (el.parentElement && el.parentElement.parentElement) || el.parentElement;
               if (!root) return '';
-              const singleVal = root.querySelector('[class*="single-value"],[aria-selected="true"],.selected-option,[class*="autocomplete-value"],[class*="value"],[class*="chip"]');
+              const singleVal = root.querySelector('[class*="single-value"],[aria-selected="true"],.selected-option,[class*="autocomplete-value"],[class*="value"],[class*="chip"],[class*="pill"]');
               if (singleVal && singleVal.innerText) return singleVal.innerText.trim();
               const hidden = root.querySelector('input[type="hidden"]');
               if (hidden && hidden.value) return hidden.value.trim();
@@ -661,6 +662,7 @@ async def _fill_input_by_heuristics(
             await locator.dispatch_event("input")
             await locator.dispatch_event("change")
 
+            selected_combobox_text: str | None = None
             if is_combobox:
                 try:
                     # 1. Target scoped listbox via aria-controls / aria-owns if available
@@ -681,7 +683,9 @@ async def _fill_input_by_heuristics(
                             opt_loc = None
 
                     if opt_loc is None or await opt_loc.count() == 0:
-                        opt_loc = page.locator('[role="option"]:visible, .ashby-application-form-autocomplete-option:visible, [class*="autocomplete-option"]:visible, [class*="select__option"]:visible')
+                        opt_loc = page.locator('[role="option"]:visible, .ashby-application-form-autocomplete-option:visible, [class*="autocomplete-option"]:visible, [class*="select__option"]:visible, ul[role="listbox"] li:visible')
+
+                    is_loc = any(t in key.lower() or t in label.lower() for t in ("location", "city", "address", "reside"))
 
                     # Bounded async polling for options to appear (up to 2.0s)
                     opt_count = await opt_loc.count()
@@ -691,15 +695,34 @@ async def _fill_input_by_heuristics(
                             opt_count = await opt_loc.count()
                             if opt_count > 0:
                                 break
+
+                    # If location autocomplete returned 0 options for full "City, Province, Country", retry with city prefix ("Ottawa")
+                    if opt_count == 0 and is_loc and "," in val_str:
+                        city_prefix = val_str.split(",")[0].strip()
+                        if city_prefix:
+                            try:
+                                await locator.fill("")
+                                await asyncio.sleep(0.1)
+                                await locator.press_sequentially(city_prefix, delay=35)
+                                for _ in range(8):
+                                    await asyncio.sleep(0.25)
+                                    opt_count = await opt_loc.count()
+                                    if opt_count > 0:
+                                        break
+                            except Exception:
+                                pass
+
+                    clicked_option = False
                     if opt_count > 0:
-                        is_loc = any(t in key.lower() or t in label.lower() for t in ("location", "city", "address", "reside"))
                         best_match = None
+                        best_match_text = ""
                         best_score = -999.0
                         str_low = val_str.lower().strip()
 
                         for o_idx in range(opt_count):
                             item = opt_loc.nth(o_idx)
-                            text = (await item.inner_text()).lower().strip()
+                            raw_text = (await item.inner_text()).strip()
+                            text = raw_text.lower()
                             if is_loc:
                                 # Strict country-aware scoring: reject US matches for Canadian candidate
                                 score = 0.0
@@ -746,26 +769,37 @@ async def _fill_input_by_heuristics(
                             if score > best_score:
                                 best_score = score
                                 best_match = item
+                                best_match_text = raw_text
 
                         # Only click if we found a positive matching option (or non-location fallback)
                         if best_match and (best_score > 0 or not is_loc):
                             await best_match.click()
+                            clicked_option = True
+                            selected_combobox_text = best_match_text or val_str
                         elif not is_loc:
+                            first_text = (await opt_loc.first.inner_text()).strip()
                             await opt_loc.first.click()
+                            clicked_option = True
+                            selected_combobox_text = first_text or val_str
                     else:
                         await page.keyboard.press("ArrowDown")
                         await asyncio.sleep(0.2)
                         await page.keyboard.press("Enter")
+                        clicked_option = True
+                        selected_combobox_text = val_str
                     await asyncio.sleep(0.3)
-                    try:
-                        await locator.press("Escape")
-                    except Exception:
-                        pass
+                    if not clicked_option:
+                        try:
+                            await locator.press("Escape")
+                        except Exception:
+                            pass
                 except Exception:
                     pass
 
         # Read back for verification
         read_back = await _read_back_value(locator, tag, control_type)
+        if not str(read_back or "").strip() and selected_combobox_text:
+            read_back = selected_combobox_text
         matched = False
         is_location_field = any(t in key.lower() or t in label.lower() for t in ("location", "city", "address", "reside"))
 
