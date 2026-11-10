@@ -40,16 +40,19 @@ _CEFR_OPTION_RE = re.compile(r"^\s*([ABC][12])\b")
 _LANG_ITEM_RE = re.compile(r"^\s*([^()|]+?)\s*\(([^)]*)\)\s*$")
 
 
-def _single_prefixed(control: FormControl, word: str) -> str | None:
+def _single_prefixed(control: Any, word: str) -> str | None:
     pattern = re.compile(rf"^\s*{word}\b", re.IGNORECASE)
-    candidates = [option for option in control.options if pattern.search(option)]
+    options = getattr(control, "options", []) or []
+    candidates = [option for option in options if pattern.search(option)]
     return candidates[0] if len(candidates) == 1 else None
 
 
-def _wrap(control: FormControl, option: str | None) -> Any | None:
+def _wrap(control: Any, option: str | None) -> Any | None:
     if option is None:
         return None
-    return [option] if control.control_type.value == "multiselect" else option
+    ctype = getattr(control, "control_type", None)
+    ctype_val = getattr(ctype, "value", str(ctype or ""))
+    return [option] if ctype_val == "multiselect" else option
 
 
 _AGREE_PATTERNS = re.compile(
@@ -58,17 +61,18 @@ _AGREE_PATTERNS = re.compile(
 )
 
 
-def _yes_no(control: FormControl, value: Any) -> Any | None:
+def _yes_no(control: Any, value: Any) -> Any | None:
     text = " ".join(str(value).split()).casefold()
+    options = getattr(control, "options", []) or []
     if text in _YES:
         opt = _single_prefixed(control, "yes")
         if opt is not None:
             return _wrap(control, opt)
-        agree_opts = [option for option in control.options if _AGREE_PATTERNS.search(option)]
+        agree_opts = [option for option in options if _AGREE_PATTERNS.search(option)]
         if len(agree_opts) == 1:
             return _wrap(control, agree_opts[0])
-        if len(control.options) == 1:
-            return _wrap(control, control.options[0])
+        if len(options) == 1:
+            return _wrap(control, options[0])
     if text in _NO:
         return _wrap(control, _single_prefixed(control, "no"))
     return None
@@ -325,10 +329,35 @@ def _consent_and_disclaimer(control: FormControl, value: Any) -> Any | None:
 # Main Option Derivation Dispatcher
 # ---------------------------------------------------------------------------
 
-def derive_option(control: FormControl, value: Any, key: str = "") -> Any | None:
+def derive_option(control: Any, value: Any, key: Any = "") -> Any | None:
     """Listed option(s) implied by ``value`` under the rules above, or None."""
-    lookup_keys = {key.lower(), control.key.lower(), *(k.lower() for k in control.vault_keys)}
-    label_lower = (control.label or "").lower()
+    if isinstance(control, str):
+        from app.form_engine import ControlType, FormControl
+
+        key_name = control
+        raw_opts = key if isinstance(key, (list, tuple, set)) else []
+        control = FormControl(
+            key=key_name,
+            label="",
+            control_type=ControlType.SELECT,
+            options=list(raw_opts),
+            vault_keys=[key_name],
+            legal=any(t in key_name.lower() for t in ("consent", "terms", "disclaimer", "agreement")),
+        )
+        key = key_name
+
+    if isinstance(key, (list, tuple, set)):
+        key_str = ""
+    else:
+        key_str = str(key or "")
+
+    lookup_keys = {
+        key_str.lower(),
+        str(getattr(control, "key", "") or "").lower(),
+        *(str(k).lower() for k in getattr(control, "vault_keys", []) if k),
+    }
+    lookup_keys.discard("")
+    label_lower = str(getattr(control, "label", "") or "").lower()
 
     # 1. Bilingual language proficiency
     if "language_proficiency" in lookup_keys or "language" in lookup_keys:
@@ -370,7 +399,7 @@ def derive_option(control: FormControl, value: Any, key: str = "") -> Any | None
 
     # 5. Consent & Legal disclaimer
     if (
-        control.legal
+        getattr(control, "legal", False)
         or any("consent" in k or "terms" in k or "disclaimer" in k or "agreement" in k for k in lookup_keys)
         or _AGREE_PATTERNS.search(label_lower)
         or "disclaimer" in label_lower
@@ -384,18 +413,19 @@ def derive_option(control: FormControl, value: Any, key: str = "") -> Any | None
     if yn_res is not None:
         return yn_res
 
+    ctrl_options = getattr(control, "options", []) or []
     # 7. Final fallback: try category matchers based on options structure
-    if any(re.search(r"\b\d+k\b|\b\d+-\d+k\b|\$\d+", opt, re.I) for opt in control.options):
+    if any(re.search(r"\b\d+k\b|\b\d+-\d+k\b|\$\d+", opt, re.I) for opt in ctrl_options):
         sal_res = _salary_range(control, value)
         if sal_res is not None:
             return sal_res
 
-    if any(re.search(r"gmt[-+]|utc[-+]|eastern|pacific|central|mountain", opt, re.I) for opt in control.options):
+    if any(re.search(r"gmt[-+]|utc[-+]|eastern|pacific|central|mountain", opt, re.I) for opt in ctrl_options):
         tz_res = _timezone(control, value)
         if tz_res is not None:
             return tz_res
 
-    if any("remote" in opt.lower() for opt in control.options):
+    if any("remote" in opt.lower() for opt in ctrl_options):
         loc_res = _work_location(control, value)
         if loc_res is not None:
             return loc_res

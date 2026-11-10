@@ -105,6 +105,7 @@ def test_knowledge_book_resolves_master_policy_answers():
     example_yaml = Path(__file__).parent.parent / "examples" / "profile.example.yaml"
     kb = KnowledgeBook.from_yaml_file(example_yaml)
     kb.preferences["willing_to_relocate"] = False
+    kb.preferences["desired_salary"] = "60000"
 
     # 1. Salary expectation
     ans, rule = kb.resolve_screening_question("What are your salary expectations?", options=["60,000", "75,000", "90,000"])

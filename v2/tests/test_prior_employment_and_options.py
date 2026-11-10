@@ -141,3 +141,13 @@ def test_yes_no_prefix_matching():
     assert derive_option(control, "Maybe") is None
     two_yes = FormControl(key="q", label="x", control_type=ControlType.SELECT, options=["Yes - A", "Yes - B", "No"])
     assert derive_option(two_yes, "Yes") is None
+
+
+def test_derive_option_supports_string_key_and_options_list():
+    assert derive_option("terms_consent", "Yes", ["I agree", "I disagree"]) == "I agree"
+    assert derive_option("salary_expectation", "65000", ["50k-60k", "60k-70k", "70k-80k"]) == "60k-70k"
+    assert derive_option("work_location_preference", "Remote Canada", ["Remote within Canada", "In-office"]) == "Remote within Canada"
+    assert derive_option("timezone", "Eastern Time", ["GMT-5 :Eastern Standard Time (EST)", "GMT-8 :Pacific Standard Time (PST)"]) == "GMT-5 :Eastern Standard Time (EST)"
+    # Resilient against non-string keys
+    assert derive_option("terms_consent", "Yes", ["Yes", "No"]) == "Yes"
+
