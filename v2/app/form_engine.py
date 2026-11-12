@@ -51,7 +51,7 @@ AUTH_PATTERNS = (
 VOLUNTARY_SECTIONS = frozenset({"eeoc", "demographic"})
 DECLINE_POLICY_KEY = "voluntary_self_identification"
 _DECLINE_OPTION_RE = re.compile(
-    r"decline|don.?t wish|do not wish|prefer not|not to (?:say|disclose|answer|self)|choose not|wish not",
+    r"decline|don.?t wish|do not wish|prefer not|not to (?:say|disclose|answer|respond|self)|choose not|wish not",
     re.IGNORECASE,
 )
 ASSESSMENT_PATTERNS = ("assessment", "hirevue", "codility", "hackerrank", "personality test")
@@ -304,6 +304,18 @@ def _resolve_control(control: FormControl, vault: AnswerVault, request_sensitive
         keys.extend(["time_zone", "timezone"])
     if "work location" in lbl or ("remote" in lbl and "hybrid" in lbl):
         keys.extend(["work_location_preference", "work_arrangement_nonlocal"])
+    if "gender" in lbl:
+        keys.extend(["gender", "gender_identity"])
+    if ("veteran" in lbl or "armed forces" in lbl) and control.options:
+        keys.extend(["veteran_status", "veteran"])
+    if "race" in lbl or "ethnic" in lbl:
+        keys.extend(["race_ethnicity", "race"])
+    if "disab" in lbl:
+        keys.extend(["disability", "disability_status"])
+    if "how did you hear" in lbl or "hear about" in lbl:
+        keys.extend(["referral_source", "hear_about_us"])
+    if "onboard" in lbl and "date" in lbl:
+        keys.extend(["start_date", "availability_date"])
 
     seen: list[str] = []
     for key in keys:
@@ -317,6 +329,18 @@ def _resolve_control(control: FormControl, vault: AnswerVault, request_sensitive
     return vault.resolve(FieldRequest(key=control.key, required=control.required, sensitive=request_sensitive))
 
 
+def _try_decline_option(control: FormControl, vault: AnswerVault) -> str | None:
+    """Return a unique decline option when an explicit USER/POLICY decline applies."""
+    if not control.options:
+        return None
+    if control.section not in VOLUNTARY_SECTIONS and not (control.sensitive and not control.required):
+        return None
+    policy = vault.resolve(FieldRequest(key=DECLINE_POLICY_KEY, required=False, sensitive=True))
+    if policy.status is ResolutionStatus.RESOLVED and _normalize_option(policy.value) == "decline":
+        return _decline_option(control)
+    return None
+
+
 def plan_fill(controls: list[FormControl], vault: AnswerVault) -> FillPlan:
     items: list[FillPlanItem] = []
     blockers: list[str] = []
@@ -324,6 +348,9 @@ def plan_fill(controls: list[FormControl], vault: AnswerVault) -> FillPlan:
         if control.control_type is ControlType.HIDDEN:
             continue
         if control.control_type is ControlType.UNKNOWN or control.confidence < 0.4:
+            if not control.required:
+                items.append(FillPlanItem(control, "skip", reason="optional unsupported control skipped"))
+                continue
             blockers.append("unsupported_control")
             items.append(FillPlanItem(control, "review", reason="unsupported or low-confidence control"))
             continue
@@ -344,32 +371,36 @@ def plan_fill(controls: list[FormControl], vault: AnswerVault) -> FillPlan:
                 if matched is None:
                     matched = derive_option(control, value, resolved.key)
                 if matched is None:
+                    decline_opt = _try_decline_option(control, vault)
+                    if decline_opt is not None:
+                        items.append(FillPlanItem(control, "fill", value=decline_opt, reason="explicit decline-to-self-identify policy"))
+                        continue
+                    if not control.required:
+                        items.append(FillPlanItem(control, "skip", reason="optional question skipped (resolved value not in listed options)"))
+                        continue
                     blockers.append("ambiguous_question")
                     items.append(FillPlanItem(control, "review", value=value, reason="resolved value is not a listed option"))
                     continue
                 value = matched
             items.append(FillPlanItem(control, "fill", value=value, reason=resolved.reason))
             continue
-        if control.section in VOLUNTARY_SECTIONS and control.options:
-            policy = vault.resolve(FieldRequest(key=DECLINE_POLICY_KEY, required=False, sensitive=True))
-            if policy.status is ResolutionStatus.RESOLVED and _normalize_option(policy.value) == "decline":
-                option = _decline_option(control)
-                if option is not None:
-                    items.append(FillPlanItem(control, "fill", value=option, reason="explicit decline-to-self-identify policy"))
-                    continue
+        decline_opt = _try_decline_option(control, vault)
+        if decline_opt is not None:
+            items.append(FillPlanItem(control, "fill", value=decline_opt, reason="explicit decline-to-self-identify policy"))
+            continue
         if control.legal and control.options and len(control.options) == 1:
             derived_legal = derive_option(control, "Yes", "terms_consent")
             if derived_legal is not None:
                 items.append(FillPlanItem(control, "fill", value=derived_legal, reason="universal affirmative applicant consent"))
                 continue
-        if control.required or control.sensitive or control.legal:
+        if control.required or control.legal or (control.section == "eeoc" and control.sensitive):
             code = "sensitive_answer_missing" if control.sensitive else (
                 "legal_answer_missing" if control.legal else "ambiguous_question"
             )
             blockers.append(code)
             items.append(FillPlanItem(control, "review", reason=resolved.reason))
         else:
-            items.append(FillPlanItem(control, "skip", reason=resolved.reason))
+            items.append(FillPlanItem(control, "skip", reason=f"optional question skipped ({resolved.reason})"))
     return FillPlan(items=items, blockers=sorted(set(blockers)))
 
 

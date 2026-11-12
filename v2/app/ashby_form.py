@@ -156,6 +156,7 @@ _TYPES = {
     "Number": ControlType.NUMBER,
     "Date": ControlType.DATE,
     "SocialLink": ControlType.TEXT,
+    "Url": ControlType.TEXT,
 }
 # Field path (system or common custom path) -> canonical vault key.
 _PATH_KEYS = {

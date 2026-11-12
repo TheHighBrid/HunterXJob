@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
@@ -8,6 +9,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from fastapi.routing import APIRoute
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -68,6 +70,13 @@ async def lifespan(_: FastAPI):
             runner.stop()
 
 
+def _deterministic_unique_id(route: APIRoute) -> str:
+    """Sort route methods so OpenAPI operation IDs never depend on PYTHONHASHSEED."""
+    operation_id = re.sub(r"\W", "_", f"{route.name}{route.path_format}")
+    method = sorted(route.methods)[0].lower() if route.methods else "get"
+    return f"{operation_id}_{method}"
+
+
 # Interactive API docs expose the full schema; only serve them in local dev mode.
 _docs = settings.local_dev_mode
 app = FastAPI(
@@ -79,6 +88,7 @@ app = FastAPI(
     openapi_url="/openapi.json" if _docs else None,
     # One schema per model (no "-Input"/"-Output" pairs) for the generated mobile types.
     separate_input_output_schemas=False,
+    generate_unique_id_function=_deterministic_unique_id,
 )
 app.add_middleware(
     CORSMiddleware,
@@ -492,13 +502,27 @@ def events(job_id: str, db: DbSession) -> list[dict[str, object]]:
 
 
 @api.post("/api/autonomous/run")
-def trigger_autonomous_run(db: DbSession, current: CurrentSettings) -> dict[str, object]:
+def trigger_autonomous_run(
+    db: DbSession,
+    current: CurrentSettings,
+    live: bool | None = None,
+    headed: bool = False,
+) -> dict[str, object]:
     from app.autonomous_loop import AutonomousConfig, AutonomousRunner
     from app.flags import is_enabled
 
     try:
-        live = bool(current.allow_live_submission and is_enabled(db, "allow_live_submission"))
-        runner = AutonomousRunner(db, current, AutonomousConfig(allow_live_submission=live))
+        want_live = True if live is None else bool(live)
+        can_live = bool(
+            want_live
+            and current.allow_live_submission
+            and is_enabled(db, "allow_live_submission")
+        )
+        runner = AutonomousRunner(
+            db,
+            current,
+            AutonomousConfig(allow_live_submission=can_live, headless=not headed),
+        )
         summary = runner.run()
         return {
             "started_at": summary.started_at,
@@ -573,6 +597,7 @@ def run_job_autonomous(
     db: DbSession,
     current: CurrentSettings,
     dry_run: bool = False,
+    headed: bool = False,
 ) -> dict[str, object]:
     from app.autonomous_loop import AutonomousConfig, AutonomousRunner
     from app.flags import is_enabled
@@ -584,7 +609,11 @@ def run_job_autonomous(
 
     try:
         live = bool(not dry_run and current.allow_live_submission and is_enabled(db, "allow_live_submission"))
-        runner = AutonomousRunner(db, current, AutonomousConfig(allow_live_submission=live))
+        runner = AutonomousRunner(
+            db,
+            current,
+            AutonomousConfig(allow_live_submission=live, headless=not headed),
+        )
         record = runner.run_job(job)
         return {
             "job_id": record.job_id,

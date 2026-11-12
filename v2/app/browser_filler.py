@@ -15,6 +15,7 @@ import hashlib
 import json
 import logging
 import re
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -421,7 +422,11 @@ async def _find_file_input_in_target(page: Any, key: str, harness: dict[str, Any
     keywords = ["resume", "cv"] if "resume" in key.lower() or "cv" in key.lower() else ["cover", "letter"]
     for kw in keywords:
         loc = page.locator(
-            f'input[type="file"][id*="{kw}" i], input[type="file"][name*="{kw}" i], input[type="file"][data-qa*="{kw}" i], input[type="file"][data-ui*="{kw}" i]'
+            f'input[type="file"][id*="{kw}" i], '
+            f'input[type="file"][name*="{kw}" i], '
+            f'input[type="file"][data-qa*="{kw}" i], '
+            f'input[type="file"][data-ui*="{kw}" i], '
+            f'[data-field-path*="{kw}" i] input[type="file"]'
         )
         if await loc.count() > 0:
             return loc.first, f'input[type="file"][keyword="{kw}"]'
@@ -519,9 +524,11 @@ async def _fill_input_by_heuristics(
 
     tag = await locator.evaluate("el => el.tagName.toLowerCase()")
     control_type = await locator.evaluate("el => (el.getAttribute('type') || '').toLowerCase()")
-    val_str = str(value)
+    val_str = ", ".join(str(x) for x in value) if isinstance(value, (list, tuple, set)) else str(value)
 
     try:
+        if control_type == "file":
+            return
         if tag == "button":
             await locator.click()
             await locator.dispatch_event("change")
@@ -636,7 +643,7 @@ async def _fill_input_by_heuristics(
                 if max_m:
                     max_l = int(max_m.group(1)) if not max_l else min(max_l, int(max_m.group(1)))
 
-            val_str = str(value)
+            val_str = ", ".join(str(x) for x in value) if isinstance(value, (list, tuple, set)) else str(value)
             if min_l > 0 or max_l is not None:
                 val_str = enforce_length_constraints(val_str, min_length=min_l, max_length=max_l)
 
@@ -886,6 +893,42 @@ async def _fill_single_field(
     return await _fill_input_by_heuristics(page, key, value, label=label, harness=harness)
 
 
+async def launch_playwright_browser(playwright: Any, headless: bool = True) -> Any:
+    """Launch Playwright browser with platform-safe flags (avoiding Linux crash flags on macOS)."""
+    launch_args = [
+        "--disable-blink-features=AutomationControlled",
+        "--disable-infobars",
+        "--no-first-run",
+    ]
+    if sys.platform != "darwin":
+        launch_args.extend(
+            [
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--js-flags=--max-old-space-size=512",
+                "--renderer-process-limit=2",
+                "--no-sandbox",
+            ]
+        )
+    launch_kwargs: dict[str, Any] = {
+        "headless": headless,
+        "slow_mo": 120 if not headless else 0,
+        "args": launch_args,
+        "ignore_default_args": ["--enable-automation"],
+    }
+    if not headless and Path("/Applications/Google Chrome.app").exists():
+        launch_kwargs["channel"] = "chrome"
+
+    try:
+        return await playwright.chromium.launch(**launch_kwargs)
+    except Exception as exc:
+        if "channel" in launch_kwargs:
+            logger.warning("Chrome channel launch failed (%s); falling back to bundled Chromium", exc)
+            fallback_kwargs = {k: v for k, v in launch_kwargs.items() if k != "channel"}
+            return await playwright.chromium.launch(**fallback_kwargs)
+        raise
+
+
 async def fill_application_form(
     url: str,
     answers: dict[str, Any],
@@ -902,9 +945,11 @@ async def fill_application_form(
     live_submit_fn: Any | None = None,
     captcha_solver: Any | None = None,
     post_submit_screenshot_path: Path | None = None,
+    browser: Any | None = None,
 ) -> FormFillResult:
     """Open the application page, fill in all answers, attach files, and verify read-backs."""
     from collections.abc import Collection
+    from contextlib import AsyncExitStack
     from playwright.async_api import async_playwright
 
     labels = labels or {}
@@ -920,29 +965,22 @@ async def fill_application_form(
 
     # If target_fields is provided, filter answers and files down to only targeted fields
     items_to_fill = answers
+    target_files = files
     if target_fields is not None:
         items_to_fill = {k: v for k, v in answers.items() if k in target_fields}
+        target_files = {k: v for k, v in files.items() if k in target_fields}
 
-    async with async_playwright() as playwright:
-        launch_kwargs: dict[str, Any] = {
-            "headless": headless,
-            "slow_mo": 120 if not headless else 0,
-            "args": [
-                "--disable-blink-features=AutomationControlled",
-                "--disable-infobars",
-                "--no-first-run",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--js-flags=--max-old-space-size=512",
-                "--renderer-process-limit=2",
-                "--no-sandbox",
-            ],
-            "ignore_default_args": ["--enable-automation"],
-        }
-        if not headless and Path("/Applications/Google Chrome.app").exists():
-            launch_kwargs["channel"] = "chrome"
+    upload_keys = {k.lower() for k in target_files}
+    if "resume" in upload_keys:
+        upload_keys.update({"_systemfield_resume", "resume_file", "cv"})
+    if "cover_letter" in upload_keys:
+        upload_keys.add("_systemfield_cover_letter")
 
-        browser = await playwright.chromium.launch(**launch_kwargs)
+    owns_browser = browser is None or not getattr(browser, "is_connected", lambda: True)()
+    async with AsyncExitStack() as stack:
+        if owns_browser:
+            playwright = await stack.enter_async_context(async_playwright())
+            browser = await launch_playwright_browser(playwright, headless=headless)
         context = await browser.new_context(
             locale="en-CA",
             viewport={"width": 1280, "height": 900},
@@ -987,7 +1025,7 @@ async def fill_application_form(
 
             # 1. Fill regular inputs, selects, and textareas
             for key, val in items_to_fill.items():
-                if val is None or val == "":
+                if val is None or val == "" or key.lower() in upload_keys:
                     continue
                 label_hint = labels.get(key, "")
                 report = await _fill_single_field(page, key, val, label=label_hint, harness=champion_harness)
@@ -1001,10 +1039,6 @@ async def fill_application_form(
                     unmatched.append(key)
 
             # 2. Attach files (e.g. resume, cover_letter)
-            target_files = files
-            if target_fields is not None:
-                target_files = {k: v for k, v in files.items() if k in target_fields}
-
             for file_key, file_val in target_files.items():
                 file_path = Path(file_val)
                 if not file_path.is_file():
@@ -1020,7 +1054,7 @@ async def fill_application_form(
                         pass
                     record = _file_record(file_path, file_key)
                     files_attached.append(record)
-                    field_reports[file_key] = FieldFillReport(
+                    file_report = FieldFillReport(
                         key=file_key,
                         control_type="file",
                         selector_used=sel_used,
@@ -1028,6 +1062,20 @@ async def fill_application_form(
                         read_back_value=file_path.name,
                         matched=True,
                     )
+                    field_reports[file_key] = file_report
+                    aliases = (file_key, "_systemfield_resume", "resume_file", "cv") if file_key == "resume" else (file_key,)
+                    for alias in aliases:
+                        if alias in unmatched:
+                            unmatched.remove(alias)
+                        if alias in field_reports and alias != file_key:
+                            field_reports[alias] = FieldFillReport(
+                                key=alias,
+                                control_type="file",
+                                selector_used=sel_used,
+                                attempted_value=file_path.name,
+                                read_back_value=file_path.name,
+                                matched=True,
+                            )
                 else:
                     unmatched.append(file_key)
                     field_reports[file_key] = FieldFillReport(
@@ -1056,8 +1104,13 @@ async def fill_application_form(
                 await page.screenshot(path=str(screenshot_path), full_page=True)
                 sc_sha256 = hashlib.sha256(screenshot_path.read_bytes()).hexdigest()
 
-            # 4. Live submission execution if enabled and all form fields matched
-            if allow_live_submit and not unmatched:
+            # 4. Live submission execution if enabled and no blocking unmatched fields
+            blocking_unmatched = [
+                k for k in unmatched if required_fields is None or k in required_fields
+            ]
+            if allow_live_submit and blocking_unmatched:
+                submit_error = f"Blocked live submit due to unmatched required fields: {blocking_unmatched}"
+            if allow_live_submit and not blocking_unmatched:
                 from app.captcha_bridge import detect_captcha, inject_captcha_token
                 from app.submission_engine import execute_live_submission as _default_submit
 
@@ -1101,11 +1154,21 @@ async def fill_application_form(
                     pass
             trace_sha256 = None
             if trace_path:
-                await context.tracing.stop(path=str(trace_path))
-                if trace_path.is_file():
-                    trace_sha256 = hashlib.sha256(trace_path.read_bytes()).hexdigest()
-            await context.close()
-            await browser.close()
+                try:
+                    await context.tracing.stop(path=str(trace_path))
+                    if trace_path.is_file():
+                        trace_sha256 = hashlib.sha256(trace_path.read_bytes()).hexdigest()
+                except Exception:
+                    pass
+            try:
+                await context.close()
+            except Exception:
+                pass
+            if owns_browser:
+                try:
+                    await browser.close()
+                except Exception:
+                    pass
 
     filled_count = sum(1 for r in field_reports.values() if r.matched)
     total_attempted = len(field_reports)

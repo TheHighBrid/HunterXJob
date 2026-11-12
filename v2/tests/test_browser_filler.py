@@ -264,3 +264,36 @@ def test_runtime_hot_reload_promoted_champion_selectors(fixture_server, tmp_path
             await browser.close()
 
     asyncio.run(run_test())
+
+
+def test_file_alias_does_not_block_live_submit(fixture_server, tmp_path):
+    """Ensure _systemfield_resume alongside attached files[resume] never blocks allow_live_submit."""
+    from app.submission_engine import SubmissionResult
+
+    resume_pdf = tmp_path / "resume.pdf"
+    resume_pdf.write_bytes(b"%PDF-1.4\n%test\n%%EOF\n")
+
+    async def fake_submit(**kwargs):
+        return SubmissionResult(
+            success=True,
+            status="submitted",
+            confirmation_text="Submitted ok",
+            final_url=f"{fixture_server}/sample_form.html",
+        )
+
+    result = asyncio.run(
+        fill_application_form(
+            url=f"{fixture_server}/sample_form.html",
+            answers={"first_name": "Avery", "email": "avery@example.com", "_systemfield_resume": "/tmp/stale.pdf"},
+            files={"resume": resume_pdf},
+            required_fields=["first_name", "email"],
+            headless=True,
+            headed_pause_ms=0,
+            allow_live_submit=True,
+            live_submit_fn=fake_submit,
+        )
+    )
+    assert result.submitted is True
+    assert result.success is True
+    assert "_systemfield_resume" not in result.unmatched_fields
+    assert len(result.files_attached) == 1

@@ -31,7 +31,7 @@ def test_gap_categories_are_locked():
         "free_text_essay": (5, 4),
         "legal_consent": (2, 0),
         "prior_employment": (1, 0),
-        "sensitive_self_id": (3, 1),
+        "sensitive_self_id": (0, 4),
         "option_mismatch": (2, 0),
         "referral": (0, 2),
         "work_authorization": (1, 0),

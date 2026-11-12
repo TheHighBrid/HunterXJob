@@ -65,9 +65,13 @@ def _cmd_backups(args: argparse.Namespace) -> int:
 def _cmd_cycle(_: argparse.Namespace) -> int:
     from app.cycle import CycleRunner
     from app.db import SessionLocal, init_db
+    from app.runtime_settings import apply_stored_overrides
 
     init_db()
-    result = CycleRunner(get_settings(), SessionLocal, Path("run/cycle.lock")).run_once("cli")
+    settings = get_settings()
+    with SessionLocal() as db:
+        apply_stored_overrides(db, settings)
+    result = CycleRunner(settings, SessionLocal, Path("run/cycle.lock")).run_once("cli")
     print(json.dumps(result, indent=2, default=str))
     return 0 if result["status"] in {"completed", "skipped"} else 1
 
@@ -86,9 +90,12 @@ def _cmd_autonomous_run(args: argparse.Namespace) -> int:
 
     from app.autonomous_loop import AutonomousConfig, AutonomousRunner
     from app.db import SessionLocal, init_db
+    from app.runtime_settings import apply_stored_overrides
 
     init_db()
     settings = get_settings()
+    with SessionLocal() as db:
+        apply_stored_overrides(db, settings)
     profile_data = None
     if getattr(args, "profile", None):
         profile_path = Path(args.profile)

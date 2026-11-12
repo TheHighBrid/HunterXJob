@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import inspect
 import json
 import logging
 from dataclasses import dataclass, field
@@ -28,7 +29,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.answer_vault import AnswerVault
-from app.browser_filler import _fill_single_field, _find_file_input, fill_application_form
+from app.browser_filler import (
+    _fill_single_field,
+    _find_file_input,
+    fill_application_form,
+    launch_playwright_browser,
+)
 from app.captcha_bridge import MockCaptchaSolver, detect_captcha, inject_captcha_token
 from app.config import Settings, get_settings
 from app.dedup import duplicate_guard
@@ -136,8 +142,7 @@ class AutonomousRunner:
             if any(b in comp_norm for b in blacklisted):
                 raise RuntimeError(f"Cannot process job: company '{job.company}' is blacklisted")
 
-        profile_dict = self.config.profile_data or verified_profile(self.db) or {}
-        book = KnowledgeBook(profile_dict)
+        book = KnowledgeBook.from_database(self.db, profile_override=self.config.profile_data)
         out_dir = self.config.output_dir or Path(getattr(self.settings, "artifact_dir", None) or "/tmp/hunterx_autonomous")
         out_dir.mkdir(parents=True, exist_ok=True)
         return await self._process_job(job, book, out_dir)
@@ -152,9 +157,8 @@ class AutonomousRunner:
             summary.finished_at = datetime.now(UTC).isoformat()
             return summary
 
-        # 2. Candidate Knowledge Book
-        profile_dict = self.config.profile_data or verified_profile(self.db) or {}
-        book = KnowledgeBook(profile_dict)
+        # 2. Candidate Knowledge Book (hydrated with verified profile + DB answer vault policies)
+        book = KnowledgeBook.from_database(self.db, profile_override=self.config.profile_data)
 
         # 3. Score pending jobs if facts available
         from app.resume_facts import read_resume_facts
@@ -162,89 +166,144 @@ class AutonomousRunner:
         if facts_text:
             score_pending_jobs(self.db, self.settings, facts_text, use_ai=False)
 
-        # 4. Query candidate jobs
-        candidates = self.db.execute(
+        # 4. Query candidate jobs (prioritizing validated/ready jobs for live runs)
+        can_submit_live = (
+            self.config.allow_live_submission
+            and self.settings.allow_live_submission
+            and is_enabled(self.db, "allow_live_submission")
+        )
+        target_stages = [
+            PipelineStage.ready_to_apply.value,
+            PipelineStage.approved.value,
+            PipelineStage.shortlisted.value,
+            PipelineStage.scored.value,
+            PipelineStage.discovered.value,
+        ]
+        if can_submit_live:
+            target_stages.insert(0, PipelineStage.validated.value)
+
+        stage_priority = {stage: idx for idx, stage in enumerate(target_stages)}
+        raw_candidates = self.db.execute(
             select(Job)
-            .where(Job.stage.in_([
-                PipelineStage.discovered.value,
-                PipelineStage.scored.value,
-                PipelineStage.shortlisted.value,
-                PipelineStage.ready_to_apply.value,
-            ]))
+            .where(Job.stage.in_(target_stages))
             .order_by(Job.final_score.desc().nullslast())
         ).scalars().all()
+        candidates = sorted(
+            raw_candidates,
+            key=lambda j: (stage_priority.get(j.stage, 99), -float(j.final_score or 0.0)),
+        )
 
         summary.candidates_considered = len(candidates)
         out_dir = self.config.output_dir or Path(getattr(self.settings, "artifact_dir", None) or "/tmp/hunterx_autonomous")
         out_dir.mkdir(parents=True, exist_ok=True)
         submitted_companies_in_cycle: set[str] = set()
 
-        for job in candidates:
-            if kill_switch_engaged(self.db):
-                summary.aborted_by_kill_switch = True
-                break
+        from contextlib import AsyncExitStack
 
-            if summary.submitted_live + summary.verified_dry_runs >= self.config.max_applications:
-                break
+        self._browser_stack: AsyncExitStack | None = None
+        self._shared_playwright: Any | None = None
+        self._shared_browser: Any | None = None
 
-            if summary.errors >= self.config.max_errors:
-                logger.warning("Reached maximum error threshold (%d), aborting cycle", self.config.max_errors)
-                break
+        async with AsyncExitStack() as browser_stack:
+            self._browser_stack = browser_stack
+            try:
+                for job in candidates:
+                    if kill_switch_engaged(self.db):
+                        summary.aborted_by_kill_switch = True
+                        break
 
-            score = float(job.final_score or 0.0)
-            if score < self.config.min_score_threshold:
-                continue
+                    if summary.submitted_live + summary.verified_dry_runs >= self.config.max_applications:
+                        break
 
-            comp_norm = (job.company or "").strip().lower()
-            if self.settings and getattr(self.settings, "blacklisted_company_list", None):
-                blacklisted = {name.lower() for name in self.settings.blacklisted_company_list}
-                if any(b in comp_norm for b in blacklisted):
-                    logger.info("Skipping blacklisted company '%s' for job '%s'", job.company, job.title)
-                    continue
+                    if summary.errors >= self.config.max_errors:
+                        logger.warning("Reached maximum error threshold (%d), aborting cycle", self.config.max_errors)
+                        break
 
-            # 5a. Company-level submission rate limiter (anti-bot cooldown)
-            if comp_norm and comp_norm in submitted_companies_in_cycle:
-                logger.info("Deferring %s for company '%s' (company already submitted in this cycle)", job.title, job.company)
-                continue
+                    score = float(job.final_score or 0.0)
+                    if score < self.config.min_score_threshold:
+                        continue
 
-            summary.shortlisted += 1
+                    comp_norm = (job.company or "").strip().lower()
+                    if self.settings and getattr(self.settings, "blacklisted_company_list", None):
+                        blacklisted = {name.lower() for name in self.settings.blacklisted_company_list}
+                        if any(b in comp_norm for b in blacklisted):
+                            logger.info("Skipping blacklisted company '%s' for job '%s'", job.company, job.title)
+                            continue
 
-            # 5b. Deduplication check
-            dedup_reason = duplicate_guard(self.db, job, action="submit")
-            if dedup_reason is not None:
-                summary.skipped_duplicates += 1
-                logger.info("Skipping duplicate job: %s (%s)", job.title, dedup_reason)
-                continue
+                    # 5a. Company-level submission rate limiter (anti-bot cooldown)
+                    if comp_norm and comp_norm in submitted_companies_in_cycle:
+                        logger.info("Deferring %s for company '%s' (company already submitted in this cycle)", job.title, job.company)
+                        continue
 
-            # 6. Liveness check (skip for local test file fixtures)
-            if not (getattr(job, "url", "") or "").startswith("file://"):
-                liveness_gate = ensure_live(self.db, self.settings, job, action="dry_run")
-                if not liveness_gate.allowed:
-                    logger.info("Skipping dead job: %s (status: %s)", job.title, liveness_gate.status)
-                    continue
+                    summary.shortlisted += 1
 
-            # Process single application
-            job_platform = getattr(job, "platform", "unknown") or "generic"
-            logger.info("▶ Processing [%d/%d] %s at %s (platform: %s)", summary.shortlisted, self.config.max_applications, job.title, job.company, job_platform)
-            record = await self._process_job(job, book, out_dir)
-            summary.records.append(record)
+                    # 5b. Deduplication check
+                    dedup_reason = duplicate_guard(self.db, job, action="submit")
+                    if dedup_reason is not None:
+                        summary.skipped_duplicates += 1
+                        logger.info("Skipping duplicate job: %s (%s)", job.title, dedup_reason)
+                        continue
 
-            if record.submitted:
-                summary.submitted_live += 1
-                logger.info("✓ Submitted live: %s at %s (receipt: %s)", job.title, job.company, record.confirmation_receipt or "ok")
-                if comp_norm:
-                    submitted_companies_in_cycle.add(comp_norm)
-            elif record.status == "dry_run_verified":
-                summary.verified_dry_runs += 1
-                logger.info("✓ Dry run verified: %s at %s", job.title, job.company)
-            else:
-                summary.errors += 1
-                logger.warning("✗ Failed (%s): %s at %s - %s", record.status, job.title, job.company, record.error)
-            import sys
-            sys.stdout.flush()
+                    # 6. Liveness check (skip for local test file fixtures)
+                    if not (getattr(job, "url", "") or "").startswith("file://"):
+                        liveness_gate = ensure_live(self.db, self.settings, job, action="dry_run")
+                        if not liveness_gate.allowed:
+                            logger.info("Skipping dead job: %s (status: %s)", job.title, liveness_gate.status)
+                            continue
+
+                    # Process single application
+                    job_platform = getattr(job, "platform", "unknown") or "generic"
+                    logger.info("▶ Processing [%d/%d] %s at %s (platform: %s)", summary.shortlisted, self.config.max_applications, job.title, job.company, job_platform)
+                    record = await self._process_job(job, book, out_dir)
+                    summary.records.append(record)
+
+                    if record.submitted:
+                        summary.submitted_live += 1
+                        logger.info("✓ Submitted live: %s at %s (receipt: %s)", job.title, job.company, record.confirmation_receipt or "ok")
+                        if comp_norm:
+                            submitted_companies_in_cycle.add(comp_norm)
+                    elif record.status == "dry_run_verified":
+                        summary.verified_dry_runs += 1
+                        logger.info("✓ Dry run verified: %s at %s", job.title, job.company)
+                    else:
+                        summary.errors += 1
+                        logger.warning("✗ Failed (%s): %s at %s - %s", record.status, job.title, job.company, record.error)
+                    import sys
+                    sys.stdout.flush()
+            finally:
+                if self._shared_browser is not None:
+                    try:
+                        await self._shared_browser.close()
+                    except Exception:
+                        pass
+                self._shared_browser = None
+                self._shared_playwright = None
+                self._browser_stack = None
 
         summary.finished_at = datetime.now(UTC).isoformat()
         return summary
+
+    async def _acquire_shared_browser(self) -> Any | None:
+        """Lazily start or reconnect a shared browser session inside run_async."""
+        if self._browser_stack is None:
+            return None
+        if self._shared_browser is not None and getattr(self._shared_browser, "is_connected", lambda: True)():
+            return self._shared_browser
+        try:
+            from playwright.async_api import async_playwright
+
+            if self._shared_playwright is None:
+                self._shared_playwright = await self._browser_stack.enter_async_context(async_playwright())
+            if self._shared_browser is not None:
+                logger.warning("Shared browser disconnected; relaunching cleanly")
+            self._shared_browser = await launch_playwright_browser(
+                self._shared_playwright, headless=self.config.headless
+            )
+            return self._shared_browser
+        except Exception as exc:
+            logger.warning("Shared browser launch skipped (%s); falling back to per-job launch", exc)
+            self._shared_browser = None
+            return None
 
     async def _process_job(
         self,
@@ -360,20 +419,24 @@ class AutonomousRunner:
             sc_path = job_dir / "pre_submit.png"
             post_sc_path = job_dir / "post_submit.png"
 
-            fill_res = await fill_application_form(
-                url=real_form.url,
-                answers=answers,
-                files=files,
-                labels=labels,
-                required_fields=required_keys,
-                headless=self.config.headless,
-                headed_pause_ms=self.config.headed_pause_ms,
-                screenshot_path=sc_path,
-                allow_live_submit=can_submit_live,
-                post_submit_screenshot_path=post_sc_path if can_submit_live else None,
-                live_submit_fn=execute_live_submission if can_submit_live else None,
-                captcha_solver=self.captcha_solver if can_submit_live else None,
-            )
+            shared_browser = await self._acquire_shared_browser()
+            fill_kwargs: dict[str, Any] = {
+                "url": real_form.url,
+                "answers": answers,
+                "files": files,
+                "labels": labels,
+                "required_fields": required_keys,
+                "headless": self.config.headless,
+                "headed_pause_ms": self.config.headed_pause_ms,
+                "screenshot_path": sc_path,
+                "allow_live_submit": can_submit_live,
+                "post_submit_screenshot_path": post_sc_path if can_submit_live else None,
+                "live_submit_fn": execute_live_submission if can_submit_live else None,
+                "captcha_solver": self.captcha_solver if can_submit_live else None,
+            }
+            if shared_browser is not None and "browser" in inspect.signature(fill_application_form).parameters:
+                fill_kwargs["browser"] = shared_browser
+            fill_res = await fill_application_form(**fill_kwargs)
 
             # Record telemetry for field fills
             for k, val in answers.items():
@@ -399,12 +462,19 @@ class AutonomousRunner:
                 self.db.add(application)
                 self.db.flush()
 
-            if fill_res.unmatched_fields or fill_res.fields_attempted == 0:
+            options_map = {ctrl.key: list(getattr(ctrl, "options", []) or []) for ctrl in real_form.controls}
+            section_map = {ctrl.key: str(getattr(ctrl, "section", "application") or "application") for ctrl in real_form.controls}
+            required_unmatched = [k for k in (fill_res.unmatched_fields or []) if k in required_keys]
+            optional_unmatched = [k for k in (fill_res.unmatched_fields or []) if k not in required_keys]
+            if optional_unmatched:
+                logger.info("Ignoring optional unmatched fields for %s: %s", job.title, optional_unmatched)
+
+            if required_unmatched or fill_res.fields_attempted == 0:
                 from app.evidence import record_evidence
                 from app.review_queue import open_task
                 from app.models import ReviewTask
 
-                err = fill_res.error or (f"Unmatched fields: {fill_res.unmatched_fields}" if fill_res.unmatched_fields else "No form fields detected or attempted on page")
+                err = fill_res.error or (f"Unmatched required fields: {required_unmatched}" if required_unmatched else "No form fields detected or attempted on page")
                 prev_stage = job.stage
                 job.stage = PipelineStage.needs_review.value
                 application.stage = PipelineStage.needs_review.value
@@ -413,18 +483,19 @@ class AutonomousRunner:
                     {
                         "key": k,
                         "label": labels.get(k, k),
-                        "section": "application",
-                        "required": k in required_keys,
+                        "section": section_map.get(k, "application"),
+                        "required": True,
+                        "options": options_map.get(k, []),
                         "reason": f"Unmatched field during browser form fill ({k})",
                     }
-                    for k in (fill_res.unmatched_fields or [])
+                    for k in required_unmatched
                 ]
                 form_summary = real_form.summary() if hasattr(real_form, "summary") else {"source": real_form.source, "url": real_form.url, "fields_total": len(real_form.controls)}
                 application.validation_json = json.dumps(
                     {
                         "ok": False,
                         "form": form_summary,
-                        "blockers": ["ambiguous_question"] if fill_res.unmatched_fields else ["form_fetch_failed"],
+                        "blockers": ["ambiguous_question"] if required_unmatched else ["form_fetch_failed"],
                         "blocked_fields": blocked_items,
                         "planned": answers,
                     },

@@ -17,8 +17,9 @@ from sqlalchemy.orm import Session
 
 from app.autonomous_material_verification import verify_job_materials_claims
 from app.config import Settings
+from app.decisioning import Decision
 from app.models import Application, Job, PipelineStage, ReviewTask
-from app.pipeline import transition
+from app.pipeline import deterministic_gate, transition
 from app.profile import verified_profile
 from app.question_catalog import QUESTION_CATALOG
 
@@ -84,11 +85,44 @@ def revalidate_single_task(
                     "reason": f"Company {job.company} is on exclusion list",
                 }
 
+            # Re-evaluate job against current deterministic eligibility & targeting rules
+            if settings is not None:
+                report = deterministic_gate(job, settings)
+                if report.decision == Decision.REJECT:
+                    task.status = "rejected"
+                    task.resolved_at = datetime.now(UTC)
+                    task.resolution_note = f"Auto-rejected on revalidation: {report.reason}"
+                    db.add(task)
+                    if job.stage in {
+                        PipelineStage.review.value,
+                        PipelineStage.needs_review.value,
+                        PipelineStage.shortlisted.value,
+                        PipelineStage.ready_to_apply.value,
+                        PipelineStage.validated.value,
+                    }:
+                        transition(db, job, PipelineStage.rejected, report.reason)
+                    db.commit()
+                    return {
+                        "task_id": task.id,
+                        "status": "rejected",
+                        "revalidated": True,
+                        "resolved": False,
+                        "reason": report.reason,
+                    }
+                if report.decision == Decision.REVIEW:
+                    return {
+                        "task_id": task.id,
+                        "status": "open",
+                        "revalidated": True,
+                        "resolved": False,
+                        "reason": f"Still requires review: {report.reason}",
+                    }
+
             # Check if profile is populated
             profile = verified_profile(db)
             if len(profile.facts) >= 5:
                 can_resolve = True
-                resolution_note = "Profile facts confirmed; decision review criteria satisfied"
+                resolution_note = "Deterministic eligibility and profile facts confirmed; decision review satisfied"
 
     # 2. Materials Review Revalidation
     elif reason == "materials_review":
@@ -100,63 +134,83 @@ def revalidate_single_task(
 
     # 3. Question & Control Revalidations
     elif reason in {"ambiguous_question", "legal_answer_missing", "sensitive_answer_missing", "unsupported_control"}:
-        # Check if question key or detail has an answer in the vault
+        from app.knowledge_book import KnowledgeBook
+        from app.option_derivation import derive_option
+
         task_detail = task.detail or ""
-        # Match against known catalog keys or answers
-        catalog_keys = {
-            (item.get("canonical_key") or item.get("key")): (item.get("label") or item.get("canonical_question", ""))
-            for item in QUESTION_CATALOG
-            if isinstance(item, dict) and (item.get("canonical_key") or item.get("key"))
-        }
-        matched_key = None
-        for k in stored_answers:
-            if k in task_detail.lower() or (catalog_keys.get(k, "") and catalog_keys.get(k, "").lower() in task_detail.lower()):
-                matched_key = k
-                break
-
-        if matched_key:
-            can_resolve = True
-            resolution_note = f"Answer found in vault for key '{matched_key}'"
-
-        # Also check all blocked_fields in application validation_json using stored_answers + KnowledgeBook
-        if not can_resolve and app and app.validation_json:
+        bfs: list[Any] = []
+        if app and app.validation_json:
             try:
-                from app.knowledge_book import KnowledgeBook
-                kb = KnowledgeBook.from_database(db)
                 vdata = json.loads(app.validation_json)
                 bfs = vdata.get("blocked_fields") or []
-                if bfs:
-                    all_resolved = True
-                    for bf in bfs:
-                        if isinstance(bf, dict):
-                            bk = (bf.get("key") or bf.get("name") or "").lower()
-                            blabel = bf.get("label") or bf.get("question") or bk
-                            btype = bf.get("field_type") or bf.get("type") or "text"
-                            bopts = bf.get("options") or []
-                        else:
-                            bk = str(bf).lower()
-                            blabel = str(bf)
-                            btype = "text"
-                            bopts = []
-                        if bk and (bk in stored_answers or any(bk in sa or sa in bk for sa in stored_answers)):
-                            continue
-                        res_field = kb.resolve_field(
-                            label=blabel,
-                            field_name=bk,
-                            field_type=btype,
-                            options=bopts,
-                            required=True,
-                            company=job.company if job else None,
-                            role_title=job.title if job else None,
-                        )
-                        if not res_field.resolved:
-                            all_resolved = False
-                            break
-                    if all_resolved:
-                        can_resolve = True
-                        resolution_note = f"All {len(bfs)} blocked field(s) resolved via Answer Vault / KnowledgeBook"
             except Exception:
-                pass
+                bfs = []
+
+        stored_lower = {k.lower(): v for k, v in stored_answers.items()}
+
+        if bfs:
+            kb = KnowledgeBook.from_database(db)
+            all_resolved = True
+            for bf in bfs:
+                if isinstance(bf, dict):
+                    if bf.get("required") is False:
+                        continue
+                    bk = str(bf.get("key") or bf.get("name") or "").lower()
+                    blabel = str(bf.get("label") or bf.get("question") or bk)
+                    bopts = list(bf.get("options") or [])
+                    breason = str(bf.get("reason") or "")
+                else:
+                    bk = str(bf).lower()
+                    blabel = str(bf)
+                    bopts = []
+                    breason = ""
+
+                if "unsupported" in breason:
+                    # Wait for form re-fetch / adapter support rather than guessing
+                    all_resolved = False
+                    break
+
+                stored_val = None
+                if bk:
+                    if bk in stored_lower:
+                        stored_val = stored_lower[bk]
+                    else:
+                        for sa, sv in stored_lower.items():
+                            if len(sa) >= 4 and (bk in sa or sa in bk):
+                                stored_val = sv
+                                break
+
+                if stored_val is not None:
+                    if not bopts or derive_option(bk, stored_val, bopts) or kb._match_option(stored_val, bopts):
+                        continue
+
+                ans_val, _ans_reason = kb.resolve_screening_question(blabel, bopts or None)
+                if ans_val is not None:
+                    if not bopts or derive_option(bk or "custom", ans_val, bopts) or kb._match_option(str(ans_val), bopts):
+                        continue
+
+                all_resolved = False
+                break
+
+            if all_resolved:
+                can_resolve = True
+                resolution_note = f"All {len(bfs)} blocked field(s) resolved or optional-only"
+        else:
+            # Match against known catalog keys or answers when no structured blocked_fields list exists
+            catalog_keys = {
+                (item.get("canonical_key") or item.get("key")): (item.get("label") or item.get("canonical_question", ""))
+                for item in QUESTION_CATALOG
+                if isinstance(item, dict) and (item.get("canonical_key") or item.get("key"))
+            }
+            matched_key = None
+            for k in stored_answers:
+                if k in task_detail.lower() or (catalog_keys.get(k, "") and catalog_keys.get(k, "").lower() in task_detail.lower()):
+                    matched_key = k
+                    break
+
+            if matched_key:
+                can_resolve = True
+                resolution_note = f"Answer found in vault for key '{matched_key}'"
 
     if can_resolve:
         task.status = "resolved"

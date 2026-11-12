@@ -254,6 +254,13 @@
             ],
             "title": "Label"
           },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
           "reason": {
             "anyOf": [
               {
@@ -285,6 +292,7 @@
         "required": [
           "key",
           "label",
+          "options",
           "reason",
           "required",
           "section"
@@ -377,6 +385,21 @@
           "verified_count"
         ],
         "title": "ClaimsVerificationOut",
+        "type": "object"
+      },
+      "ClearUncertainHoldIn": {
+        "properties": {
+          "action": {
+            "default": "requeue",
+            "enum": [
+              "requeue",
+              "withdraw"
+            ],
+            "title": "Action",
+            "type": "string"
+          }
+        },
+        "title": "ClearUncertainHoldIn",
         "type": "object"
       },
       "CycleOut": {
@@ -4424,7 +4447,7 @@
   "paths": {
     "/": {
       "get": {
-        "operationId": "dashboard__head",
+        "operationId": "dashboard__get",
         "responses": {
           "200": {
             "content": {
@@ -4440,7 +4463,7 @@
         "summary": "Dashboard"
       },
       "head": {
-        "operationId": "dashboard__head",
+        "operationId": "dashboard__get",
         "responses": {
           "200": {
             "content": {
@@ -4934,6 +4957,34 @@
     "/api/autonomous/run": {
       "post": {
         "operationId": "trigger_autonomous_run_api_autonomous_run_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "live",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Live"
+            }
+          },
+          {
+            "in": "query",
+            "name": "headed",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Headed",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -4946,6 +4997,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Trigger Autonomous Run"
@@ -5273,7 +5334,7 @@
     "/api/health": {
       "get": {
         "description": "Liveness probe. Open to everyone; details only for authenticated callers.",
-        "operationId": "health_api_health_head",
+        "operationId": "health_api_health_get",
         "responses": {
           "200": {
             "content": {
@@ -5290,7 +5351,7 @@
       },
       "head": {
         "description": "Liveness probe. Open to everyone; details only for authenticated callers.",
-        "operationId": "health_api_health_head",
+        "operationId": "health_api_health_get",
         "responses": {
           "200": {
             "content": {
@@ -5654,6 +5715,66 @@
         ]
       }
     },
+    "/api/jobs/{job_id}/clear-uncertain-hold": {
+      "post": {
+        "description": "Owner override: resolve a stuck submission_uncertain hold (re-queue or withdraw).",
+        "operationId": "clear_job_uncertain_hold_api_jobs__job_id__clear_uncertain_hold_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ClearUncertainHoldIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clear Job Uncertain Hold",
+        "tags": [
+          "remote"
+        ]
+      }
+    },
     "/api/jobs/{job_id}/form": {
       "get": {
         "description": "Fetch the job's real application form (read-only) and plan it against the vault.\n\nNo state changes, no evidence, nothing submitted. Values for sensitive or\nlegal fields are redacted in the response.",
@@ -5802,6 +5923,16 @@
             "schema": {
               "default": false,
               "title": "Dry Run",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "headed",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Headed",
               "type": "boolean"
             }
           }

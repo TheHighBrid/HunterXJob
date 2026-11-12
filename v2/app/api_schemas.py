@@ -284,6 +284,11 @@ class BlockedFieldOut(Out):
     section: str | None = None
     required: bool = False
     reason: str | None = None
+    options: list[str] = Field(default_factory=list)
+
+
+class ClearUncertainHoldIn(BaseModel):
+    action: Literal["requeue", "withdraw"] = "requeue"
 
 
 class FormStatusOut(Out):

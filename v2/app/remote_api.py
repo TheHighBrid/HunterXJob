@@ -28,6 +28,7 @@ from app.api_schemas import (
     BatchReviewResultOut,
     BatchTaskIdsIn,
     ClaimsVerificationOut,
+    ClearUncertainHoldIn,
     CycleOut,
     FlagIn,
     FlagOut,
@@ -60,7 +61,15 @@ from app.models import Application, FeatureFlag, Job, ReviewTask, iso_utc
 from app.pipeline import preview_form
 from app.real_forms import LiveFormProvider
 from app.reports import summary
-from app.review_actions import ReviewActionError, approve_task, reject_task, resolve_task, task_detail, task_summary
+from app.review_actions import (
+    ReviewActionError,
+    approve_task,
+    clear_uncertain_hold,
+    reject_task,
+    resolve_task,
+    task_detail,
+    task_summary,
+)
 from app.runtime import get_runner
 from app.runtime_settings import SettingsPatch, overridden_keys, save_patch, settings_view
 from app.security import auth_posture, require_api_key
@@ -138,6 +147,21 @@ def unlink_duplicate(job_id: str, db: DbSession) -> dict[str, object]:
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
     return job_detail(db, row)
+
+
+@router.post("/api/jobs/{job_id}/clear-uncertain-hold", response_model=JobDetailOut, tags=["remote"])
+def clear_job_uncertain_hold(
+    job_id: str,
+    db: DbSession,
+    payload: ClearUncertainHoldIn | None = None,
+) -> dict[str, object]:
+    """Owner override: resolve a stuck submission_uncertain hold (re-queue or withdraw)."""
+    action = payload.action if payload else "requeue"
+    try:
+        updated = clear_uncertain_hold(db, job_id, action)
+    except ReviewActionError as exc:
+        raise HTTPException(exc.status_code, exc.detail) from exc
+    return job_detail(db, updated)
 
 
 @router.post("/api/jobs/{job_id}/check-liveness", response_model=JobDetailOut, tags=["remote"])

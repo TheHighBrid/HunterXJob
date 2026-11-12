@@ -161,6 +161,8 @@ def score_pending_jobs(db: Session, settings: Settings, resume_facts: str, use_a
     processed = 0
 
     for job in jobs:
+        if job.stage not in {PipelineStage.discovered.value, PipelineStage.normalized.value}:
+            continue
         processed += 1
         job.platform = platform_for_job(job)
         result = deterministic_gate(job, settings)
@@ -321,6 +323,7 @@ def _record_blockers(application: Application, form: _LoadedForm, blockers: list
         "section": item.control.section,
         "required": item.control.required,
         "reason": item.reason,
+        "options": list(item.control.options or []),
     } for item in plan.items if item.status == "review"]
     application.validation_json = json.dumps(
         {"ok": False, "form": form.summary, "blockers": blockers, "blocked_fields": blocked, "planned": _planned(plan)},

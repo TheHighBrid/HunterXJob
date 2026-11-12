@@ -12,13 +12,13 @@ export interface paths {
             cookie?: never;
         };
         /** Dashboard */
-        get: operations["dashboard__head"];
+        get: operations["dashboard__get"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         /** Dashboard */
-        head: operations["dashboard__head"];
+        head: operations["dashboard__get"];
         patch?: never;
         trace?: never;
     };
@@ -469,7 +469,7 @@ export interface paths {
          * Health
          * @description Liveness probe. Open to everyone; details only for authenticated callers.
          */
-        get: operations["health_api_health_head"];
+        get: operations["health_api_health_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -478,7 +478,7 @@ export interface paths {
          * Health
          * @description Liveness probe. Open to everyone; details only for authenticated callers.
          */
-        head: operations["health_api_health_head"];
+        head: operations["health_api_health_get"];
         patch?: never;
         trace?: never;
     };
@@ -604,6 +604,26 @@ export interface paths {
         get: operations["get_job_claims_verification_api_jobs__job_id__claims_verification_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{job_id}/clear-uncertain-hold": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clear Job Uncertain Hold
+         * @description Owner override: resolve a stuck submission_uncertain hold (re-queue or withdraw).
+         */
+        post: operations["clear_job_uncertain_hold_api_jobs__job_id__clear_uncertain_hold_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1411,6 +1431,8 @@ export interface components {
             key: string;
             /** Label */
             label: string | null;
+            /** Options */
+            options: string[];
             /** Reason */
             reason: string | null;
             /**
@@ -1457,6 +1479,15 @@ export interface components {
             }[];
             /** Verified Count */
             verified_count: number;
+        };
+        /** ClearUncertainHoldIn */
+        ClearUncertainHoldIn: {
+            /**
+             * Action
+             * @default requeue
+             * @enum {string}
+             */
+            action: "requeue" | "withdraw";
         };
         /** CycleOut */
         CycleOut: {
@@ -2776,7 +2807,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    dashboard__head: {
+    dashboard__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2796,7 +2827,7 @@ export interface operations {
             };
         };
     };
-    dashboard__head: {
+    dashboard__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3205,7 +3236,10 @@ export interface operations {
     };
     trigger_autonomous_run_api_autonomous_run_post: {
         parameters: {
-            query?: never;
+            query?: {
+                live?: boolean | null;
+                headed?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3221,6 +3255,15 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -3504,7 +3547,7 @@ export interface operations {
             };
         };
     };
-    health_api_health_head: {
+    health_api_health_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3524,7 +3567,7 @@ export interface operations {
             };
         };
     };
-    health_api_health_head: {
+    health_api_health_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3771,6 +3814,41 @@ export interface operations {
             };
         };
     };
+    clear_job_uncertain_hold_api_jobs__job_id__clear_uncertain_hold_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ClearUncertainHoldIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     job_form_api_jobs__job_id__form_get: {
         parameters: {
             query?: never;
@@ -3868,6 +3946,7 @@ export interface operations {
         parameters: {
             query?: {
                 dry_run?: boolean;
+                headed?: boolean;
             };
             header?: never;
             path: {

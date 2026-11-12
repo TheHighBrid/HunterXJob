@@ -341,3 +341,239 @@ def test_api_autonomous_endpoints(monkeypatch, tmp_path):
     assert "smartrecruiters" in data["adapters_available"]
     assert "workday" in data["adapters_available"]
     app.dependency_overrides.clear()
+
+
+def test_autonomous_loop_prioritizes_validated_and_approved_and_skips_validated_in_dry_run(monkeypatch, tmp_path):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.autonomous_loop import AutonomousApplicationRecord, AutonomousConfig, AutonomousRunner
+    from app.config import Settings
+    from app.db import Base
+    from app.flags import set_flag
+    from app.models import Job, PipelineStage
+
+    db_path = tmp_path / "loop.db"
+    settings = Settings(
+        api_key="k" * 40,
+        database_file=str(db_path),
+        artifact_dir=str(tmp_path / "artifacts"),
+        allow_live_submission=True,
+    )
+    engine = create_engine(f"sqlite:///{db_path}")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    monkeypatch.setattr("app.resume_facts.read_resume_facts", lambda: "")
+
+    with Session() as db:
+        set_flag(db, "allow_live_submission", True)
+        set_flag(db, "global_kill_switch", False)
+        db.add_all([
+            Job(
+                id="validated-job",
+                source="greenhouse",
+                external_id="gh-val-1",
+                title="Product Designer Validated",
+                company="Acme Validated",
+                url="https://boards.greenhouse.io/acme1/jobs/1",
+                stage=PipelineStage.validated.value,
+                eligible=True,
+                final_score=70.0,
+            ),
+            Job(
+                id="ready-job",
+                source="greenhouse",
+                external_id="gh-ready-2",
+                title="Product Designer Ready",
+                company="Acme Ready",
+                url="https://boards.greenhouse.io/acme2/jobs/2",
+                stage=PipelineStage.ready_to_apply.value,
+                eligible=True,
+                final_score=72.0,
+            ),
+            Job(
+                id="approved-job",
+                source="greenhouse",
+                external_id="gh-appr-3",
+                title="Product Designer Approved",
+                company="Acme Approved",
+                url="https://boards.greenhouse.io/acme3/jobs/3",
+                stage=PipelineStage.approved.value,
+                eligible=True,
+                final_score=75.0,
+            ),
+            Job(
+                id="discovered-job",
+                source="greenhouse",
+                external_id="gh-disc-4",
+                title="Product Designer Discovered",
+                company="Acme Discovered",
+                url="https://boards.greenhouse.io/acme4/jobs/4",
+                stage=PipelineStage.discovered.value,
+                eligible=True,
+                final_score=95.0,
+            ),
+        ])
+        db.commit()
+
+        processed_live: list[tuple[str, str]] = []
+
+        async def _fake_live(self, job, book, out_dir):
+            processed_live.append((job.id, job.stage))
+            return AutonomousApplicationRecord(
+                job_id=job.id,
+                company=job.company,
+                title=job.title,
+                url=job.url,
+                platform="greenhouse",
+                score=float(job.final_score or 0.0),
+                stage=PipelineStage.submitted.value,
+                status="submitted",
+                submitted=True,
+            )
+
+        monkeypatch.setattr(AutonomousRunner, "_process_job", _fake_live)
+        live_runner = AutonomousRunner(db, settings, AutonomousConfig(allow_live_submission=True))
+        live_runner.run()
+
+        assert processed_live == [
+            ("validated-job", PipelineStage.validated.value),
+            ("ready-job", PipelineStage.ready_to_apply.value),
+            ("approved-job", PipelineStage.approved.value),
+            ("discovered-job", PipelineStage.discovered.value),
+        ]
+
+        processed_dry: list[tuple[str, str]] = []
+
+        async def _fake_dry(self, job, book, out_dir):
+            processed_dry.append((job.id, job.stage))
+            return AutonomousApplicationRecord(
+                job_id=job.id,
+                company=job.company,
+                title=job.title,
+                url=job.url,
+                platform="greenhouse",
+                score=float(job.final_score or 0.0),
+                stage=PipelineStage.ready_to_apply.value,
+                status="dry_run_verified",
+                submitted=False,
+            )
+
+        monkeypatch.setattr(AutonomousRunner, "_process_job", _fake_dry)
+        dry_runner = AutonomousRunner(db, settings, AutonomousConfig(allow_live_submission=False))
+        dry_runner.run()
+
+        assert processed_dry == [
+            ("ready-job", PipelineStage.ready_to_apply.value),
+            ("approved-job", PipelineStage.approved.value),
+            ("discovered-job", PipelineStage.discovered.value),
+        ]
+
+
+def test_api_autonomous_run_respects_live_and_headed_query_params(monkeypatch, tmp_path):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app import main
+    from app.autonomous_loop import AutonomousApplicationRecord, AutonomousRunSummary
+    from app.config import Settings, get_settings
+    from app.db import Base
+    from app.flags import set_flag
+    from app.main import app, get_db
+    from app.models import Job, PipelineStage
+
+    KEY = "k" * 40
+    db_path = tmp_path / "api_loop.db"
+    settings = Settings(
+        api_key=KEY,
+        database_file=str(db_path),
+        allow_live_submission=False,
+    )
+    engine = create_engine(f"sqlite:///{db_path}")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as seed:
+        seed.add(
+            Job(
+                id="job-headed-1",
+                source="greenhouse",
+                external_id="gh-head-1",
+                title="Senior UX Designer",
+                company="Headed Co",
+                url="https://boards.greenhouse.io/headedco/jobs/1",
+                stage=PipelineStage.validated.value,
+                eligible=True,
+                final_score=80.0,
+            )
+        )
+        seed.commit()
+
+    def _get_db():
+        with Session() as session:
+            yield session
+
+    captured_configs = []
+
+    class _StubRunner:
+        def __init__(self, db, s, config):
+            captured_configs.append(config)
+
+        def run(self):
+            return AutonomousRunSummary(started_at="2026-11-10T00:00:00+00:00", finished_at="2026-11-10T00:00:01+00:00")
+
+        def run_job(self, job):
+            return AutonomousApplicationRecord(
+                job_id=job.id,
+                company=job.company,
+                title=job.title,
+                url=job.url,
+                platform="greenhouse",
+                score=float(job.final_score or 0.0),
+                stage=job.stage,
+                status="dry_run_verified",
+                submitted=False,
+            )
+
+    monkeypatch.setattr("app.autonomous_loop.AutonomousRunner", _StubRunner)
+    monkeypatch.setattr(main, "settings", settings)
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_db] = _get_db
+
+    try:
+        client = TestClient(app, raise_server_exceptions=False)
+
+        # 1. Server & DB disallow live -> ?live=true&headed=true keeps allow_live_submission=False, headless=False
+        resp = client.post("/api/autonomous/run?live=true&headed=true", headers={"X-API-Key": KEY})
+        assert resp.status_code == 200
+        assert captured_configs[-1].allow_live_submission is False
+        assert captured_configs[-1].headless is False
+
+        # 2. Unlock locally -> ?live=false forces dry-run; omitted defaults to live=True
+        settings.allow_live_submission = True
+        with Session() as s:
+            set_flag(s, "allow_live_submission", True)
+
+        resp = client.post("/api/autonomous/run?live=false&headed=false", headers={"X-API-Key": KEY})
+        assert resp.status_code == 200
+        assert captured_configs[-1].allow_live_submission is False
+        assert captured_configs[-1].headless is True
+
+        resp = client.post("/api/autonomous/run", headers={"X-API-Key": KEY})
+        assert resp.status_code == 200
+        assert captured_configs[-1].allow_live_submission is True
+        assert captured_configs[-1].headless is True
+
+        # 3. Single-job run forwards headed=true and respects dry_run
+        resp = client.post("/api/jobs/job-headed-1/run-autonomous?dry_run=false&headed=true", headers={"X-API-Key": KEY})
+        assert resp.status_code == 200
+        assert captured_configs[-1].allow_live_submission is True
+        assert captured_configs[-1].headless is False
+
+        resp = client.post("/api/jobs/job-headed-1/run-autonomous?dry_run=true&headed=true", headers={"X-API-Key": KEY})
+        assert resp.status_code == 200
+        assert captured_configs[-1].allow_live_submission is False
+        assert captured_configs[-1].headless is False
+    finally:
+        app.dependency_overrides.clear()

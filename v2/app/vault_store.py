@@ -17,15 +17,19 @@ logger = logging.getLogger(__name__)
 # were not set more specifically.
 _POLICY_KEY_ALIASES: dict[str, tuple[str, ...]] = {
     # Start date & notice period
-    "start_date": ("availability_date", "available_start_date", "earliest_start", "earliest_start_date", "notice_period", "when_can_you_start"),
-    "availability_date": ("start_date", "available_start_date", "earliest_start", "notice_period"),
+    "start_date": ("availability_date", "available_start_date", "earliest_start", "earliest_start_date", "notice_period", "when_can_you_start", "start_availability"),
+    "availability_date": ("start_date", "available_start_date", "earliest_start", "notice_period", "start_availability"),
+    "start_availability": ("start_date", "availability_date", "available_start_date", "earliest_start", "notice_period"),
     "available_start_date": ("start_date", "availability_date", "notice_period"),
     "earliest_start": ("start_date", "availability_date", "notice_period"),
     "notice_period": ("start_date", "availability_date", "available_start_date"),
 
     # Work authorization & residency
     "work_authorization": ("work_authorization_ca", "authorized_to_work", "work_auth", "canada_work_eligibility", "eligible_to_work"),
-    "work_authorization_ca": ("work_authorization", "authorized_to_work", "canada_work_eligibility", "eligible_to_work"),
+    "work_authorization_ca": ("work_authorization", "authorized_to_work", "canada_work_eligibility", "canadian_work_authorization", "eligible_to_work"),
+    "canadian_work_authorization": ("work_authorization_ca", "canada_work_eligibility", "work_authorization", "authorized_to_work"),
+    "work_authorization_us": ("us_work_authorization",),
+    "us_work_authorization": ("work_authorization_us",),
     "authorized_to_work": ("work_authorization", "work_authorization_ca"),
     "canada_work_eligibility": ("work_authorization_ca", "work_authorization"),
     "citizenship_ca": ("citizenship", "citizenship_residency", "country_of_citizenship"),
@@ -34,7 +38,10 @@ _POLICY_KEY_ALIASES: dict[str, tuple[str, ...]] = {
     # Sponsorship
     "sponsorship_required": ("sponsorship", "sponsorship_ca", "visa_sponsorship", "require_sponsorship", "sponsorship_future_required"),
     "sponsorship": ("sponsorship_required", "sponsorship_ca", "visa_sponsorship", "require_sponsorship"),
-    "sponsorship_ca": ("sponsorship_required", "sponsorship", "visa_sponsorship"),
+    "sponsorship_ca": ("sponsorship_required_ca", "sponsorship_required", "sponsorship", "visa_sponsorship"),
+    "sponsorship_required_ca": ("sponsorship_ca", "sponsorship_required", "sponsorship", "visa_sponsorship"),
+    "sponsorship_us": ("sponsorship_required_us",),
+    "sponsorship_required_us": ("sponsorship_us",),
     "visa_sponsorship": ("sponsorship_required", "sponsorship"),
 
     # Salary & Compensation
@@ -80,8 +87,9 @@ _POLICY_KEY_ALIASES: dict[str, tuple[str, ...]] = {
     # Motivation & Experience
     "why_company_motivation": ("motivation", "why_company"),
     "financial_experience": ("banking_experience_years", "fraud_experience", "collections_experience"),
-    "referral_source": ("how_heard", "source", "source_channel"),
-    "how_heard": ("referral_source", "source"),
+    "referral_source": ("hear_about_us", "how_heard", "source", "source_channel"),
+    "hear_about_us": ("referral_source", "how_heard", "source", "source_channel"),
+    "how_heard": ("referral_source", "hear_about_us", "source"),
 
     # Social links
     "linkedin_url": ("linkedin", "social_linkedin", "linkedin_profile"),
@@ -174,7 +182,7 @@ def load_vault(db: Session, scope: str | Iterable[str] = "global", *, profile: b
                 source = AnswerSource.IMPORTED
         record = AnswerRecord(key=row.key, value=row.value, source=source, confidence=row.confidence, note=row.note)
         records.append(record)
-        for alias in _POLICY_KEY_ALIASES.get(row.key, ()):
+        for alias in _POLICY_KEY_ALIASES.get(row.key.strip().lower(), ()):
             aliases.append(AnswerRecord(
                 key=alias, value=row.value, source=source, confidence=row.confidence,
                 note=row.note or f"fallback from {row.key}",

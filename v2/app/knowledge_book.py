@@ -30,6 +30,22 @@ from app.question_catalog import (
 
 logger = logging.getLogger(__name__)
 
+_FILE_ANSWER_KEYS = frozenset({
+    "resume",
+    "_systemfield_resume",
+    "cover_letter",
+    "_systemfield_cover_letter",
+    "resume_file",
+    "cv",
+})
+_FILE_UPLOAD_ONLY_KEYS = frozenset({
+    "resume",
+    "_systemfield_resume",
+    "_systemfield_cover_letter",
+    "resume_file",
+    "cv",
+})
+
 
 def enforce_length_constraints(
     text: str,
@@ -119,6 +135,37 @@ class KnowledgeBook:
         )
 
     @classmethod
+    def from_database(cls, db: Any, profile_override: Any = None) -> KnowledgeBook:
+        """Build a KnowledgeBook hydrated with verified profile facts and Answer Vault policies."""
+        from sqlalchemy import select
+        from app.models import AnswerPolicy
+        from app.profile import verified_profile
+
+        profile = profile_override if profile_override is not None else (verified_profile(db) or {})
+        custom_answers: dict[str, Any] = {}
+        preferences: dict[str, Any] = {}
+
+        rows = db.execute(select(AnswerPolicy)).scalars().all()
+        rows_sorted = sorted(rows, key=lambda r: (0 if r.scope == "global" else 1, r.updated_at or r.created_at))
+        for row in rows_sorted:
+            if row.key and row.value is not None:
+                key_low = row.key.strip().lower()
+                if key_low in _FILE_ANSWER_KEYS or key_low.startswith("missing_answers_for_"):
+                    continue
+                custom_answers[row.key] = row.value
+                custom_answers[key_low] = row.value
+
+        if "salary_expectation" in custom_answers:
+            preferences["desired_salary"] = custom_answers["salary_expectation"]
+        elif "minimum_acceptable_salary" in custom_answers:
+            preferences["desired_salary"] = custom_answers["minimum_acceptable_salary"]
+        if "willing_to_relocate" in custom_answers:
+            val_low = str(custom_answers["willing_to_relocate"]).strip().lower()
+            preferences["willing_to_relocate"] = val_low in ("yes", "true", "1", "y")
+
+        return cls(profile=profile, custom_answers=custom_answers, preferences=preferences)
+
+    @classmethod
     def from_yaml_file(cls, path: Path | str) -> KnowledgeBook:
         """Load knowledge book from a combined profile/knowledge YAML file."""
         import yaml
@@ -189,6 +236,7 @@ class KnowledgeBook:
         pol_item = item.get("policy_item")
         if pol_item is not None:
             if pol_item.mode == "auto" and pol_item.answer:
+                from app.option_derivation import derive_option
                 val = pol_item.answer
                 if options:
                     matched = None
@@ -196,6 +244,8 @@ class KnowledgeBook:
                         matched = self._match_option(eq, options)
                         if matched:
                             break
+                    if not matched:
+                        matched = derive_option(pol_item.key, val, options)
                     if not matched:
                         matched = self._match_option(val, options)
                     if not matched:
@@ -369,25 +419,57 @@ class KnowledgeBook:
             return val, f"catalog:{key}"
 
         # 12. Demographics
-        if key == "gender_identity":
-            val = "Male"
+        if key in ("gender_identity", "gender"):
+            from app.option_derivation import derive_option
+            raw_gender = self.custom_answers.get("gender") or self.custom_answers.get("gender_identity") or "Man"
+            val = raw_gender
             if options:
-                val = self._match_option("Male", options) or self._match_option("Prefer not to answer", options) or val
+                val = (
+                    derive_option("gender", raw_gender, options)
+                    or self._match_option(raw_gender, options)
+                    or self._match_option("Prefer not to respond", options)
+                    or self._match_option("Prefer not to answer", options)
+                    or self._match_option("Decline to self-identify", options)
+                    or val
+                )
             return val, f"catalog:{key}"
-        if key == "veteran_status":
-            val = "I am not a protected veteran"
+        if key in ("veteran_status", "veteran"):
+            from app.option_derivation import derive_option
+            raw_vet = self.custom_answers.get("veteran_status") or self.custom_answers.get("veteran") or "No"
+            val = "I am not a veteran"
             if options:
-                val = self._match_option(val, options) or self._match_option("No", options) or self._match_option("Prefer not to answer", options) or val
+                val = (
+                    derive_option("veteran_status", raw_vet, options)
+                    or self._match_option("I am not a veteran", options)
+                    or self._match_option("I am not a protected veteran", options)
+                    or self._match_option("I do not wish to answer", options)
+                    or self._match_option("Prefer not to disclose", options)
+                    or self._match_option("Prefer not to answer", options)
+                    or self._match_option("No", options)
+                    or val
+                )
             return val, f"catalog:{key}"
-        if key == "disability_status":
+        if key in ("disability_status", "disability"):
             val = "No, I do not have a disability"
             if options:
-                val = self._match_option(val, options) or self._match_option("No", options) or self._match_option("Prefer not to answer", options) or val
+                val = (
+                    self._match_option(val, options)
+                    or self._match_option("No", options)
+                    or self._match_option("Prefer not to respond", options)
+                    or self._match_option("Prefer not to answer", options)
+                    or val
+                )
             return val, f"catalog:{key}"
         if key in ("race_ethnicity", "hispanic_latino"):
             val = "Prefer not to answer"
             if options:
-                val = self._match_option("Prefer not to answer", options) or self._match_option("Decline to self-identify", options) or val
+                val = (
+                    self._match_option("Prefer not to respond", options)
+                    or self._match_option("Prefer not to disclose", options)
+                    or self._match_option("Prefer not to answer", options)
+                    or self._match_option("Decline to self-identify", options)
+                    or val
+                )
             return val, f"catalog:{key}"
 
         # 12b. Motivation and work environment/culture
@@ -442,9 +524,17 @@ class KnowledgeBook:
         if options and len(options) == 1:
             return options[0], "single_option_acknowledgment"
 
-        # 1. Direct custom answer override if configured
+        # 1. Direct custom answer override if configured (never match file/system keys by substring)
+        text_norm = " ".join(text.lower().split())
         for key, val in self.custom_answers.items():
-            if key.lower() in text.lower():
+            k_low = key.strip().lower()
+            if (
+                not k_low
+                or k_low in _FILE_ANSWER_KEYS
+                or k_low.startswith(("missing_answers_for_", "question_", "_systemfield_"))
+            ):
+                continue
+            if k_low == text_norm or (len(k_low) >= 8 and k_low.replace("_", " ") in text_norm):
                 return val, "custom_answer_match"
 
         if "maxmind" in text.lower() and ("interested" in text.lower() or "fit" in text.lower()):
@@ -842,10 +932,15 @@ class KnowledgeBook:
                 if ol in ("no", "n", "false", "decline", "non"):
                     return opt
 
-        # Fallback to substring matching
-        for opt in options:
-            if target_norm in normalize_text(opt) or normalize_text(opt) in target_norm:
-                return opt
+        # Fallback to word-boundary containment (avoiding 'man' matching 'woman' or 'no' matching 'unknown')
+        if target_norm:
+            bound_pat = re.compile(rf"\b{re.escape(target_norm)}\b")
+            for opt in options:
+                opt_norm = normalize_text(opt)
+                if bound_pat.search(opt_norm):
+                    return opt
+                if opt_norm and len(opt_norm) >= 2 and re.search(rf"\b{re.escape(opt_norm)}\b", target_norm):
+                    return opt
 
         return None
 
@@ -892,17 +987,33 @@ class KnowledgeBook:
             "_systemfield_website": answers.get("portfolio_url"),
         }
 
+        from app.option_derivation import derive_option
+
         for ctrl in controls:
             key = getattr(ctrl, "key", "")
+            ctype_str = str(getattr(ctrl, "control_type", "") or "").lower()
+            if "file" in ctype_str or key.strip().lower() in _FILE_UPLOAD_ONLY_KEYS:
+                continue
             label = getattr(ctrl, "label", "") or key
             options = getattr(ctrl, "options", [])
+            is_required = bool(getattr(ctrl, "required", False))
+            section = str(getattr(ctrl, "section", "application") or "application").lower()
 
-            # 1. Exact match in answers or system field map
+            # 1. Exact match across control key and vault_keys or system field map
             val = None
-            if key in answers and answers[key] is not None:
-                val = answers[key]
-            elif key in system_map and system_map[key] is not None:
-                val = system_map[key]
+            candidate_keys = [key, *(getattr(ctrl, "vault_keys", []) or [])]
+            for ck in candidate_keys:
+                if not ck:
+                    continue
+                if ck in answers and answers[ck] is not None:
+                    val = answers[ck]
+                    break
+                if ck.lower() in answers and answers[ck.lower()] is not None:
+                    val = answers[ck.lower()]
+                    break
+                if ck in system_map and system_map[ck] is not None:
+                    val = system_map[ck]
+                    break
 
             # 2. Contact label heuristics (for ATS platforms that assign UUIDs to contact fields)
             if val is None:
@@ -934,18 +1045,18 @@ class KnowledgeBook:
                     else:
                         val = answers.get("city") or answers.get("location")
 
-            # 3. Screening question resolver
-            if val is None:
+            # 3. Screening question resolver (for optional free-text/unknown prompts, only answer if mandatory or options exist)
+            if val is None and (is_required or options):
                 val, reason = self.resolve_screening_question(label, options)
 
             # 4. Checkbox / consent fallbacks
             ctype_str = str(getattr(ctrl, "control_type", "")).lower()
             if val is None and ctype_str in ("checkbox", "controltype.checkbox"):
-                if getattr(ctrl, "legal", False) or any(p in label.lower() for p in ("agree", "consent", "terms", "privacy", "policy")):
+                if getattr(ctrl, "legal", False) or (is_required and any(p in label.lower() for p in ("agree", "consent", "terms", "privacy", "policy"))):
                     val = True
 
             # 5. Local Ollama LLM (llama3.2:3b) + heuristic fallback for required custom role/scenario questions
-            if val is None and getattr(ctrl, "required", False) and "file" not in ctype_str:
+            if val is None and is_required and "file" not in ctype_str:
                 min_len = getattr(ctrl, "min_length", 0) or 0
                 max_len = getattr(ctrl, "max_length", None)
                 val, reason = self.resolve_with_llm_or_fallback(
@@ -959,11 +1070,23 @@ class KnowledgeBook:
                         matched_res = match_answers_to_options([str(v) for v in val], records, allow_multiple=True)
                         if matched_res.matched:
                             resolved[key] = [m.label for m in matched_res.matched]
-                        else:
+                        elif is_required:
                             resolved[key] = list(val)
                     else:
-                        matched = self._match_option(str(val), options)
-                        resolved[key] = matched or val
+                        derived = derive_option(ctrl, val)
+                        if isinstance(derived, list):
+                            derived = derived[0] if derived else None
+                        matched = derived or self._match_option(str(val), options)
+                        if not matched and (section in ("eeoc", "demographic") or not is_required):
+                            if str(answers.get("voluntary_self_identification", "")).strip().lower() == "decline":
+                                for d_opt in ("Prefer not to respond", "Prefer not to disclose", "Decline to self-identify", "Decline To Self Identify", "I do not wish to answer", "I don't wish to answer"):
+                                    matched = self._match_option(d_opt, options)
+                                    if matched:
+                                        break
+                        if matched:
+                            resolved[key] = matched
+                        elif is_required:
+                            resolved[key] = val
                 else:
                     resolved[key] = val
 

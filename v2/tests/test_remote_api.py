@@ -422,6 +422,7 @@ MUTATING_ROUTES = {
     ("POST", "/api/materials/{material_id}/approve"),
     ("POST", "/api/materials/{material_id}/reject"),
     ("POST", "/api/jobs/{job_id}/unlink-duplicate"),
+    ("POST", "/api/jobs/{job_id}/clear-uncertain-hold"),
     ("POST", "/api/jobs/{job_id}/check-liveness"),
     ("POST", "/api/jobs/{job_id}/run-autonomous"),
     ("POST", "/api/autonomous/run"),
@@ -601,3 +602,33 @@ def test_vault_simulate_endpoint(env):
     })
     assert unmapped.status_code == 200
     assert unmapped.json()["status"] == "missing"
+
+
+def test_clear_uncertain_hold_unblocks_jobs_with_no_open_tasks(env):
+    client = env["client"]
+    with env["Session"]() as db:
+        job1 = _job(db, title="Role One", stage=PipelineStage.submission_uncertain.value)
+        app1 = _application(db, job1, PipelineStage.submission_uncertain.value, last_error="Submission not confirmed")
+        job2 = _job(db, title="Role Two", company="OtherCo", stage=PipelineStage.submission_uncertain.value)
+        _application(db, job2, PipelineStage.submission_uncertain.value, last_error="Submission not confirmed")
+        normal = _job(db, title="Normal", company="ThirdCo", stage=PipelineStage.ready_to_apply.value)
+        j1_id, a1_id, j2_id, n_id = job1.id, app1.id, job2.id, normal.id
+
+    # Non-uncertain job returns 409 safely
+    assert client.post(f"/api/jobs/{n_id}/clear-uncertain-hold", headers=AUTH, json={"action": "requeue"}).status_code == 409
+
+    # Job with zero open review tasks can be re-queued to ready_to_apply
+    res1 = client.post(f"/api/jobs/{j1_id}/clear-uncertain-hold", headers=AUTH, json={"action": "requeue"})
+    assert res1.status_code == 200, res1.text
+    assert res1.json()["stage"] == "ready_to_apply"
+    assert res1.json()["application"]["stage"] == "ready_to_apply"
+    assert res1.json()["application"]["last_error"] is None
+
+    # Job can also be withdrawn cleanly if handled manually
+    res2 = client.post(f"/api/jobs/{j2_id}/clear-uncertain-hold", headers=AUTH, json={"action": "withdraw"})
+    assert res2.status_code == 200, res2.text
+    assert res2.json()["stage"] == "withdrawn"
+    assert res2.json()["application"]["stage"] == "withdrawn"
+    with env["Session"]() as db:
+        assert db.get(Application, a1_id).stage == "ready_to_apply"
+

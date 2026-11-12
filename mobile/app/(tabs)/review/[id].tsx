@@ -96,7 +96,10 @@ function TaskHeader({ task }: { task: ReviewTaskDetail }) {
   );
 }
 
-function getSuggestionChips(key: string, label: string): string[] {
+function getSuggestionChips(key: string, label: string, options?: string[]): string[] {
+  if (options && options.length > 0 && options.length <= 10) {
+    return options;
+  }
   const text = `${key} ${label}`.toLowerCase();
   if (text.includes("sponsor") || text.includes("authoriz") || text.includes("legally") || text.includes("citizen") || text.includes("visa")) {
     return ["Canadian Citizen", "Authorized without sponsorship", "No sponsorship required", "Yes"];
@@ -104,13 +107,19 @@ function getSuggestionChips(key: string, label: string): string[] {
   if (text.includes("relocat") || text.includes("commute") || text.includes("hybrid") || text.includes("ottawa") || text.includes("location") || text.includes("remote")) {
     return ["Ottawa, ON, Canada", "Hybrid (Ottawa NCR)", "Remote Canada", "Yes"];
   }
-  if (text.includes("gender") || text.includes("race") || text.includes("veteran") || text.includes("disabilit") || text.includes("demographic") || text.includes("eeoc") || text.includes("voluntary")) {
+  if (text.includes("veteran") || text.includes("armed forces")) {
+    return ["No", "I am not a veteran", "Decline to self-identify", "Prefer not to answer"];
+  }
+  if (text.includes("gender")) {
+    return ["Man", "Male", "Decline to self-identify", "Prefer not to answer"];
+  }
+  if (text.includes("race") || text.includes("disabilit") || text.includes("demographic") || text.includes("eeoc") || text.includes("voluntary")) {
     return ["Decline to self-identify", "Prefer not to answer"];
   }
   if (text.includes("experience") || text.includes("year")) {
     return ["5+ years", "3-5 years", "Yes"];
   }
-  if (text.includes("notice") || text.includes("start")) {
+  if (text.includes("notice") || text.includes("start") || text.includes("onboard")) {
     return ["Immediately", "2 weeks notice", "Negotiable"];
   }
   return ["Yes", "No", "N/A"];
@@ -144,6 +153,7 @@ function InteractiveBlockedFieldsCard({
               section: "application",
               required: true,
               reason: task.detail || humanize(task.reason_code),
+              options: [],
             },
           ]
         : [];
@@ -215,7 +225,7 @@ function InteractiveBlockedFieldsCard({
 
       <View style={{ gap: 16, marginTop: 4 }}>
         {effectiveFields.map((field) => {
-          const suggestions = getSuggestionChips(field.key, field.label || "");
+          const suggestions = getSuggestionChips(field.key, field.label || "", field.options);
           const currentVal = answers[field.key] ?? "";
           const isSaving = savingKeys[field.key];
           const isSaved = savedKeys[field.key];

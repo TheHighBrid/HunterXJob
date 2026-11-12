@@ -151,3 +151,61 @@ def test_derive_option_supports_string_key_and_options_list():
     # Resilient against non-string keys
     assert derive_option("terms_consent", "Yes", ["Yes", "No"]) == "Yes"
 
+
+def test_gender_veteran_referral_and_experience_option_derivation():
+    # Gender: Man -> Male (and Woman -> Female), without substring bug ('man' inside 'woman')
+    c_gen = FormControl(
+        key="demographic_4005225008", label="What gender do you identify as?",
+        control_type=ControlType.SELECT,
+        options=["Female", "Male", "Non-binary", "Prefer not to respond"],
+        section="demographic", required=False, sensitive=True, vault_keys=["demographic_4005225008", "gender"],
+    )
+    assert derive_option(c_gen, "Man", "gender") == "Male"
+    assert derive_option(c_gen, "Woman", "gender") == "Female"
+
+    # Veteran: No -> I am not a veteran / I am not a protected veteran
+    c_vet = FormControl(
+        key="question_18933206008",
+        label='If you are a veteran of the armed forces in your country and would like to identify this fact to our recruiting team, please write "YES" in the text box below.',
+        control_type=ControlType.SELECT,
+        options=["I am not a veteran", "I identify as a veteran", "I do not wish to answer"],
+        section="application", required=False, sensitive=True,
+    )
+    assert derive_option(c_vet, "No", "veteran_status") == "I am not a veteran"
+
+    # Referral comma-separated multi-source policy string
+    c_ref = FormControl(
+        key="question_18073604008", label="How did you hear about this job opportunity?",
+        control_type=ControlType.SELECT,
+        options=["Referral", "LinkedIn", "Indeed", "Other"],
+        required=True, vault_keys=["question_18073604008", "referral_source"],
+    )
+    assert derive_option(c_ref, "Indeed, LinkedIn, Social Media", "referral_source") == "Indeed"
+
+    # Experience duration stored on a boolean Yes/No experience question
+    c_exp = FormControl(
+        key="cards[x][field0]", label="Do you have experience in Customer Support with a SaaS technology?",
+        control_type=ControlType.RADIO, options=["Yes", "No"], required=True,
+    )
+    assert derive_option(c_exp, "3-5 years") == "Yes"
+    assert derive_option(c_exp, "0 years") == "No"
+
+
+def test_optional_questions_never_stall_application_plan():
+    # Optional demographic or custom sensitive field without match skips instead of blocking
+    opt_unmatched = FormControl(
+        key="demographic_custom", label="What gender do you identify as?",
+        control_type=ControlType.SELECT, options=["Option A", "Option B"],
+        section="demographic", required=False, sensitive=True,
+    )
+    opt_vet_text = FormControl(
+        key="question_vet_text",
+        label='If you are a veteran of the armed forces in your country, please write "YES" in the text box below.',
+        control_type=ControlType.TEXT, options=[], section="application", required=False, sensitive=True,
+    )
+    plan = plan_fill([opt_unmatched, opt_vet_text], _vault({"gender": "Man"}))
+    assert plan.ready is True
+    assert plan.blockers == []
+    assert all(item.status == "skip" for item in plan.items)
+
+

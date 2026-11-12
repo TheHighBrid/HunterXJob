@@ -149,8 +149,6 @@ function ExecutionCommandCard({
     job.stage === "review" ||
     job.form_status.state === "blocked";
 
-  const uncertainTask = openTasks.find((t) => t.reason_code === "submission_confirmation_uncertain") ?? openTasks[0];
-
   async function handleRunAutonomous(dryRun: boolean) {
     setBusyAction(dryRun ? "dry_run" : "submit_live");
     setExecBanner(null);
@@ -185,14 +183,13 @@ function ExecutionCommandCard({
     }
   }
 
-  async function handleClearUncertainHold(resolution: "resolved" | "dismissed") {
-    if (!uncertainTask) return;
-    setBusyAction(resolution);
+  async function handleClearUncertainHold(action: "requeue" | "withdraw") {
+    setBusyAction(action);
     setExecBanner(null);
     try {
-      await api.resolveTask(uncertainTask.id, resolution);
+      await api.clearUncertainHold(job.id, action);
       await refresh();
-      if (resolution === "resolved") {
+      if (action === "requeue") {
         setExecBanner({
           tone: "info",
           text: "✓ Unconfirmed submission hold cleared! Job and Application returned to Ready to Apply.",
@@ -201,8 +198,9 @@ function ExecutionCommandCard({
       } else {
         setExecBanner({
           tone: "info",
-          text: "Hold dismissed.",
+          text: "Hold cleared and application marked as Withdrawn (handled manually).",
         });
+        notify("Application Withdrawn", "Hold cleared and application withdrawn.");
       }
     } catch (err) {
       setExecBanner({ tone: "danger", text: describeError(err) });
@@ -281,24 +279,22 @@ function ExecutionCommandCard({
             {job.application?.last_error ||
               "A headless submission was attempted, but the ATS confirmation page was not verified (e.g., Lever hCaptcha challenge on submit button). Automatic retries are locked until you confirm whether the employer received it."}
           </Muted>
-          {uncertainTask ? (
-            <View style={{ gap: 8, marginTop: 6 }}>
-              <PrimaryButton
-                title="✅ Verified Not Received — Clear Hold & Re-Queue"
-                variant="success"
-                loading={busyAction === "resolved"}
-                disabled={!!busyAction}
-                onPress={() => void handleClearUncertainHold("resolved")}
-              />
-              <PrimaryButton
-                title="📌 Dismiss Hold (Handled Manually)"
-                variant="secondary"
-                loading={busyAction === "dismissed"}
-                disabled={!!busyAction}
-                onPress={() => void handleClearUncertainHold("dismissed")}
-              />
-            </View>
-          ) : null}
+          <View style={{ gap: 8, marginTop: 6 }}>
+            <PrimaryButton
+              title="✅ Verified Not Received — Clear Hold & Re-Queue"
+              variant="success"
+              loading={busyAction === "requeue"}
+              disabled={!!busyAction}
+              onPress={() => void handleClearUncertainHold("requeue")}
+            />
+            <PrimaryButton
+              title="📌 Handled Manually — Withdraw Role"
+              variant="secondary"
+              loading={busyAction === "withdraw"}
+              disabled={!!busyAction}
+              onPress={() => void handleClearUncertainHold("withdraw")}
+            />
+          </View>
         </View>
       ) : null}
 

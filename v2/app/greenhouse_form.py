@@ -226,7 +226,9 @@ _CONDITIONAL_RE = re.compile(
     re.IGNORECASE,
 )
 _ROLE_LOCATION_RE = re.compile(
-    r"this location|this (?:position|role|job)|the (?:position|role|job) is located|where (?:this|the) (?:position|role|job)",
+    r"this location|this (?:position|role|job)|"
+    r"(?:the|this) (?:position|role|job)(?:\s+you\s+are\s+applying\s+for)?\s+is\s+located|"
+    r"where (?:this|the) (?:position|role|job)",
     re.IGNORECASE,
 )
 
@@ -276,8 +278,8 @@ _KEY_RULES: tuple[tuple[tuple[re.Pattern[str], ...], str, int | None], ...] = (
     ((re.compile(r"current (?:job )?title|current role"),), "current_title", 60),
     # Availability / start date (not education or employment history start).
     ((re.compile(
-        r"earliest (?:start|availability)|available to start|when (?:can|could) you start|"
-        r"start date|date you (?:can |could )?start|available start|notice period"
+        r"earliest (?:start|availability)|available to (?:start|onboard)|onboard with|when (?:can|could) you start|"
+        r"start date|date you (?:can |could )?(?:start|be available)|available start|notice period"
     ),), "start_date", None),
     # Current work status (not employment agreements / prior-employer history).
     ((re.compile(

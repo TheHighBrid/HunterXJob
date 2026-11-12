@@ -5,8 +5,8 @@
       "platform": "greenhouse",
       "controls": 25,
       "fill": 14,
-      "review": 5,
-      "skip": 6,
+      "review": 3,
+      "skip": 8,
       "planned_pct": 56.0
     },
     {
@@ -32,8 +32,8 @@
       "platform": "lever",
       "controls": 23,
       "fill": 14,
-      "review": 4,
-      "skip": 5,
+      "review": 3,
+      "skip": 6,
       "planned_pct": 60.9
     },
     {
@@ -59,8 +59,8 @@
     "forms": 6,
     "controls": 132,
     "fill": 70,
-    "review": 30,
-    "skip": 32,
+    "review": 27,
+    "skip": 35,
     "planned_pct": 53.0
   }
 }

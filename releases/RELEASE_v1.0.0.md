@@ -1,12 +1,12 @@
 # HunterXJob Android v1.0.0 Release
 
 **Package:** `com.hunterxjob.app`  
-**Version:** `1.0.0` (VersionCode `1`)  
+**Version:** `1.2.1` (VersionCode `5`)  
 **Target SDK:** Android 14 (API 34)  
 **Min SDK:** Android 7.0+ (API 24)  
-**Signatures:** Full Scheme V1 (JAR) + Scheme V2 + Scheme V3 (Production Keystore)  
-**Artifact:** [`HunterXJob-v1.0.0.apk`](./HunterXJob-v1.0.0.apk) (82.39 MB)  
-**SHA-256 Checksum:** `743ce72e89d08f6f6489cfc16492e63664d47a7684f597ada370abd6d027814e`
+**Signatures:** Scheme V2 (Production Keystore)  
+**Artifact:** [`HunterXJob-v1.0.0.apk`](./HunterXJob-v1.0.0.apk) (82.45 MB)  
+**SHA-256 Checksum:** `41f35362d3ff35ae61cd87f716bc355d7f37c21ac54bf9af03df4b30010c7563`
 
 ---
 

@@ -153,6 +153,8 @@ export function createClient(getConfig: () => ClientConfig, fetchImpl: FetchLike
     job: (id: string) => request<JobDetail>(`/api/jobs/${encodeURIComponent(id)}`),
     previewForm: (id: string) => request<FormPreview>(`/api/jobs/${encodeURIComponent(id)}/form`, {}, 60000),
     unlinkDuplicate: (id: string) => post<JobDetail>(`/api/jobs/${encodeURIComponent(id)}/unlink-duplicate`),
+    clearUncertainHold: (id: string, action: "requeue" | "withdraw" = "requeue") =>
+      post<JobDetail>(`/api/jobs/${encodeURIComponent(id)}/clear-uncertain-hold`, { action }),
     checkLiveness: (id: string) => post<JobDetail>(`/api/jobs/${encodeURIComponent(id)}/check-liveness`),
 
     reviewTasks: (status: "open" | "closed" | "all" = "open") => request<ReviewTask[]>(`/api/review-tasks?status=${status}`),

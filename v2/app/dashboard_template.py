@@ -1239,6 +1239,8 @@ def get_dashboard_html() -> str:
               <span class="px-2 py-0.5 rounded text-[10px] font-semibold border ${stageColor}">${escapeHtml(j.stage)}</span>
             </td>
             <td class="px-4 py-3 text-right space-x-1.5 whitespace-nowrap">
+              ${j.stage === 'submission_uncertain' ? `<button onclick="clearUncertainHold('${j.id}', 'requeue')" class="px-2 py-1 rounded bg-amber-600/25 hover:bg-amber-600/45 text-amber-300 text-[11px] font-semibold border border-amber-500/40">Clear Hold</button>` : ''}
+              ${j.stage === 'duplicate' ? `<button onclick="unlinkDuplicateJob('${j.id}')" class="px-2 py-1 rounded bg-sky-600/20 hover:bg-sky-600/40 text-sky-300 text-[11px] font-semibold border border-sky-500/30">Unlink Dup</button>` : ''}
               <button onclick="inspectTruthGuard('${j.id}')" class="px-2 py-1 rounded bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-[11px] font-semibold border border-indigo-500/30">Truth Guard</button>
               <button onclick="inspectForm('${j.id}')" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-medium border border-slate-700/60">Form</button>
               <button onclick="applyDirect('${j.id}')" class="px-2.5 py-1 rounded bg-brand-600 hover:bg-brand-500 text-white text-[11px] font-semibold">Apply Live</button>
@@ -2018,6 +2020,44 @@ def get_dashboard_html() -> str:
         } else {
           const err = await res.json();
           toast(`Resolve failed: ${err.detail || 'Error'}`, 'error');
+        }
+      } catch (e) {
+        toast(`Network error: ${e.message}`, 'error');
+      }
+    }
+
+    async function clearUncertainHold(jobId, action = 'requeue') {
+      try {
+        toast('Clearing unconfirmed submission hold...', 'info');
+        const res = await fetch(`/api/jobs/${jobId}/clear-uncertain-hold`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ action }),
+        });
+        if (res.ok) {
+          toast(action === 'requeue' ? 'Hold cleared & job returned to Ready to Apply' : 'Hold withdrawn', 'success');
+          loadJobs();
+          refreshKPIsAndStatus();
+        } else {
+          const err = await res.json();
+          toast(`Clear hold failed: ${err.detail || 'Error'}`, 'error');
+        }
+      } catch (e) {
+        toast(`Network error: ${e.message}`, 'error');
+      }
+    }
+
+    async function unlinkDuplicateJob(jobId) {
+      try {
+        toast('Unlinking duplicate role...', 'info');
+        const res = await fetch(`/api/jobs/${jobId}/unlink-duplicate`, { method: 'POST', headers: authHeaders() });
+        if (res.ok) {
+          toast('Unlinked duplicate; re-gated for evaluation', 'success');
+          loadJobs();
+          refreshKPIsAndStatus();
+        } else {
+          const err = await res.json();
+          toast(`Unlink failed: ${err.detail || 'Error'}`, 'error');
         }
       } catch (e) {
         toast(`Network error: ${e.message}`, 'error');

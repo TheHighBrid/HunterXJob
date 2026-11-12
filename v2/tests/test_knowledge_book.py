@@ -173,3 +173,27 @@ def test_knowledge_book_resolves_extended_catalog_questions():
         options=["Yes", "No, I do not have a disability", "I decline to answer"],
     )
     assert ans_dis == "No, I do not have a disability"
+
+
+def test_knowledge_book_ignores_file_controls_and_poison_substring_policies():
+    from app.form_engine import ControlType, FormControl
+
+    kb = KnowledgeBook.from_yaml_file(EXAMPLE_YAML)
+    kb.custom_answers.update({
+        "resume": "/tmp/should_never_leak_into_text.pdf",
+        "_systemfield_resume": "poisoned-value",
+        "missing_answers_for_revenue_enablement_manager": "poisoned",
+    })
+    controls = [
+        FormControl(key="_systemfield_resume", label="Resume", control_type=ControlType.FILE, required=True),
+        FormControl(key="resume", label="Resume / CV", control_type=ControlType.FILE, required=False),
+        FormControl(key="name", label="Full Name", control_type=ControlType.TEXT, required=True),
+    ]
+    answers = kb.resolve_answers(controls)
+    assert "_systemfield_resume" not in answers
+    assert "resume" not in answers
+    assert answers["name"] == "Avery Quinn"
+
+    ans_screen, rule = kb.resolve_screening_question("Please summarize your resume highlights")
+    assert rule != "custom_answer_match"
+    assert ans_screen != "/tmp/should_never_leak_into_text.pdf"

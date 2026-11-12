@@ -1,7 +1,7 @@
 {
   "totals": {
-    "review": 30,
-    "skip": 32
+    "review": 27,
+    "skip": 35
   },
   "by_category": [
     {
@@ -35,8 +35,8 @@
     {
       "name": "sensitive_self_id",
       "total": 4,
-      "review": 3,
-      "skip": 1,
+      "review": 0,
+      "skip": 4,
       "required": 0
     },
     {
@@ -79,8 +79,8 @@
     {
       "name": "text",
       "total": 19,
-      "review": 3,
-      "skip": 16,
+      "review": 2,
+      "skip": 17,
       "required": 2
     },
     {
@@ -93,8 +93,8 @@
     {
       "name": "select",
       "total": 12,
-      "review": 10,
-      "skip": 2,
+      "review": 9,
+      "skip": 3,
       "required": 9
     },
     {
@@ -107,8 +107,8 @@
     {
       "name": "multiselect",
       "total": 3,
-      "review": 3,
-      "skip": 0,
+      "review": 2,
+      "skip": 1,
       "required": 2
     },
     {
@@ -178,7 +178,7 @@
     },
     {
       "form": "greenhouse/asana_8165477.json",
-      "status": "review",
+      "status": "skip",
       "category": "sensitive_self_id",
       "type": "select",
       "required": false,
@@ -186,7 +186,7 @@
     },
     {
       "form": "greenhouse/asana_8165477.json",
-      "status": "review",
+      "status": "skip",
       "category": "sensitive_self_id",
       "type": "text",
       "required": false,
@@ -386,7 +386,7 @@
     },
     {
       "form": "ats/lever_apply.html",
-      "status": "review",
+      "status": "skip",
       "category": "sensitive_self_id",
       "type": "multiselect",
       "required": false,

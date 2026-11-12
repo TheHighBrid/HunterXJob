@@ -326,6 +326,139 @@ def _consent_and_disclaimer(control: FormControl, value: Any) -> Any | None:
 
 
 # ---------------------------------------------------------------------------
+# Gender Identity Normalization
+# ---------------------------------------------------------------------------
+
+_GENDER_GROUPS: tuple[tuple[frozenset[str], re.Pattern[str]], ...] = (
+    (
+        frozenset({"man", "male", "m", "cis man", "cisgender man", "man / boy", "he/him"}),
+        re.compile(r"^\s*(?:man|male|m|cis(?:gender)?\s+man|male\s*/\s*man|man\s*/\s*male)\s*$", re.IGNORECASE),
+    ),
+    (
+        frozenset({"woman", "female", "f", "cis woman", "cisgender woman", "she/her"}),
+        re.compile(r"^\s*(?:woman|female|f|cis(?:gender)?\s+woman|female\s*/\s*woman|woman\s*/\s*female)\s*$", re.IGNORECASE),
+    ),
+    (
+        frozenset({"non-binary", "nonbinary", "non binary"}),
+        re.compile(r"non[- ]?binary", re.IGNORECASE),
+    ),
+)
+
+
+def _gender_match(control: Any, value: Any) -> Any | None:
+    options = getattr(control, "options", []) or []
+    if not options:
+        return None
+    val_norm = " ".join(str(value or "").split()).casefold()
+    for aliases, pattern in _GENDER_GROUPS:
+        if val_norm in aliases:
+            matches = [opt for opt in options if pattern.search(opt)]
+            if len(matches) == 1:
+                return _wrap(control, matches[0])
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Veteran Status Normalization
+# ---------------------------------------------------------------------------
+
+_VETERAN_DECLINE_RE = re.compile(
+    r"wish to answer|prefer not|decline|disclose|do not wish|don't wish",
+    re.IGNORECASE,
+)
+_VETERAN_NOT_RE = re.compile(
+    r"\bnot\s+a\s+(?:protected\s+)?veteran\b|\bnon[- ]?veteran\b|\bi\s+am\s+not\b",
+    re.IGNORECASE,
+)
+_VETERAN_AFFIRM_RE = re.compile(
+    r"\bi\s+(?:am\s+a|identify\s+as\s+a)\s+(?:protected\s+)?veteran\b",
+    re.IGNORECASE,
+)
+
+
+def _veteran_match(control: Any, value: Any) -> Any | None:
+    options = getattr(control, "options", []) or []
+    if not options:
+        return None
+    val_norm = " ".join(str(value or "").split()).casefold()
+    if val_norm in _NO or _VETERAN_NOT_RE.search(val_norm):
+        opt_no = _single_prefixed(control, "no")
+        if opt_no is not None:
+            return _wrap(control, opt_no)
+        matches = [
+            opt for opt in options
+            if _VETERAN_NOT_RE.search(opt) and not _VETERAN_DECLINE_RE.search(opt)
+        ]
+        if len(matches) == 1:
+            return _wrap(control, matches[0])
+    if val_norm in _YES or (_VETERAN_AFFIRM_RE.search(val_norm) and not _VETERAN_NOT_RE.search(val_norm)):
+        opt_yes = _single_prefixed(control, "yes")
+        if opt_yes is not None:
+            return _wrap(control, opt_yes)
+        matches = [
+            opt for opt in options
+            if _VETERAN_AFFIRM_RE.search(opt) and not _VETERAN_NOT_RE.search(opt)
+        ]
+        if len(matches) == 1:
+            return _wrap(control, matches[0])
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Referral / Source Normalization
+# ---------------------------------------------------------------------------
+
+def _referral_match(control: Any, value: Any) -> Any | None:
+    options = getattr(control, "options", []) or []
+    if not options:
+        return None
+    parts = [p.strip() for p in re.split(r"[,;|]+", str(value or "")) if p.strip()]
+    if not parts:
+        return None
+    norm_map = {" ".join(o.split()).casefold(): o for o in options}
+    for part in parts:
+        p_norm = " ".join(part.split()).casefold()
+        if p_norm in norm_map:
+            return _wrap(control, norm_map[p_norm])
+    for part in parts:
+        p_norm = " ".join(part.split()).casefold()
+        pat = re.compile(rf"^\s*{re.escape(part)}(?:\b|\s*\()", re.IGNORECASE)
+        matches = [
+            o for o in options
+            if pat.search(o) and ("referral" not in o.lower() or p_norm == "referral")
+        ]
+        if len(matches) == 1:
+            return _wrap(control, matches[0])
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Experience Duration -> Yes/No Normalization
+# ---------------------------------------------------------------------------
+
+_POS_DURATION_RE = re.compile(
+    r"^\s*[1-9]\d*(?:\s*[-–+]\s*\d+)?\s*(?:\+\s*)?(?:years?|yrs?|\+)?\s*$",
+    re.IGNORECASE,
+)
+
+
+def _experience_yes_no(control: Any, value: Any) -> Any | None:
+    options = getattr(control, "options", []) or []
+    if not (2 <= len(options) <= 3):
+        return None
+    opt_yes = _single_prefixed(control, "yes")
+    opt_no = _single_prefixed(control, "no")
+    if opt_yes is None or opt_no is None:
+        return None
+    val_str = str(value or "").strip()
+    if _POS_DURATION_RE.match(val_str):
+        return _wrap(control, opt_yes)
+    if re.match(r"^\s*(?:0(?:\s*(?:years?|yrs?))?|none)\s*$", val_str, re.IGNORECASE):
+        return _wrap(control, opt_no)
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Main Option Derivation Dispatcher
 # ---------------------------------------------------------------------------
 
@@ -408,10 +541,50 @@ def derive_option(control: Any, value: Any, key: Any = "") -> Any | None:
         if consent_res is not None:
             return consent_res
 
+    # 5a. Gender identity
+    if (
+        "gender" in lookup_keys
+        or "gender_identity" in lookup_keys
+        or any("demographic" in k for k in lookup_keys) and "gender" in label_lower
+        or "gender" in label_lower
+    ):
+        gender_res = _gender_match(control, value)
+        if gender_res is not None:
+            return gender_res
+
+    # 5b. Veteran / Military status
+    if (
+        any("veteran" in k or "military" in k for k in lookup_keys)
+        or "veteran" in label_lower
+        or "armed forces" in label_lower
+    ):
+        vet_res = _veteran_match(control, value)
+        if vet_res is not None:
+            return vet_res
+
+    # 5c. Referral / Hear about us source lists
+    if (
+        lookup_keys & {"referral_source", "hear_about_us", "how_heard", "source_channel"}
+        or "how did you hear" in label_lower
+        or "hear about" in label_lower
+    ):
+        ref_res = _referral_match(control, value)
+        if ref_res is not None:
+            return ref_res
+
     # 6. Fallback to general Yes/No matching
     yn_res = _yes_no(control, value)
     if yn_res is not None:
         return yn_res
+
+    # 6b. Experience duration stored against a Yes/No boolean experience question
+    if (
+        ("experience" in label_lower or "do you have" in label_lower or "have you" in label_lower or "proficien" in label_lower)
+        and not any(t in label_lower for t in ("salary", "compensation", "age", "year of graduation"))
+    ):
+        exp_res = _experience_yes_no(control, value)
+        if exp_res is not None:
+            return exp_res
 
     ctrl_options = getattr(control, "options", []) or []
     # 7. Final fallback: try category matchers based on options structure
