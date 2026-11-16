@@ -6,10 +6,9 @@ imported, so nothing here is production-evidenced.
 
 ## Purpose
 
-The live applications were submitted through JobTomatik's supervised-submit,
-handoff, evidence and ledger services, not through HunterXJob `v2/`, which is
-dry-run only. Until an export of those applications is imported, they stay
-"documented but unverified" in this repo. This document defines the export
+Real applications submitted outside HunterXJob `v2/` (which is dry-run
+only) stay "documented but unverified" in this repo until an export of them
+is imported. This document defines the export
 format HunterXJob accepts and how each record is labelled.
 
 The importer (`v2/app/ledger_import.py`) is offline: it reads a file, validates
@@ -24,7 +23,7 @@ UTF-8 JSON Lines: one JSON object per line. Blank lines are ignored.
 |---|---|---|---|
 | `schema_version` | yes | string | Must be `hx-ledger-import-v1`. |
 | `record_id` | yes | string | Unique within the file; an opaque export id. |
-| `source_system` | yes | string | System that submitted, e.g. `jobtomatik`. |
+| `source_system` | yes | string | Name of the system that produced the export. |
 | `company` | yes | string | Employer name. |
 | `job_title` | yes | string | Posting title. |
 | `job_url` | yes | string | `http`/`https` URL of the posting. |
@@ -83,5 +82,4 @@ reasons) and exits 1 if any record was rejected.
 ## Not in scope
 
 Writing imported records to the database, linking them to `Application` rows,
-and any JobTomatik integration wait on Mohamed's decision about how HunterXJob
-relates to the JobTomatik engine.
+and any cross-repo integration are out of scope for this change.
