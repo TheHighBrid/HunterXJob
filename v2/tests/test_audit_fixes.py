@@ -76,7 +76,7 @@ def test_audit_and_enforce_form_answers_truthfulness():
 
 
 def test_job_eligibility_vetoes_hybrid_outside_ottawa():
-    """Under the "core" preset, hybrid/on-site outside Ottawa–Gatineau is rejected before browser launch."""
+    """Under the "core" preset, hybrid/on-site outside Ottawa-Gatineau is rejected before browser launch."""
     ctx = DecisionContext(
         target_locations=("Ottawa", "Gatineau", "National Capital Region", "Remote Canada", "Canada"),
         target_keywords=("fraud", "compliance", "operations"),

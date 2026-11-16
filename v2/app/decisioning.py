@@ -409,7 +409,7 @@ def _hard_veto(job: JobFacts, context: DecisionContext) -> tuple[DecisionReport 
         if _normalize(target) not in ("canada", "remote canada", "remote", "anywhere")
     )
 
-    # Candidate rule: In-person or hybrid work is allowed ONLY in Ottawa–Gatineau (or explicitly targeted city),
+    # Candidate rule: In-person or hybrid work is allowed ONLY in Ottawa-Gatineau (or explicitly targeted city),
     # unless the targeting policy allows in-person work anywhere in Canada ("broad").
     onsite_elsewhere = (not is_remote or is_explicit_hybrid_or_onsite) and not is_ottawa_ncr and not explicit_city_target
     if onsite_elsewhere and location and context.policy.allow_onsite_canada and explicit_canada:
