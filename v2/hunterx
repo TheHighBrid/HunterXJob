@@ -63,7 +63,7 @@ ensure_api_key() {
   if [ -z "$(env_value API_KEY '')" ]; then
     key="$(.venv/bin/python -m app.cli api-key)"
     if grep -q '^API_KEY=' .env; then
-      sed -i "s|^API_KEY=.*|API_KEY=${key}|" .env
+      .venv/bin/python -c "import re; p='.env'; c=open(p).read(); open(p,'w').write(re.sub(r'(?m)^API_KEY=.*', f'API_KEY=${key}', c))"
     else
       printf '\nAPI_KEY=%s\n' "$key" >> .env
     fi
@@ -282,7 +282,16 @@ case "$cmd" in
   certify) shift; py_cli certify "$@" ;;
   dedup-scan) py_cli dedup-scan ;;
   liveness) py_cli liveness ;;
-  api-key) py_cli api-key ;;
+  api-key)
+    if [ -f .env ]; then
+      current="$(env_value API_KEY '')"
+      if [ -n "$current" ]; then
+        echo "$current"
+        exit 0
+      fi
+    fi
+    py_cli api-key
+    ;;
   version) py_cli version ;;
   openapi) shift; py_cli openapi "$@" ;;
   profile) shift; py_cli profile "$@" ;;
