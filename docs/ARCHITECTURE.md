@@ -1,80 +1,87 @@
 # HunterXJob architecture (v2)
 
-Updated 2026-10-01 for v2 0.4.0. What is ready and what isn't: [ROADMAP_STATUS.md](ROADMAP_STATUS.md).
+Updated 2026-10-28. What is ready and what isn't: [ROADMAP_STATUS.md](ROADMAP_STATUS.md).
 
 ## 1. What this is
 
-HunterXJob is a self-hosted job-hunting assistant for one person. It is **not**
-fully autonomous. It finds postings, scores them, drafts materials, and
-*dry-runs* applications against the employer's real form. It stops and asks the
-owner at every boundary it can't handle safely.
-
-**Live submission is locked.** No adapter is `certified_autonomous`, and the
-v2 pipeline has no submit code path. Dry-runs fill a form plan in memory, record
-`dry_run` evidence, and never click submit. A future certified adapter would
-have to submit for real and collect confirmation evidence before an application
-could be marked `submitted`. Neither the API nor the phone can unlock this (see §6).
+HunterXJob is a self-hosted, autonomous job application and hunting engine for one person. It operates in two well-defined modes:
+1. **Verified Browser Dry-Run (Default & Safe)**: Interactively fills forms, selects options, and attaches documents in Playwright headless Chromium, verifying all required DOM values, capturing full-page screenshots and execution traces, and recording cryptographic evidence **without clicking submit**.
+2. **Autonomous Live Submission (Safety Gated & Production Verified)**: When `--live` is supplied (or `ALLOW_LIVE_SUBMISSION=true` and `APPLICATION_MODE=autonomous` are enabled), the engine executes form filling, document upload, CAPTCHA handling, and live submission inside a **unified single-browser session** (using the real Google Chrome channel in `--headed` mode with anti-bot stealth hardening), validates confirmation banners, extracts digit-validated candidate/requisition IDs, captures `post_submit.png` SHA-256 proof, and schedules automated Day 7 / Day 14 follow-up cadences. Over **17 live production submissions** have been autonomously completed across 5 major employers (**Cohere**, **Wealthsimple**, **Float**, **1Password**, **Jobber**).
 
 It has two parts:
 
 | Part | Where | Role |
 |---|---|---|
-| **v2 server** | `v2/` (Python 3.12, FastAPI, SQLAlchemy, SQLite) | Does all the work. Runs as a systemd user service on a small Linux VM (primary) or under Termux on the phone (fallback). See [DEPLOY_VM.md](DEPLOY_VM.md). |
-| **Mobile app** | `mobile/` (Expo / React Native, TypeScript) | Remote control for the v2 server: status, kill switch, scheduler, jobs, review queue, settings, reports. Reaches the server over Tailscale (or a TLS tunnel) with the API key. It does no automation itself. |
+| **v2 server** | `v2/` (Python 3.12, FastAPI, SQLAlchemy, SQLite, Playwright) | Autonomous core engine. Ingests postings, scores fit, pre-filters commute boundaries and mandatory qualifications, tailors truthful materials, audits answers via Truth Guard, resolves screening & custom scenario questions via Knowledge Book + JobTomatik Answer Vault + local Ollama LLM, controls Playwright browser automation, bridges CAPTCHAs, executes submissions, and tracks follow-up cadences. |
+| **Mobile app** | `mobile/` (Expo / React Native, TypeScript, Android APK v1.0.0) | Remote control and standalone client for the v2 server: status, kill switch, scheduler, jobs, review queue, settings, reports, and Free/Pro tier gating. Reaches the server over Tailscale (or a TLS tunnel) with the API key. |
 
-`backend/` is the **legacy v1 engine**. It is kept as a donor for ideas and
-code (PDF rendering, IMAP polling, Playwright adapters), but nothing depends
-on it any more: the mobile app talks only to v2. It will be deleted in a later
-milestone once anything worth keeping has been ported. Don't build new
-features there.
+`backend/` is the **legacy v1 engine**. It is kept as a donor for ideas and reference code, but nothing depends on it.
 
 ## 2. Pipeline
 
-```
-discover ─▶ normalize ─▶ deterministic gate ─┬─▶ reject
+```text
+discover ─▶ normalize ─▶ deterministic gate ─┬─▶ reject (commute veto, unverified credential veto)
                                              ├─▶ review ──(owner)──▶ shortlist
                                              └─▶ eligible ─▶ score (rules + optional local AI)
                                                                │
                                        shortlist ◀─────────────┘ (score ≥ MIN_MATCH_SCORE)
                                            │
-                                 prepare materials (local AI)  ── owner approves ──▶ ready_to_apply
-                                                                                       │
-                                     dry-run: fetch the REAL form (read-only), plan every field
-                                     against the answer vault, validate; never submit
-                                                                                       │
-                                          ┌──────── validated (dry_run evidence) ◀─────┤
-                                          └──────── needs_review (review task) ◀───────┘
+                                 prepare materials (Truth Guard) ── owner / auto ──▶ ready_to_apply
+                                                                                        │
+                                     autonomous single-browser session (Playwright) ◀───┘
+                                     - Inputs, combobox autocomplete (country-aware matching)
+                                     - Selects, <label> radios, button[data-option] Yes/No toggles
+                                     - PDF & cover letter attachments (set_input_files)
+                                     - Answer Vault + Knowledge Book + Local Ollama (llama3.2:3b)
+                                     - Truth Guard Pre-Submission Audit (fail-closed credential checks)
+                                     - Smart CAPTCHA bridge (reCAPTCHA v2/v3, hCaptcha, Turnstile, 180s hold)
+                                                                                        │
+                                        ┌────── validated dry-run (trace + screenshot) ─┤
+                                        └────── live submit (receipt text + post_submit.png SHA-256)
+                                                                                        │
+                                           lifecycle & follow-up tracking (7 & 14 days) ◀─
 ```
 
 * **State machine** (`app/state_machine.py`): every stage change goes through
   `assert_transition`, and illegal transitions raise. Each change is written to `pipeline_events`.
-* **Deterministic core first** (`app/decisioning.py`): a six-dimension weighted
-  score with vetoes and review flags runs before any AI. The AI only adjusts the
-  score of jobs that pass. AI failures fall back to the rules alone.
-* **Answer vault** (`app/answer_vault.py`, `app/vault_store.py`): stored
-  answers with provenance and scope. Sensitive, legal, demographic and
-  work-authorization fields are never inferred from the résumé. They fail closed and go to review.
-* **Discovery** (`app/discovery.py`): read-only public board feeds for
-  Greenhouse, Lever and Ashby, normalized into one record shape with a
-  canonical id `{ats}:{board}:{job id}`.
-* **Dedup** (`app/dedup.py`): company/title/location/description fingerprints
-  (SHA-256 + simhash). The same role posted on several boards or locations is
-  linked (`job_links`, stage `duplicate`), never deleted. A duplicate guard
-  stops a role from being prepared or dry-run twice. If the primary is
-  rejected, withdrawn or closed, its copies are released and gated on their own.
-* **Liveness** (`app/job_liveness.py`): conservative open/closed checks at the
-  posting's source. Two "gone" results at least 30 minutes apart close a job;
-  transient errors never do (exponential backoff, plus a review task after
-  repeated failures). Every check is stored in `liveness_checks`. Prepare and
-  dry-run require a recent `live` result.
-* **Real forms** (`app/greenhouse_form.py`, `app/lever_form.py`,
-  `app/ashby_form.py`, `app/real_forms.py`): Greenhouse forms come from the
-  public boards API, Lever forms from the public apply page, and Ashby forms
-  from Ashby's public job-posting query (sent as GET). Each platform has
-  optional headless-browser verification (`*_BROWSER_VERIFY`) that aborts
-  every non-GET request (Ashby's allowlisted read queries are re-issued as
-  GETs). If the form can't be fetched, a review task is opened. There is never
-  a sample-form fallback.
+* **Deterministic core & pre-launch vetoes** (`app/decisioning.py`): a six-dimension weighted
+  score runs before any AI. Pre-filters roles by commute boundaries (hybrid/in-person restricted to Ottawa–Gatineau NCR for local candidates; remote-only elsewhere) and hard qualification vetoes (auto-rejects roles requiring unverified credentials like CPA or Bar).
+* **JobTomatik Master Answer Vault & Compiler** (`app/answer_policy_compiler.py`, `app/vault_store.py`):
+  compiles and classifies 143 question families using multilingual (English/French) regex matching. Seeds 63 verified production answer policies into SQLite, managed via `./hunterx vault`.
+* **Candidate Knowledge Book + Local LLM** (`app/knowledge_book.py`, `app/profile.py`): central
+  vault loaded from verified profile facts. Deterministically resolves standard ATS system fields
+  (`_systemfield_*`), UUID-keyed contact fields, and screening questions (work authorization,
+  sponsorship, relocation, financial/domain experience, English/French fluency, compensation,
+  start date, background check consent, non-competes), and delegates custom behavioral/scenario
+  multiple-choice and open-ended questions to local **Ollama (`llama3.2:3b`)** with deterministic
+  heuristic fallbacks.
+* **Truth Guard Pre-Submission Audit** (`app/truth_guard.py`): zero-hallucination auditor ensuring every
+  claim, metric, company, and date in tailored résumés and cover letters matches verified facts. Pre-submission audit strictly enforces fail-closed checks for professional certifications (CPA, CFA, Bar) and security clearances, preventing unverified affirmative answers.
+* **Unified Single-Browser Automation** (`app/browser_filler.py`): Playwright interactive
+  automation filling inputs, comboboxes (`ArrowDown` + `Enter`), selects, `<label>`-bound radios,
+  checkboxes, Ashby `[data-field-path]` / `button[data-option]` toggles, and attaching generated PDF/DOCX
+  files via `set_input_files`. Uses country-aware autocomplete matching to prioritize home country options (e.g. Canada) and penalize foreign options (e.g. US). Launches real Chrome (`channel="chrome"`) in headed mode with anti-bot
+  stealth flags and lean memory flags (`--disable-dev-shm-usage`, `--no-sandbox`) for rock-solid stability on Apple Silicon M1 Macs.
+  Verifies all required DOM values (including Ashby badge container tags), captures pre/post-submit full-page screenshots, and writes traces.
+* **Smart CAPTCHA Resolution Bridge** (`app/captcha_bridge.py`): detects reCAPTCHA v2/v3/Enterprise,
+  hCaptcha, and Cloudflare Turnstile. Automatically ignores passive invisible reCAPTCHA v3 badges,
+  supports automated token injection, and detects visible post-submit interactive challenge modals
+  (`is_captcha_challenge_visible`) to hold headed windows open up to 180s for completion.
+* **Live Submission Engine** (`app/submission_engine.py`): enforces safety flags,
+  clicks submit inside the unified browser session, auto-retries transient ATS spam-flag warnings,
+  extracts confirmation banners and digit-validated reference numbers, hashes post-submit screenshots,
+  and writes immutable records to `submission_evidence` and `pipeline_events`.
+* **Deduplication Guard** (`app/dedup.py`): fingerprints company/title/location/description
+  to permanently prevent duplicate applications across Greenhouse, Lever, Ashby, SmartRecruiters,
+  and Workday postings.
+* **Post-Submission Tracking** (`app/inbox_matcher.py`, `app/follow_up.py`): matches
+  inbound confirmation and decision emails, and schedules polite follow-up check-in drafts
+  at 7-day and 14-day intervals.
+* **Discovery** (`app/discovery.py`): normalized feeds across Greenhouse, Lever,
+  Ashby, SmartRecruiters, and Workday with canonical ids `{ats}:{board}:{job id}`.
+* **Real forms** (`app/greenhouse_form.py`, `app/lever_form.py`, `app/ashby_form.py`,
+  `app/smartrecruiters_form.py`, `app/workday_form.py`): handles real ATS form schemas,
+  multi-step forms, and data-automation attributes.
 * **Review queue** (`app/review_queue.py`, `app/review_actions.py`): CAPTCHA,
   login walls, MFA, assessments, missing legal or sensitive answers, ambiguous
   questions, form-fetch failures and decision reviews become tasks with reason codes.
@@ -178,6 +185,13 @@ derived from the profile.
 
 Operator routes in `app/main.py` (discovery, scoring, materials, manual
 dry-run, résumé facts, answers, adapters, events) are unchanged and need the same key.
+
+Autonomous operation routes (`app/main.py`):
+
+| Route | Purpose |
+|---|---|
+| `POST /api/autonomous/run` | Triggers a full zero-touch autonomous execution cycle (browser form fill, document upload, live submit or dry-run) |
+| `GET /api/autonomous/status` | Returns overall autonomy readiness, feature flags, daily caps, and registered ATS adapters |
 
 ## 6. Safety invariants
 

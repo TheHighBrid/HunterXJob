@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head><title>Workable - Application</title></head>
+<body>
+  <h2>Backend Engineer</h2>
+  <form id="application_form" data-ui="application-form" method="POST">
+    <div data-ui="section-personal">
+      <label for="name">Full name</label>
+      <input type="text" id="name" name="name" data-ui="name" required />
+
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" data-ui="email" required />
+
+      <label for="phone">Phone</label>
+      <input type="tel" id="phone" name="phone" data-ui="phone" required />
+
+      <label for="address">Address / City</label>
+      <input type="text" id="address" name="address" data-ui="address" required />
+
+      <label for="summary">Summary</label>
+      <textarea id="summary" name="summary" data-ui="summary"></textarea>
+    </div>
+
+    <div data-ui="section-experience">
+      <label for="resume">Resume/CV</label>
+      <input type="file" id="resume" name="resume" data-ui="resume-input" required />
+    </div>
+
+    <div data-ui="section-questions">
+      <label for="work_auth">Are you legally authorized to work in Canada?</label>
+      <select name="work_auth" id="work_auth" data-ui="work-auth">
+        <option value="">Select...</option>
+        <option value="Yes">Yes</option>
+        <option value="No">No</option>
+      </select>
+    </div>
+
+    <button type="submit" data-ui="submit-button">Submit application</button>
+  </form>
+</body>
+</html>

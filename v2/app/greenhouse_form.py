@@ -222,11 +222,13 @@ _RESIDENCE_RE = re.compile(
     re.IGNORECASE,
 )
 _CONDITIONAL_RE = re.compile(
-    r"\bif (?:you answered|yes|no|so|applicable|other|\"other\"|\u201cyes|\u201cother)|if [\"\u201c]?other[\"\u201d]? is selected",
+    r"\bif (?:you answered|yes|no|so|other|\"other\"|\u201cyes|\u201cother)|if [\"\u201c]?other[\"\u201d]? is selected",
     re.IGNORECASE,
 )
 _ROLE_LOCATION_RE = re.compile(
-    r"this location|this (?:position|role|job)|the (?:position|role|job) is located|where (?:this|the) (?:position|role|job)",
+    r"this location|this (?:position|role|job)|"
+    r"(?:the|this) (?:position|role|job)(?:\s+you\s+are\s+applying\s+for)?\s+is\s+located|"
+    r"where (?:this|the) (?:position|role|job)",
     re.IGNORECASE,
 )
 
@@ -266,13 +268,18 @@ _KEY_RULES: tuple[tuple[tuple[re.Pattern[str], ...], str, int | None], ...] = (
     ((re.compile(r"portfolio|personal website|\bwebsite\b"),), "website_url", None),
     ((re.compile(r"pronoun"),), "pronouns", None),
     ((re.compile(r"preferred (?:full |first )?name|name you.?d prefer"),), "preferred_name", None),
+    ((re.compile(r"^(?:your\s+)?legal\s+(?:first|given)\s+name$"),), "first_name", None),
+    ((re.compile(r"^(?:your\s+)?legal\s+(?:last|family)\s+name$|^(?:your\s+)?legal\s+surname$"),), "last_name", None),
+    ((re.compile(r"^(?:your\s+)?full[ -]?name$|^(?:first\s+and\s+last\s+name|legal\s+name)$"),), "full_name", None),
+    # Salary acceptance / alignment (checked before salary expectation so alignment questions aren't trapped in amount)
+    ((re.compile(r"(?:reviewed|aligned|expectations aligned|accept).*(?:salary|compensation|range)|(?:salary|compensation|range).*(?:aligned|alignment|acceptable|accept)"),), "salary_acceptance", None),
     ((re.compile(r"salary|compensation expectation|pay expectation|desired (?:pay|compensation)"),), "salary_expectation", None),
     ((re.compile(r"current (?:company|employer)"),), "current_company", 60),
     ((re.compile(r"current (?:job )?title|current role"),), "current_title", 60),
     # Availability / start date (not education or employment history start).
     ((re.compile(
-        r"earliest (?:start|availability)|available to start|when (?:can|could) you start|"
-        r"start date|date you (?:can |could )?start|available start|notice period"
+        r"earliest (?:start|availability)|available to (?:start|onboard)|onboard with|when (?:can|could) you start|"
+        r"start date|date you (?:can |could )?(?:start|be available)|available start|notice period"
     ),), "start_date", None),
     # Current work status (not employment agreements / prior-employer history).
     ((re.compile(
@@ -284,6 +291,19 @@ _KEY_RULES: tuple[tuple[tuple[re.Pattern[str], ...], str, int | None], ...] = (
         r"consent (?:to|for) (?:a )?(?:background|criminal)|"
         r"(?:background|criminal).{0,40}consent"
     ),), "background_check_consent", None),
+    ((re.compile(r"identity (?:verification|check)|verify your identity|verification.*interview"),), "identity_verification_consent", None),
+    ((re.compile(
+        r"terms (?:and|&) conditions|terms of (?:use|service)|"
+        r"disclaimer|read and agree|acknowledge and agree|"
+        r"below disclaimer and consent|applicant (?:declaration|agreement)|"
+        r"certif(?:y|ication).*true and (?:accurate|complete)|"
+        r"declaration and consent|privacy notice and consent"
+    ),), "terms_consent", None),
+    ((re.compile(
+        r"which work location|work location.*(?:work|suit)|preferred work location|"
+        r"work (?:arrangement|preference|model)|remote.*hybrid|hybrid.*remote|"
+        r"remote within canada"
+    ),), "work_location_preference", None),
     ((re.compile(
         r"education(?:al)? (?:level|attainment)|highest (?:level of )?education|"
         r"highest degree|degree (?:level|obtained)|level of education"
@@ -293,8 +313,18 @@ _KEY_RULES: tuple[tuple[tuple[re.Pattern[str], ...], str, int | None], ...] = (
     ((re.compile(r"commute|travel to|willing to (?:travel|drive)|distance to|hybrid|on[- ]?site"),
       re.compile(r"ottawa|gatineau|national capital|\bncr\b")), "ottawa_commute", None),
     ((re.compile(r"how did you hear|hear(?:d)? about"),), "referral_source", None),
+    ((re.compile(r"(?:resid|located|\blive\b|based).*(?:canada|in ca\b)|(?:are you in|living in)\s+canada"),), "located_in_canada", None),
     ((re.compile(r"country"), re.compile(r"resid|located|\blive\b|based")), "country_of_residence", None),
     ((re.compile(r"time ?zone"),), "time_zone", None),
+    # Experience and motivation
+    ((re.compile(r"fintech|financial services?|banking experience"),), "financial_experience", None),
+    ((re.compile(r"why\s+(?:are\s+you\s+(?:interested|excited)|(?:do\s+you\s+want\s+to\s+work)|wealthsimple|float|[a-z0-9_-]+)|what\s+interests\s+you\s+about"),), "why_company_motivation", None),
+    ((re.compile(r"underwriting|credit policy|underwrite"),), "direct_underwriting", None),
+    ((re.compile(r"smb lending|small business.*lending|commercial lending"),), "smb_lending", None),
+    ((re.compile(r"how\s+you\s+use\s+sql|\bsql\b.*role|\buse\s+sql\b"),), "sql_skill", None),
+    ((re.compile(r"card fraud|fraud (?:prevention|work|experience|investigation)"),), "fraud_experience", None),
+    ((re.compile(r"require (?:any )?(?:type of )?accommodation"),), "accommodation_required", None),
+    ((re.compile(r"who referred you|name of the person who referred you"),), "current_employee_referral", None),
 )
 
 # Spoken / bilingual language questions. Programming-language prompts must not match.
@@ -352,15 +382,28 @@ def classify_question(label: str, job_location: str = "") -> str | None:
     return _rule_key(text)
 
 
+_ALLOWED_LEGAL_KEYS = frozenset({
+    "background_check_consent",
+    "identity_verification_consent",
+    "terms_consent",
+    "general_consent",
+    "privacy_consent",
+    "disclaimer_consent",
+    "agreement_consent",
+    "drug_screening_consent",
+    "credit_check_consent",
+})
+
+
 def shared_answer_key(label: str, job_location: str = "") -> str | None:
     """Canonical vault key for a form question, respecting legal fail-closed rules.
 
-    Most legal declarations stay per-question. Background-check consent may
-    share an explicit policy answer from the vault.
+    Recognized standard candidate declarations and consents share an explicit
+    policy answer from the vault. Unknown or employer-specific legal terms fail closed.
     """
     classified = classify_question(label, job_location)
     if _looks_like(label, LEGAL_PATTERNS):
-        return classified if classified == "background_check_consent" else None
+        return classified if classified in _ALLOWED_LEGAL_KEYS else None
     return classified
 
 
@@ -595,10 +638,12 @@ def parse_greenhouse_payload(payload: dict[str, Any], ref: GreenhouseJobRef) -> 
         warnings.append("form contains field types this engine does not support")
 
     tag_prior_employer(controls, ref.board)
+    abs_url = str(payload.get("absolute_url") or "").strip()
+    target_url = abs_url if abs_url and "greenhouse.io" in abs_url else ref.embed_url
     return RealForm(
         platform="greenhouse",
         source="greenhouse_api",
-        url=str(payload.get("absolute_url") or ref.embed_url),
+        url=target_url,
         title=str(payload.get("title") or ""),
         controls=controls,
         vault_scopes=ref.vault_scopes,

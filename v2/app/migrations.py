@@ -79,6 +79,16 @@ def _discovery_identity(connection: Connection) -> None:
     connection.execute(text("UPDATE jobs SET liveness_failures = 0 WHERE liveness_failures IS NULL"))
 
 
+KERNEL_TABLES = (
+    "agent_versions",
+    "kernel_runs",
+    "kernel_traces",
+    "kernel_evaluations",
+    "kernel_defects",
+    "kernel_improvement_jobs",
+    "kernel_promotions",
+)
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(1, "baseline schema (v0.2)", _create_tables(*BASELINE_TABLES)),
     Migration(2, "scheduler cycle ledger", _create_tables("scheduler_cycles")),
@@ -86,12 +96,14 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(4, "verified profile facts and versioned application materials",
               _create_tables("profile_facts", "application_materials")),
     Migration(5, "canonical job identity, duplicate links and liveness checks", _discovery_identity),
+    Migration(6, "autonomous improvement kernel tables", _create_tables(*KERNEL_TABLES)),
 )
 LATEST_VERSION = MIGRATIONS[-1].version
 
 
 def _ensure_version_table(connection: Connection) -> None:
     from app import models  # noqa: F401  (registers the tables on Base.metadata)
+    from improvement_kernel.storage import models as kernel_models  # noqa: F401
 
     Base.metadata.create_all(connection, tables=[Base.metadata.tables["schema_version"]], checkfirst=True)
 

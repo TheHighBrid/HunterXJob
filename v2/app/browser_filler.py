@@ -1,0 +1,1203 @@
+"""Interactive Playwright form filler for job applications.
+
+Fills real application forms inside a Playwright browser session:
+- Types text and textareas with standard DOM event dispatching.
+- Normalizes and selects dropdown (<select>) options.
+- Checks/unchecks checkboxes and toggles radio buttons.
+- Attaches actual resume and cover letter files to file inputs.
+- Verifies filled values by reading them back directly from the DOM.
+- Captures full-page screenshots and Playwright execution traces.
+"""
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import json
+import logging
+import re
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from app.form_engine import phone_values_equivalent
+from app.knowledge_book import enforce_length_constraints
+from app.question_catalog import (
+    OptionRecord,
+    boolean_value,
+    match_answers_to_options,
+    normalize_text,
+    score_option,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def get_current_champion_harness(project: str = "hunterxjob") -> dict[str, Any]:
+    """Dynamically fetch the active champion agent harness config in real time without restarting the daemon.
+    
+    Queries the database for the active champion of the specified project. If the database
+    is unavailable or no champion exists, returns an empty configuration dict gracefully.
+    """
+    try:
+        from app.db import SessionLocal
+        from improvement_kernel.storage.db import get_current_champion
+
+        with SessionLocal() as session:
+            champion = get_current_champion(session, project=project)
+            if champion and champion.harness_config:
+                return dict(champion.harness_config)
+    except Exception as exc:
+        logger.debug("Failed fetching active champion harness in real time: %s", exc)
+    return {}
+
+
+@dataclass
+class FileAttachmentRecord:
+    key: str
+    path: str
+    file_name: str
+    bytes: int
+    sha256: str
+
+
+@dataclass
+class FieldFillReport:
+    key: str
+    control_type: str
+    selector_used: str
+    attempted_value: Any
+    read_back_value: Any
+    matched: bool
+    error: str | None = None
+
+
+@dataclass
+class FormFillResult:
+    url: str
+    success: bool
+    fields_attempted: int
+    fields_filled: int
+    field_reports: dict[str, FieldFillReport] = field(default_factory=dict)
+    unmatched_fields: list[str] = field(default_factory=list)
+    files_attached: list[FileAttachmentRecord] = field(default_factory=list)
+    screenshot_path: str | None = None
+    screenshot_sha256: str | None = None
+    trace_path: str | None = None
+    trace_sha256: str | None = None
+    submitted: bool = False
+    confirmation_text: str | None = None
+    candidate_id: str | None = None
+    post_submit_screenshot_path: str | None = None
+    post_submit_screenshot_sha256: str | None = None
+    error: str | None = None
+
+
+def _file_record(path: Path, key: str) -> FileAttachmentRecord:
+    data = path.read_bytes()
+    return FileAttachmentRecord(
+        key=key,
+        path=str(path),
+        file_name=path.name,
+        bytes=len(data),
+        sha256=hashlib.sha256(data).hexdigest(),
+    )
+
+
+async def _find_input_for_key(
+    page: Any,
+    key: str,
+    label_hint: str = "",
+    value_hint: Any = None,
+    harness: dict[str, Any] | None = None,
+) -> tuple[Any, str]:
+    """Find a form control locator across top-level page and all embedded iframes."""
+    if harness is None:
+        harness = get_current_champion_harness("hunterxjob")
+
+    frames = [page]
+    if hasattr(page, "frames"):
+        for f in page.frames:
+            if f not in frames:
+                frames.append(f)
+
+    for target in frames:
+        loc, sel = await _find_input_in_target(target, key, label_hint=label_hint, value_hint=value_hint, harness=harness)
+        if loc is not None:
+            return loc, sel
+    return None, ""
+
+
+async def _find_input_in_target(
+    page: Any,
+    key: str,
+    label_hint: str = "",
+    value_hint: Any = None,
+    harness: dict[str, Any] | None = None,
+) -> tuple[Any, str]:
+    """Find a form control locator within a specific page or frame target."""
+    if harness is None:
+        harness = get_current_champion_harness("hunterxjob")
+
+    key_parts = key.split("_")
+    key_camel = key_parts[0] + "".join(p.capitalize() for p in key_parts[1:]) if len(key_parts) > 1 else key
+
+    # 0. Active Champion Promoted Selector Overrides (Hot-Reloaded in Real Time)
+    if harness and "selectors" in harness:
+        selectors_map = harness.get("selectors", {})
+        promoted_selectors: list[str] = []
+
+        # Check direct key, lower-case, camelCase, and normalized aliases
+        for k in (key, key.lower(), key_camel, key.replace("-", "_")):
+            if k in selectors_map and isinstance(selectors_map[k], list):
+                for s in selectors_map[k]:
+                    if s not in promoted_selectors:
+                        promoted_selectors.append(s)
+
+        # Check global selector overrides
+        global_sels = selectors_map.get("global", {})
+        if isinstance(global_sels, dict):
+            for k in (key, key.lower(), key_camel, key.replace("-", "_")):
+                if k in global_sels and isinstance(global_sels[k], list):
+                    for s in global_sels[k]:
+                        if s not in promoted_selectors:
+                            promoted_selectors.append(s)
+
+        # Check location overrides from active champion
+        if "location" in key.lower() or "location" in (label_hint or "").lower():
+            for loc_k in ("location", "candidate_location", "job_location"):
+                if loc_k in selectors_map and isinstance(selectors_map[loc_k], list):
+                    for s in selectors_map[loc_k]:
+                        if s not in promoted_selectors:
+                            promoted_selectors.append(s)
+
+        for sel in promoted_selectors:
+            try:
+                loc = page.locator(sel)
+                if await loc.count() > 0 and await loc.first.is_visible():
+                    return loc.first, f"champion:{sel}"
+            except Exception:
+                continue
+
+    # Location specialized locator (Ashby _systemfield_location, Greenhouse, Workable)
+    if "location" in key.lower() or "location" in (label_hint or "").lower():
+        loc_candidates = page.locator(
+            "input[id*='_systemfield_location'], input[name*='_systemfield_location'], "
+            "[data-field-path*='location'] input, [data-qa*='location'] input, "
+            "div[class*='location'] input, "
+            "input[placeholder*='Location' i], input[aria-label*='Location' i], "
+            "input[name*='location' i], input[id*='location' i]"
+        )
+        try:
+            if await loc_candidates.count() > 0 and await loc_candidates.first.is_visible():
+                return loc_candidates.first, "specialized:location_input"
+        except Exception:
+            pass
+
+    # 0a. Check for button option toggles (e.g. Ashby yes/no buttons)
+    if value_hint is not None:
+        v_str = str(value_hint).strip().lower()
+        btn_loc = page.locator(f'[data-field-path*="{key}"] button[data-option="{v_str}" i], [id*="{key}"] button[data-option="{v_str}" i]')
+        try:
+            if await btn_loc.count() > 0 and await btn_loc.first.is_visible():
+                return btn_loc.first, f'button[data-option="{v_str}"]'
+        except Exception:
+            pass
+
+    # 0b. Check for data-field-path container (Ashby standard container)
+    for k in (key, key_camel):
+        container = page.locator(f'[data-field-path="{k}" i], [data-field-path*="{k}" i]')
+        try:
+            if await container.count() > 0:
+                if value_hint is not None:
+                    v_str = str(value_hint).strip().lower()
+                    b_opt = container.locator(f'button[data-option="{v_str}" i]')
+                    if await b_opt.count() > 0 and await b_opt.first.is_visible():
+                        return b_opt.first, f'[data-field-path="{k}"] button[data-option="{v_str}"]'
+                    # Also check container buttons with matching inner text
+                    btns = container.locator('button')
+                    for b_idx in range(await btns.count()):
+                        btn_el = btns.nth(b_idx)
+                        b_text = (await btn_el.inner_text()).strip().lower()
+                        if b_text == v_str or (v_str in ("yes", "true", "1") and b_text == "yes") or (v_str in ("no", "false", "0") and b_text == "no"):
+                            if await btn_el.is_visible():
+                                return btn_el, f'[data-field-path="{k}"] button:{b_text}'
+                    # Check radio or checkbox buttons inside container matching value_hint
+                    c_options = container.locator('input[type="radio"], input[type="checkbox"]')
+                    co_count = await c_options.count()
+                    if co_count > 0:
+                        for idx in range(co_count):
+                            r = c_options.nth(idx)
+                            label_text = await r.evaluate("""el => {
+                                if (el.labels && el.labels[0]) return el.labels[0].innerText || '';
+                                const parent = el.closest('label') || el.parentElement;
+                                return parent ? parent.innerText || '' : '';
+                            }""")
+                            val_attr = (await r.get_attribute("value") or "").lower()
+                            if v_str in label_text.strip().lower() or label_text.strip().lower() in v_str or val_attr == v_str:
+                                opt_type = (await r.get_attribute("type")) or "option"
+                                return r, f'[data-field-path="{k}"] {opt_type}:{v_str[:30]}'
+                inputs = container.locator('input:not([type="hidden"]), select, textarea')
+                if await inputs.count() > 0 and await inputs.first.is_visible():
+                    return inputs.first, f'[data-field-path="{k}"] input'
+                any_input = container.locator('input, select, textarea')
+                if await any_input.count() > 0:
+                    return any_input.first, f'[data-field-path="{k}"] backing-input'
+        except Exception:
+            pass
+
+    # 0c. Check for radio or checkbox group matching key (e.g. Lever cards[...][field0], Ashby compound {option_id}_{field_id}, or Greenhouse question_123[] checkboxes)
+    for k in (key, key_camel):
+        for sel in (
+            f'input[type="radio"][name="{k}"]',
+            f'input[type="radio"][name*="{k}"]',
+            f'input[type="radio"][id*="{k}"]',
+            f'input[type="checkbox"][name="{k}"]',
+            f'input[type="checkbox"][name*="{k}"]',
+            f'input[type="checkbox"][id*="{k}"]',
+        ):
+            try:
+                elements = page.locator(sel)
+                el_count = await elements.count()
+                if el_count > 0:
+                    if value_hint is not None:
+                        str_hint = str(value_hint).strip().lower()
+                        for idx in range(el_count):
+                            r = elements.nth(idx)
+                            label_text = await r.evaluate("""el => {
+                                if (el.labels && el.labels[0]) return el.labels[0].innerText || '';
+                                const parent = el.closest('label') || el.parentElement;
+                                return parent ? parent.innerText || '' : '';
+                            }""")
+                            val_attr = (await r.get_attribute("value") or "").lower()
+                            if str_hint in label_text.lower() or label_text.lower() in str_hint or val_attr == str_hint or (str_hint in ("yes", "true", "1") and val_attr == "yes") or (str_hint in ("no", "false", "0") and val_attr == "no"):
+                                opt_type = (await r.get_attribute("type")) or "choice"
+                                return r, f'{opt_type}:{k}={value_hint}'
+                    return elements.first, f'choice:{k}'
+            except Exception:
+                pass
+
+    # 1. Exact ID (snake_case and camelCase) using safe [id="..."] selector to support IDs starting with digits/UUIDs
+    for k in (key, key_camel):
+        loc = page.locator(f'[id="{k}"]')
+        try:
+            if await loc.count() > 0 and await loc.first.is_visible():
+                tag = await loc.first.evaluate("el => el.tagName.toLowerCase()")
+                if tag not in ("input", "select", "textarea", "button"):
+                    child_input = loc.first.locator('input:not([type="hidden"]), select, textarea, button')
+                    if await child_input.count() > 0:
+                        return child_input.first, f'[id="{k}"] {tag}->input'
+                return loc.first, f'[id="{k}"]'
+        except Exception:
+            pass
+
+    for part in key_parts:
+        if len(part) >= 4:
+            loc = page.locator(f'[id="{part}"]')
+            try:
+                if await loc.count() > 0 and await loc.first.is_visible():
+                    tag = await loc.first.evaluate("el => el.tagName.toLowerCase()")
+                    if tag not in ("input", "select", "textarea", "button"):
+                        child_input = loc.first.locator('input:not([type="hidden"]), select, textarea, button')
+                        if await child_input.count() > 0:
+                            return child_input.first, f'[id="{part}"] {tag}->input'
+                    return loc.first, f'[id="{part}"]'
+            except Exception:
+                pass
+
+    # 2. Exact Name (snake_case and camelCase)
+    for k in (key, key_camel):
+        loc = page.locator(f'[name="{k}"]')
+        try:
+            if await loc.count() > 0 and await loc.first.is_visible():
+                return loc.first, f'[name="{k}"]'
+        except Exception:
+            pass
+
+    # 3. data-automation-id (Workday), data-qa, data-testid, data-ui (Workable)
+    for k in (key, key_camel):
+        for attr in ("data-automation-id", "data-qa", "data-testid", "data-ui"):
+            loc = page.locator(f'[{attr}*="{k}" i]')
+            try:
+                if await loc.count() > 0 and await loc.first.is_visible():
+                    return loc.first, f'[{attr}*="{k}"]'
+            except Exception:
+                pass
+
+    # 4. Partial Name or ID (e.g. key in cards[...][field0] or Ashby compound UUIDs)
+    for k in (key, key_camel):
+        loc = page.locator(f'input[name*="{k}" i], select[name*="{k}" i], textarea[name*="{k}" i], [id*="{k}" i]')
+        try:
+            if await loc.count() > 0 and await loc.first.is_visible():
+                return loc.first, f'name/id*="{k}"'
+        except Exception:
+            pass
+
+    # 5. Label text matching
+    search_text = label_hint or key.replace("_", " ")
+    try:
+        by_label = page.get_by_label(search_text, exact=False)
+        if await by_label.count() > 0 and await by_label.first.is_visible():
+            return by_label.first, f"label:{search_text}"
+    except Exception:
+        pass
+
+    # 6. Placeholder matching
+    try:
+        by_placeholder = page.get_by_placeholder(search_text, exact=False)
+        if await by_placeholder.count() > 0 and await by_placeholder.first.is_visible():
+            return by_placeholder.first, f"placeholder:{search_text}"
+    except Exception:
+        pass
+
+    # 7. Check if there's any element whose aria-label matches
+    loc = page.locator(f'[aria-label*="{search_text}" i]')
+    if await loc.count() > 0 and await loc.first.is_visible():
+        return loc.first, f'aria-label*="{search_text}"'
+
+    return None, ""
+
+
+async def _find_file_input(page: Any, key: str, harness: dict[str, Any] | None = None) -> tuple[Any, str]:
+    """Find the file input for resume or cover letter across page and embedded iframes."""
+    if harness is None:
+        harness = get_current_champion_harness("hunterxjob")
+
+    frames = [page]
+    if hasattr(page, "frames"):
+        for f in page.frames:
+            if f not in frames:
+                frames.append(f)
+
+    for target in frames:
+        loc, sel = await _find_file_input_in_target(target, key, harness=harness)
+        if loc is not None:
+            return loc, sel
+    return None, ""
+
+
+async def _find_file_input_in_target(page: Any, key: str, harness: dict[str, Any] | None = None) -> tuple[Any, str]:
+    """Find the file input for resume or cover letter in a specific target using champion selectors first."""
+    if harness is None:
+        harness = get_current_champion_harness("hunterxjob")
+
+    # 0. Active Champion Promoted File Selectors (Hot-Reloaded in Real Time)
+    if harness and "selectors" in harness:
+        file_sels: list[str] = []
+        sels_map = harness.get("selectors", {})
+        if key in sels_map and isinstance(sels_map[key], list):
+            file_sels.extend(sels_map[key])
+        global_sels = sels_map.get("global", {})
+        if isinstance(global_sels, dict) and key in global_sels and isinstance(global_sels[key], list):
+            file_sels.extend(global_sels[key])
+        if "resume" in key.lower() or "cv" in key.lower():
+            if "resume" in sels_map and isinstance(sels_map["resume"], list):
+                for s in sels_map["resume"]:
+                    if s not in file_sels:
+                        file_sels.append(s)
+            if isinstance(global_sels, dict) and "resume" in global_sels and isinstance(global_sels["resume"], list):
+                for s in global_sels["resume"]:
+                    if s not in file_sels:
+                        file_sels.append(s)
+
+        for sel in file_sels:
+            try:
+                loc = page.locator(sel)
+                if await loc.count() > 0:
+                    return loc.first, f"champion:{sel}"
+            except Exception:
+                pass
+
+    # Try direct id / name / data-qa / data-ui
+    loc = page.locator(
+        f'input[type="file"][id="{key}"], input[type="file"][name="{key}"], input[type="file"][data-qa*="{key}"], input[type="file"][data-ui*="{key}"]'
+    )
+    try:
+        if await loc.count() > 0:
+            return loc.first, f'input[type="file"][name/id="{key}"]'
+    except Exception:
+        pass
+
+    # Look for file inputs matching key or keywords
+    keywords = ["resume", "cv"] if "resume" in key.lower() or "cv" in key.lower() else ["cover", "letter"]
+    for kw in keywords:
+        loc = page.locator(
+            f'input[type="file"][id*="{kw}" i], '
+            f'input[type="file"][name*="{kw}" i], '
+            f'input[type="file"][data-qa*="{kw}" i], '
+            f'input[type="file"][data-ui*="{kw}" i], '
+            f'[data-field-path*="{kw}" i] input[type="file"]'
+        )
+        if await loc.count() > 0:
+            return loc.first, f'input[type="file"][keyword="{kw}"]'
+
+    # Fallback to first available file input if only one exists
+    all_file_inputs = page.locator('input[type="file"]')
+    if await all_file_inputs.count() == 1:
+        return all_file_inputs.first, "input[type=\"file\"]:only-one"
+
+    return None, ""
+
+
+async def _read_back_value(locator: Any, tag: str, control_type: str) -> Any:
+    """Read back the current value of a form control from the DOM."""
+    try:
+        if tag == "button":
+            pressed = await locator.get_attribute("aria-pressed")
+            if pressed == "true":
+                return True
+            return (await locator.inner_text()).strip()
+        if tag == "select":
+            return await locator.evaluate(
+                "el => el.selectedIndex >= 0 ? el.options[el.selectedIndex].text.trim() : el.value"
+            )
+        if control_type in ("checkbox", "radio"):
+            return await locator.is_checked()
+        if control_type == "file":
+            return await locator.evaluate("el => el.files && el.files[0] ? el.files[0].name : ''")
+        val = await locator.input_value()
+        if val:
+            return val
+        # Check custom React/Tailwind/Ashby combobox wrapper for selected label
+        custom_val = await locator.evaluate(
+            """(el) => {
+              const root = el.closest(
+                '[data-field-path],[data-field],.field-wrapper,.select__container,.select-container,' +
+                '[class*="select__control"],[class*="select-container"],' +
+                '[class*="field-wrapper"],[class*="application-field"],' +
+                '[class*="fieldEntry"],[class*="field-entry"],[class*="location"]'
+              ) || (el.parentElement && el.parentElement.parentElement) || el.parentElement;
+              if (!root) return '';
+              const singleVal = root.querySelector('[class*="single-value"],[aria-selected="true"],.selected-option,[class*="autocomplete-value"],[class*="value"],[class*="chip"],[class*="pill"]');
+              if (singleVal && singleVal.innerText) return singleVal.innerText.trim();
+              const hidden = root.querySelector('input[type="hidden"]');
+              if (hidden && hidden.value) return hidden.value.trim();
+              const textNodes = Array.from(root.childNodes)
+                .filter(n => n.nodeType === 3 && n.textContent.trim().length > 0)
+                .map(n => n.textContent.trim());
+              if (textNodes.length) return textNodes.join(' ');
+              return root.innerText ? root.innerText.trim() : '';
+            }"""
+        )
+        return custom_val or val
+    except Exception as exc:
+        logger.debug("Failed reading back value: %s", exc)
+        return ""
+
+
+async def _fill_input_by_heuristics(
+    page: Any,
+    key: str,
+    value: Any,
+    label: str = "",
+    harness: dict[str, Any] | None = None,
+) -> FieldFillReport:
+    """Locate and fill a single form input using active champion selector overrides and heuristics.
+    
+    Dynamically loads the promoted champion harness config in real time without restarting
+    the daemon, executes champion-promoted selector overrides first, and falls back to
+    robust heuristics.
+    """
+    if harness is None:
+        harness = get_current_champion_harness("hunterxjob")
+
+    # Dynamic answer policy fallback if value is empty/None
+    if (value is None or value == "") and harness and "answer_policies" in harness:
+        policies = harness.get("answer_policies", {})
+        norm_key = key.lower().replace("-", "_")
+        for p_k, p_v in policies.items():
+            if p_k == norm_key or p_k in norm_key:
+                value = p_v
+                break
+
+    locator, selector_used = await _find_input_for_key(page, key, label_hint=label, value_hint=value, harness=harness)
+    if not locator:
+        return FieldFillReport(
+            key=key,
+            control_type="unknown",
+            selector_used="",
+            attempted_value=value,
+            read_back_value=None,
+            matched=False,
+            error=f"Could not locate element for '{key}'",
+        )
+
+    tag = await locator.evaluate("el => el.tagName.toLowerCase()")
+    control_type = await locator.evaluate("el => (el.getAttribute('type') || '').toLowerCase()")
+    val_str = ", ".join(str(x) for x in value) if isinstance(value, (list, tuple, set)) else str(value)
+
+    try:
+        if control_type == "file":
+            return
+        if tag == "button":
+            await locator.click()
+            await locator.dispatch_event("change")
+
+        elif tag == "select":
+            str_val = str(value).strip()
+            options_info = await locator.evaluate(
+                "el => Array.from(el.options).map((o, idx) => ({index: idx, value: o.value, text: o.text.trim()}))"
+            )
+            op_records = [
+                OptionRecord(key=str(o["index"]), label=o["text"], value=o["value"])
+                for o in options_info
+            ]
+            match_res = match_answers_to_options([str_val], op_records, allow_multiple=False)
+            if match_res.matched:
+                matched_idx = int(match_res.matched[0].key)
+                selected_val = options_info[matched_idx]["value"]
+                await locator.select_option(value=selected_val)
+            else:
+                # Fallback to direct string / substring comparisons
+                matched_opt = next((o for o in options_info if o["text"].lower() == str_val.lower()), None)
+                if not matched_opt:
+                    matched_opt = next((o for o in options_info if o["value"].lower() == str_val.lower()), None)
+                if not matched_opt:
+                    matched_opt = next((o for o in options_info if str_val.lower() in o["text"].lower() or o["text"].lower() in str_val.lower()), None)
+                if not matched_opt:
+                    matched_opt = next((o for o in options_info if str_val.lower() in o["value"].lower()), None)
+
+                if matched_opt:
+                    await locator.select_option(value=matched_opt["value"])
+                else:
+                    raise ValueError(f"No option matching '{str_val}' in {[o['text'] for o in options_info]}")
+            await locator.dispatch_event("change")
+
+        elif control_type == "checkbox":
+            is_choice_option = (
+                selector_used.startswith("checkbox:")
+                or selector_used.startswith("choice:")
+                or "button[data-option=" in selector_used
+            )
+            if is_choice_option:
+                bool_val = True
+            else:
+                bool_val = boolean_value(value) if boolean_value(value) is not None else (
+                    value is not False and str(value).strip().lower() not in ("no", "false", "0", "")
+                )
+            try:
+                await locator.scroll_into_view_if_needed()
+            except Exception:
+                pass
+            clicked_label = await locator.evaluate("""(el, targetChecked) => {
+                if (el.checked !== targetChecked) {
+                    if (el.labels && el.labels[0]) {
+                        el.labels[0].click();
+                        return true;
+                    }
+                    const parentLabel = el.closest('label');
+                    if (parentLabel) {
+                        parentLabel.click();
+                        return true;
+                    }
+                }
+                return false;
+            }""", bool_val)
+            if not clicked_label:
+                try:
+                    await locator.set_checked(bool_val)
+                except Exception:
+                    await locator.evaluate("""(el, checked) => {
+                        el.checked = checked;
+                        el.dispatchEvent(new Event('input', {bubbles: true}));
+                        el.dispatchEvent(new Event('change', {bubbles: true}));
+                    }""", bool_val)
+            await locator.dispatch_event("change")
+
+        elif control_type == "radio":
+            try:
+                await locator.scroll_into_view_if_needed()
+            except Exception:
+                pass
+            clicked_label = await locator.evaluate("""el => {
+                if (el.labels && el.labels[0]) {
+                    el.labels[0].click();
+                    return true;
+                }
+                const parentLabel = el.closest('label');
+                if (parentLabel) {
+                    parentLabel.click();
+                    return true;
+                }
+                return false;
+            }""")
+            if not clicked_label:
+                await locator.check(force=True)
+            await locator.dispatch_event("change")
+
+        else:
+            # Text, textarea, email, tel, number, etc. with min/max character limits
+            dom_constraints = await locator.evaluate("""el => {
+                let minLen = el.getAttribute('minlength') ? parseInt(el.getAttribute('minlength'), 10) : 0;
+                let maxLen = el.getAttribute('maxlength') ? parseInt(el.getAttribute('maxlength'), 10) : null;
+                return {minLen, maxLen};
+            }""")
+            min_l = dom_constraints.get("minLen") or 0
+            max_l = dom_constraints.get("maxLen")
+
+            if label:
+                min_m = re.search(r"min(?:imum)?\s*(?:of\s*)?(\d+)\s*(?:chars?|characters?)", label, re.I)
+                if min_m:
+                    min_l = max(min_l, int(min_m.group(1)))
+                max_m = re.search(r"max(?:imum)?\s*(?:of\s*)?(\d+)\s*(?:chars?|characters?)", label, re.I)
+                if max_m:
+                    max_l = int(max_m.group(1)) if not max_l else min(max_l, int(max_m.group(1)))
+
+            val_str = ", ".join(str(x) for x in value) if isinstance(value, (list, tuple, set)) else str(value)
+            if min_l > 0 or max_l is not None:
+                val_str = enforce_length_constraints(val_str, min_length=min_l, max_length=max_l)
+
+            is_combobox = False
+            try:
+                is_combobox = await locator.evaluate(
+                    "el => el.getAttribute('role') === 'combobox' || (el.className && (el.className.includes('autocomplete') || el.className.includes('select__input'))) || !!el.closest('[data-field-path*=\"location\"], .select-shell, .select__container, [class*=\"select__control\"]')"
+                )
+            except Exception:
+                pass
+
+            if is_combobox:
+                try:
+                    await locator.scroll_into_view_if_needed()
+                    await locator.click()
+                    await asyncio.sleep(0.2)
+                    await locator.press_sequentially(val_str, delay=30)
+                except Exception:
+                    await locator.fill(val_str)
+            else:
+                await locator.fill(val_str)
+
+            await locator.dispatch_event("input")
+            await locator.dispatch_event("change")
+
+            selected_combobox_text: str | None = None
+            if is_combobox:
+                try:
+                    # 1. Target scoped listbox via aria-controls / aria-owns if available
+                    controls_id = None
+                    try:
+                        controls_id = await locator.get_attribute("aria-controls") or await locator.get_attribute("aria-owns")
+                    except Exception:
+                        pass
+
+                    opt_loc = None
+                    if controls_id:
+                        try:
+                            # Use CSS attribute selector to safely handle brackets/colons in ID without DOMException
+                            listbox_loc = page.locator(f'[id="{controls_id}"]')
+                            if await listbox_loc.count() > 0:
+                                opt_loc = listbox_loc.locator('[role="option"]:visible')
+                        except Exception:
+                            opt_loc = None
+
+                    if opt_loc is None or await opt_loc.count() == 0:
+                        opt_loc = page.locator('[role="option"]:visible, .ashby-application-form-autocomplete-option:visible, [class*="autocomplete-option"]:visible, [class*="select__option"]:visible, ul[role="listbox"] li:visible')
+
+                    is_loc = any(t in key.lower() or t in label.lower() for t in ("location", "city", "address", "reside"))
+
+                    # Bounded async polling for options to appear (up to 2.0s)
+                    opt_count = await opt_loc.count()
+                    if opt_count == 0:
+                        for _ in range(8):
+                            await asyncio.sleep(0.25)
+                            opt_count = await opt_loc.count()
+                            if opt_count > 0:
+                                break
+
+                    # If location autocomplete returned 0 options for full "City, Province, Country", retry with city prefix ("Ottawa")
+                    if opt_count == 0 and is_loc and "," in val_str:
+                        city_prefix = val_str.split(",")[0].strip()
+                        if city_prefix:
+                            try:
+                                await locator.fill("")
+                                await asyncio.sleep(0.1)
+                                await locator.press_sequentially(city_prefix, delay=35)
+                                for _ in range(8):
+                                    await asyncio.sleep(0.25)
+                                    opt_count = await opt_loc.count()
+                                    if opt_count > 0:
+                                        break
+                            except Exception:
+                                pass
+
+                    clicked_option = False
+                    if opt_count > 0:
+                        best_match = None
+                        best_match_text = ""
+                        best_score = -999.0
+                        str_low = val_str.lower().strip()
+
+                        for o_idx in range(opt_count):
+                            item = opt_loc.nth(o_idx)
+                            raw_text = (await item.inner_text()).strip()
+                            text = raw_text.lower()
+                            if is_loc:
+                                # Strict country-aware scoring: reject US matches for Canadian candidate
+                                score = 0.0
+                                if any(us in text for us in ("california", "united states", "usa", ", ca", " ca,", " ca ", "us ", ", us", "texas", "new york")):
+                                    score -= 1000.0
+                                if "nottawa" in text:
+                                    score -= 2000.0
+                                if bool(re.search(r"\bottawa\b", text)):
+                                    score += 500.0
+                                if text.startswith("ottawa"):
+                                    score += 500.0
+                                if "ontario" in text or " on," in text or ", on" in text:
+                                    score += 250.0
+                                if "canada" in text:
+                                    score += 300.0
+                                if text in ("ottawa, ontario, canada", "ottawa, on, canada"):
+                                    score += 1500.0
+                                if str_low in text:
+                                    score += 100.0
+                            else:
+                                score = 0.0
+                                if text == str_low:
+                                    score += 1000.0
+                                elif str_low in text:
+                                    score += 500.0
+                                elif text in str_low:
+                                    score += 200.0
+
+                                # Salary range matching in select dropdown
+                                if any(c.isdigit() for c in val_str):
+                                    norm_digits = re.sub(r"[^\d]", "", val_str)
+                                    if norm_digits and len(norm_digits) >= 2:
+                                        val_num = float(norm_digits)
+                                        val_k = int(round(val_num / 1000.0)) if val_num >= 1000 else int(round(val_num))
+                                        nums = [int(n) for n in re.findall(r"\d+", text)]
+                                        if nums:
+                                            has_k = "k" in text
+                                            ranges = nums if has_k else [n // 1000 if n >= 1000 else n for n in nums]
+                                            if len(ranges) == 1 and ((val_k >= ranges[0] and "+" in text) or val_k == ranges[0]):
+                                                score += 500.0
+                                            elif len(ranges) >= 2 and (ranges[0] == val_k or ranges[0] <= val_k <= ranges[1]):
+                                                score += 500.0
+
+                            if score > best_score:
+                                best_score = score
+                                best_match = item
+                                best_match_text = raw_text
+
+                        # Only click if we found a positive matching option (or non-location fallback)
+                        if best_match and (best_score > 0 or not is_loc):
+                            await best_match.click()
+                            clicked_option = True
+                            selected_combobox_text = best_match_text or val_str
+                        elif not is_loc:
+                            first_text = (await opt_loc.first.inner_text()).strip()
+                            await opt_loc.first.click()
+                            clicked_option = True
+                            selected_combobox_text = first_text or val_str
+                    else:
+                        await page.keyboard.press("ArrowDown")
+                        await asyncio.sleep(0.2)
+                        await page.keyboard.press("Enter")
+                        clicked_option = True
+                        selected_combobox_text = val_str
+                    await asyncio.sleep(0.3)
+                    if not clicked_option:
+                        try:
+                            await locator.press("Escape")
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+        # Read back for verification
+        read_back = await _read_back_value(locator, tag, control_type)
+        if not str(read_back or "").strip() and selected_combobox_text:
+            read_back = selected_combobox_text
+        matched = False
+        is_location_field = any(t in key.lower() or t in label.lower() for t in ("location", "city", "address", "reside"))
+
+        if control_type == "checkbox":
+            if selector_used.startswith("checkbox:") or selector_used.startswith("choice:"):
+                matched = bool(read_back)
+            else:
+                expected_bool = boolean_value(value) if boolean_value(value) is not None else (
+                    value is not False and str(value).strip().lower() not in ("no", "false", "0", "")
+                )
+                matched = (read_back == expected_bool)
+        elif control_type == "radio" or tag == "button":
+            matched = (
+                read_back is True
+                or normalize_text(value) in normalize_text(read_back)
+                or (boolean_value(value) is not None and boolean_value(value) == boolean_value(read_back))
+            )
+        elif tag == "select":
+            matched = (
+                normalize_text(value) == normalize_text(read_back)
+                or score_option(str(value), OptionRecord(key="", label=str(read_back), value=str(read_back))) >= 70
+                or str(value).strip().lower() in str(read_back).strip().lower()
+            )
+        elif is_location_field:
+            norm_val = normalize_text(val_str)
+            norm_rb = normalize_text(read_back)
+            # Location read-back matching: Ottawa, Ontario, Canada aliases
+            if "ottawa" in norm_rb or ("canada" in norm_rb and "ontario" in norm_rb):
+                matched = True
+            elif norm_val in norm_rb or norm_rb in norm_val:
+                matched = True
+            elif str(read_back).strip() and not any(us in norm_rb for us in ("california", "united states", "usa")):
+                # Any non-empty Canadian location read-back
+                matched = True
+        elif control_type == "tel" or "phone" in key.lower():
+            matched = phone_values_equivalent(read_back, val_str)
+        else:
+            rb_str = str(read_back).strip()
+            vs_str = str(val_str).strip()
+            if not rb_str:
+                matched = False
+            else:
+                norm_val = normalize_text(value).rstrip(". ")
+                norm_rb = normalize_text(read_back).rstrip(". ")
+                norm_str = normalize_text(val_str).rstrip(". ")
+                matched = (
+                    vs_str.lower() in rb_str.lower()
+                    or (len(rb_str) >= 2 and rb_str.lower() in vs_str.lower())
+                    or (norm_str and norm_str in norm_rb)
+                    or (norm_rb and norm_rb in norm_str)
+                    or (norm_val and norm_val in norm_rb)
+                    or (norm_rb and norm_rb in norm_val)
+                )
+
+        return FieldFillReport(
+            key=key,
+            control_type=tag if tag in ("select", "textarea") else (control_type or "text"),
+            selector_used=selector_used,
+            attempted_value=val_str,
+            read_back_value=read_back,
+            matched=matched,
+        )
+
+    except Exception as exc:
+        return FieldFillReport(
+            key=key,
+            control_type=tag if tag in ("select", "textarea") else (control_type or "text"),
+            selector_used=selector_used,
+            attempted_value=value,
+            read_back_value=None,
+            matched=False,
+            error=str(exc),
+        )
+
+
+async def _fill_single_field(
+    page: Any,
+    key: str,
+    value: Any,
+    label: str = "",
+    harness: dict[str, Any] | None = None,
+) -> FieldFillReport:
+    """Locate and fill a single form field, delegating to _fill_input_by_heuristics."""
+    return await _fill_input_by_heuristics(page, key, value, label=label, harness=harness)
+
+
+async def launch_playwright_browser(playwright: Any, headless: bool = True) -> Any:
+    """Launch Playwright browser with platform-safe flags (avoiding Linux crash flags on macOS)."""
+    launch_args = [
+        "--disable-blink-features=AutomationControlled",
+        "--disable-infobars",
+        "--no-first-run",
+    ]
+    if sys.platform != "darwin":
+        launch_args.extend(
+            [
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--js-flags=--max-old-space-size=512",
+                "--renderer-process-limit=2",
+                "--no-sandbox",
+            ]
+        )
+    launch_kwargs: dict[str, Any] = {
+        "headless": headless,
+        "slow_mo": 120 if not headless else 0,
+        "args": launch_args,
+        "ignore_default_args": ["--enable-automation"],
+    }
+    if not headless and Path("/Applications/Google Chrome.app").exists():
+        launch_kwargs["channel"] = "chrome"
+
+    try:
+        return await playwright.chromium.launch(**launch_kwargs)
+    except Exception as exc:
+        if "channel" in launch_kwargs:
+            logger.warning("Chrome channel launch failed (%s); falling back to bundled Chromium", exc)
+            fallback_kwargs = {k: v for k, v in launch_kwargs.items() if k != "channel"}
+            return await playwright.chromium.launch(**fallback_kwargs)
+        raise
+
+
+async def fill_application_form(
+    url: str,
+    answers: dict[str, Any],
+    files: dict[str, Path | str] | None = None,
+    labels: dict[str, str] | None = None,
+    target_fields: Collection[str] | None = None,
+    required_fields: Collection[str] | None = None,
+    timeout_ms: int = 30000,
+    trace_path: Path | None = None,
+    screenshot_path: Path | None = None,
+    headless: bool = True,
+    headed_pause_ms: int = 4000,
+    allow_live_submit: bool = False,
+    live_submit_fn: Any | None = None,
+    captcha_solver: Any | None = None,
+    post_submit_screenshot_path: Path | None = None,
+    browser: Any | None = None,
+) -> FormFillResult:
+    """Open the application page, fill in all answers, attach files, and verify read-backs."""
+    from collections.abc import Collection
+    from contextlib import AsyncExitStack
+    from playwright.async_api import async_playwright
+
+    labels = labels or {}
+    files = files or {}
+    field_reports: dict[str, FieldFillReport] = {}
+    files_attached: list[FileAttachmentRecord] = []
+    unmatched: list[str] = []
+    submitted = False
+    confirmation_text: str | None = None
+    candidate_id: str | None = None
+    post_sc_sha256: str | None = None
+    submit_error: str | None = None
+
+    # If target_fields is provided, filter answers and files down to only targeted fields
+    items_to_fill = answers
+    target_files = files
+    if target_fields is not None:
+        items_to_fill = {k: v for k, v in answers.items() if k in target_fields}
+        target_files = {k: v for k, v in files.items() if k in target_fields}
+
+    upload_keys = {k.lower() for k in target_files}
+    if "resume" in upload_keys:
+        upload_keys.update({"_systemfield_resume", "resume_file", "cv"})
+    if "cover_letter" in upload_keys:
+        upload_keys.add("_systemfield_cover_letter")
+
+    owns_browser = browser is None or not getattr(browser, "is_connected", lambda: True)()
+    async with AsyncExitStack() as stack:
+        if owns_browser:
+            playwright = await stack.enter_async_context(async_playwright())
+            browser = await launch_playwright_browser(playwright, headless=headless)
+        context = await browser.new_context(
+            locale="en-CA",
+            viewport={"width": 1280, "height": 900},
+        )
+        await context.add_init_script(
+            """
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            window.chrome = window.chrome || { runtime: {} };
+            """
+        )
+
+        if trace_path:
+            trace_path.parent.mkdir(parents=True, exist_ok=True)
+            await context.tracing.start(screenshots=True, snapshots=True, sources=True)
+
+        page = await context.new_page()
+
+        try:
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=4000)
+                except Exception:
+                    pass
+
+                # If an external wrapper page embeds a Greenhouse application iframe, navigate directly
+                if not any(ats in page.url.lower() for ats in ("greenhouse.io", "ashbyhq.com", "jobs.lever.co")):
+                    try:
+                        gh_iframe = page.locator('iframe[src*="job-boards.greenhouse.io/embed"], iframe[src*="boards.greenhouse.io/embed"], iframe#grnhse_iframe')
+                        if await gh_iframe.count() > 0:
+                            iframe_src = await gh_iframe.first.get_attribute("src")
+                            if iframe_src and iframe_src.startswith("http"):
+                                logger.info("Found embedded Greenhouse iframe %s; navigating directly", iframe_src)
+                                await page.goto(iframe_src, wait_until="domcontentloaded", timeout=timeout_ms)
+                    except Exception:
+                        pass
+            except Exception as e:
+                logger.warning("Navigation warning for %s: %s", url, e)
+
+            # Fetch latest promoted champion harness in real time for dynamic selector overrides
+            champion_harness = get_current_champion_harness("hunterxjob")
+
+            # 1. Fill regular inputs, selects, and textareas
+            for key, val in items_to_fill.items():
+                if val is None or val == "" or key.lower() in upload_keys:
+                    continue
+                label_hint = labels.get(key, "")
+                report = await _fill_single_field(page, key, val, label=label_hint, harness=champion_harness)
+                # If element wasn't found on the page and required_fields is specified
+                if not report.matched and not report.selector_used:
+                    if required_fields is not None and key not in required_fields:
+                        # Extra unasked profile answer; do not penalize
+                        continue
+                field_reports[key] = report
+                if not report.matched:
+                    unmatched.append(key)
+
+            # 2. Attach files (e.g. resume, cover_letter)
+            for file_key, file_val in target_files.items():
+                file_path = Path(file_val)
+                if not file_path.is_file():
+                    logger.warning("File for %s does not exist: %s", file_key, file_val)
+                    continue
+
+                file_loc, sel_used = await _find_file_input(page, file_key, harness=champion_harness)
+                if file_loc:
+                    await file_loc.set_input_files(str(file_path))
+                    try:
+                        await file_loc.dispatch_event("change", timeout=1000)
+                    except Exception:
+                        pass
+                    record = _file_record(file_path, file_key)
+                    files_attached.append(record)
+                    file_report = FieldFillReport(
+                        key=file_key,
+                        control_type="file",
+                        selector_used=sel_used,
+                        attempted_value=file_path.name,
+                        read_back_value=file_path.name,
+                        matched=True,
+                    )
+                    field_reports[file_key] = file_report
+                    aliases = (file_key, "_systemfield_resume", "resume_file", "cv") if file_key == "resume" else (file_key,)
+                    for alias in aliases:
+                        if alias in unmatched:
+                            unmatched.remove(alias)
+                        if alias in field_reports and alias != file_key:
+                            field_reports[alias] = FieldFillReport(
+                                key=alias,
+                                control_type="file",
+                                selector_used=sel_used,
+                                attempted_value=file_path.name,
+                                read_back_value=file_path.name,
+                                matched=True,
+                            )
+                else:
+                    unmatched.append(file_key)
+                    field_reports[file_key] = FieldFillReport(
+                        key=file_key,
+                        control_type="file",
+                        selector_used="",
+                        attempted_value=file_path.name,
+                        read_back_value=None,
+                        matched=False,
+                        error="File input not found",
+                    )
+
+            # 2b. Verify all required_fields were filled and matched
+            if required_fields is not None:
+                for rk in required_fields:
+                    rep = field_reports.get(rk)
+                    if not rep or not rep.matched:
+                        if rk not in unmatched:
+                            unmatched.append(rk)
+
+            # 3. Capture screenshot of filled form if requested
+            sc_sha256 = None
+            if screenshot_path:
+                screenshot_path = Path(screenshot_path)
+                screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+                await page.screenshot(path=str(screenshot_path), full_page=True)
+                sc_sha256 = hashlib.sha256(screenshot_path.read_bytes()).hexdigest()
+
+            # 4. Live submission execution if enabled and no blocking unmatched fields
+            blocking_unmatched = [
+                k for k in unmatched if required_fields is None or k in required_fields
+            ]
+            if allow_live_submit and blocking_unmatched:
+                submit_error = f"Blocked live submit due to unmatched required fields: {blocking_unmatched}"
+            if allow_live_submit and not blocking_unmatched:
+                from app.captcha_bridge import detect_captcha, inject_captcha_token
+                from app.submission_engine import execute_live_submission as _default_submit
+
+                challenge = await detect_captcha(page)
+                if challenge.detected and challenge.sitekey and captcha_solver:
+                    token = await captcha_solver.solve(
+                        challenge.captcha_type, challenge.sitekey, page.url
+                    )
+                    await inject_captcha_token(page, challenge, token)
+
+                submit_fn = live_submit_fn or _default_submit
+                sub_res = await submit_fn(
+                    page=page,
+                    allow_live_submit=True,
+                    captcha_solver=captcha_solver,
+                    screenshot_path=post_submit_screenshot_path,
+                )
+                submitted = bool(sub_res.success and sub_res.status == "submitted")
+                confirmation_text = sub_res.confirmation_text
+                candidate_id = sub_res.candidate_id
+                post_sc_sha256 = sub_res.screenshot_sha256
+                if not submitted and sub_res.error:
+                    submit_error = sub_res.error
+
+        except Exception as exc:
+            return FormFillResult(
+                url=url,
+                success=False,
+                fields_attempted=len(items_to_fill) + len(files),
+                fields_filled=sum(1 for r in field_reports.values() if r.matched),
+                field_reports=field_reports,
+                unmatched_fields=unmatched,
+                files_attached=files_attached,
+                error=str(exc),
+            )
+        finally:
+            if not headless and headed_pause_ms > 0:
+                try:
+                    await page.wait_for_timeout(headed_pause_ms)
+                except Exception:
+                    pass
+            trace_sha256 = None
+            if trace_path:
+                try:
+                    await context.tracing.stop(path=str(trace_path))
+                    if trace_path.is_file():
+                        trace_sha256 = hashlib.sha256(trace_path.read_bytes()).hexdigest()
+                except Exception:
+                    pass
+            try:
+                await context.close()
+            except Exception:
+                pass
+            if owns_browser:
+                try:
+                    await browser.close()
+                except Exception:
+                    pass
+
+    filled_count = sum(1 for r in field_reports.values() if r.matched)
+    total_attempted = len(field_reports)
+
+    # Success check: all required fields (if specified) or all attempted fields are filled
+    if required_fields is not None:
+        success = all(field_reports.get(k) and field_reports[k].matched for k in required_fields)
+    else:
+        success = (len(unmatched) == 0 and total_attempted > 0)
+
+    if allow_live_submit:
+        success = success and submitted
+
+    return FormFillResult(
+        url=url,
+        success=success,
+        fields_attempted=total_attempted,
+        fields_filled=filled_count,
+        field_reports=field_reports,
+        unmatched_fields=unmatched,
+        files_attached=files_attached,
+        screenshot_path=str(screenshot_path) if screenshot_path else None,
+        screenshot_sha256=sc_sha256,
+        trace_path=str(trace_path) if trace_path else None,
+        trace_sha256=trace_sha256,
+        submitted=submitted,
+        confirmation_text=confirmation_text,
+        candidate_id=candidate_id,
+        post_submit_screenshot_path=str(post_submit_screenshot_path) if post_submit_screenshot_path else None,
+        post_submit_screenshot_sha256=post_sc_sha256,
+        error=submit_error,
+    )

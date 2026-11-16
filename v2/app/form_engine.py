@@ -51,7 +51,7 @@ AUTH_PATTERNS = (
 VOLUNTARY_SECTIONS = frozenset({"eeoc", "demographic"})
 DECLINE_POLICY_KEY = "voluntary_self_identification"
 _DECLINE_OPTION_RE = re.compile(
-    r"decline|don.?t wish|do not wish|prefer not|not to (?:say|disclose|answer|self)|choose not|wish not",
+    r"decline|don.?t wish|do not wish|prefer not|not to (?:say|disclose|answer|respond|self)|choose not|wish not",
     re.IGNORECASE,
 )
 ASSESSMENT_PATTERNS = ("assessment", "hirevue", "codility", "hackerrank", "personality test")
@@ -231,22 +231,59 @@ def _normalize_option(value: Any) -> str:
     return " ".join(str(value).split()).casefold()
 
 
-def _match_option(control: FormControl, value: Any) -> Any | None:
-    """Return the listed option(s) equal to ``value`` or None.
+def _score_best_option(answer: Any, options: list[str]) -> str | None:
+    """Score options against answer and return unique winner if score >= 70."""
+    from app.question_catalog import OptionRecord, score_option
 
-    Matching is exact after case/whitespace normalization only. No fuzzy or
-    semantic matching: an answer that is not literally one of the offered
-    options goes to review unless a narrow deterministic rule in
-    ``app.option_derivation`` applies.
-    """
+    ans_str = str(answer or "").strip()
+    if not ans_str or not options:
+        return None
+
+    scored: list[tuple[int, str]] = []
+    for opt in options:
+        rec = OptionRecord(key=opt, label=opt, value=opt)
+        score = score_option(ans_str, rec)
+        if score >= 70:
+            scored.append((score, opt))
+
+    if not scored:
+        return None
+
+    scored.sort(key=lambda s: s[0], reverse=True)
+    top_score = scored[0][0]
+    top_candidates = [opt for score, opt in scored if score == top_score]
+
+    # If there is a tie between multiple distinct options, fail closed (ambiguous)
+    if len(top_candidates) == 1:
+        return top_candidates[0]
+    return None
+
+
+def _match_single_option(control: FormControl, val: str, lookup: dict[str, str]) -> str | None:
+    norm = _normalize_option(val)
+    if norm in lookup:
+        return lookup[norm]
+    derived = derive_option(control, val)
+    if derived is not None:
+        if isinstance(derived, list):
+            return derived[0] if derived else None
+        return derived
+    best = _score_best_option(val, control.options)
+    if best is not None:
+        return best
+    return None
+
+
+def _match_option(control: FormControl, value: Any) -> Any | None:
+    """Return the listed option(s) matching ``value`` or None."""
     lookup = {_normalize_option(option): option for option in control.options}
     if control.control_type is ControlType.MULTISELECT:
         parts = value if isinstance(value, (list, tuple)) else [part for part in str(value).split("|") if part.strip()]
-        matched = [lookup.get(_normalize_option(part)) for part in parts]
+        matched = [_match_single_option(control, part, lookup) for part in parts]
         if not matched or any(item is None for item in matched):
             return None
         return matched
-    return lookup.get(_normalize_option(value))
+    return _match_single_option(control, str(value), lookup)
 
 
 def _decline_option(control: FormControl) -> str | None:
@@ -256,14 +293,52 @@ def _decline_option(control: FormControl) -> str | None:
 
 def _resolve_control(control: FormControl, vault: AnswerVault, request_sensitive: bool):
     keys = [*control.vault_keys, control.key]
+
+    # Exhaustive fallback keys derived from control properties and semantic patterns
+    lbl = (control.label or "").lower()
+    if control.legal or any(w in lbl for w in ("disclaimer", "consent", "agree", "certify", "acknowledge")):
+        keys.extend(["terms_consent", "agreement_consent", "general_consent"])
+    if "salary" in lbl or "compensation" in lbl or "pay" in lbl:
+        keys.extend(["salary_expectation", "desired_salary", "compensation_expectation"])
+    if "time zone" in lbl or "timezone" in lbl:
+        keys.extend(["time_zone", "timezone"])
+    if "work location" in lbl or ("remote" in lbl and "hybrid" in lbl):
+        keys.extend(["work_location_preference", "work_arrangement_nonlocal"])
+    if "gender" in lbl:
+        keys.extend(["gender", "gender_identity"])
+    if ("veteran" in lbl or "armed forces" in lbl) and control.options:
+        keys.extend(["veteran_status", "veteran"])
+    if "race" in lbl or "ethnic" in lbl:
+        keys.extend(["race_ethnicity", "race"])
+    if "disab" in lbl:
+        keys.extend(["disability", "disability_status"])
+    if "how did you hear" in lbl or "hear about" in lbl:
+        keys.extend(["referral_source", "hear_about_us"])
+    if "onboard" in lbl and "date" in lbl:
+        keys.extend(["start_date", "availability_date"])
+
     seen: list[str] = []
     for key in keys:
-        if key in seen:
+        if not key or key in seen:
             continue
         seen.append(key)
         if vault.has(key):
-            return vault.resolve(FieldRequest(key=key, required=control.required, sensitive=request_sensitive))
+            res = vault.resolve(FieldRequest(key=key, required=control.required, sensitive=request_sensitive))
+            if res.status is ResolutionStatus.RESOLVED:
+                return res
     return vault.resolve(FieldRequest(key=control.key, required=control.required, sensitive=request_sensitive))
+
+
+def _try_decline_option(control: FormControl, vault: AnswerVault) -> str | None:
+    """Return a unique decline option when an explicit USER/POLICY decline applies."""
+    if not control.options:
+        return None
+    if control.section not in VOLUNTARY_SECTIONS and not (control.sensitive and not control.required):
+        return None
+    policy = vault.resolve(FieldRequest(key=DECLINE_POLICY_KEY, required=False, sensitive=True))
+    if policy.status is ResolutionStatus.RESOLVED and _normalize_option(policy.value) == "decline":
+        return _decline_option(control)
+    return None
 
 
 def plan_fill(controls: list[FormControl], vault: AnswerVault) -> FillPlan:
@@ -273,6 +348,9 @@ def plan_fill(controls: list[FormControl], vault: AnswerVault) -> FillPlan:
         if control.control_type is ControlType.HIDDEN:
             continue
         if control.control_type is ControlType.UNKNOWN or control.confidence < 0.4:
+            if not control.required:
+                items.append(FillPlanItem(control, "skip", reason="optional unsupported control skipped"))
+                continue
             blockers.append("unsupported_control")
             items.append(FillPlanItem(control, "review", reason="unsupported or low-confidence control"))
             continue
@@ -307,28 +385,66 @@ def plan_fill(controls: list[FormControl], vault: AnswerVault) -> FillPlan:
                 if matched is None:
                     matched = derive_option(control, value, resolved.key)
                 if matched is None:
+                    decline_opt = _try_decline_option(control, vault)
+                    if decline_opt is not None:
+                        items.append(FillPlanItem(control, "fill", value=decline_opt, reason="explicit decline-to-self-identify policy"))
+                        continue
+                    if not control.required:
+                        items.append(FillPlanItem(control, "skip", reason="optional question skipped (resolved value not in listed options)"))
+                        continue
                     blockers.append("ambiguous_question")
                     items.append(FillPlanItem(control, "review", value=value, reason="resolved value is not a listed option"))
                     continue
                 value = matched
             items.append(FillPlanItem(control, "fill", value=value, reason=resolved.reason))
             continue
-        if control.section in VOLUNTARY_SECTIONS and control.options:
-            policy = vault.resolve(FieldRequest(key=DECLINE_POLICY_KEY, required=False, sensitive=True))
-            if policy.status is ResolutionStatus.RESOLVED and _normalize_option(policy.value) == "decline":
-                option = _decline_option(control)
-                if option is not None:
-                    items.append(FillPlanItem(control, "fill", value=option, reason="explicit decline-to-self-identify policy"))
-                    continue
-        if control.required or control.sensitive or control.legal:
+        decline_opt = _try_decline_option(control, vault)
+        if decline_opt is not None:
+            items.append(FillPlanItem(control, "fill", value=decline_opt, reason="explicit decline-to-self-identify policy"))
+            continue
+        if control.legal and control.options and len(control.options) == 1:
+            derived_legal = derive_option(control, "Yes", "terms_consent")
+            if derived_legal is not None:
+                items.append(FillPlanItem(control, "fill", value=derived_legal, reason="universal affirmative applicant consent"))
+                continue
+        if control.required or control.legal or (control.section == "eeoc" and control.sensitive):
             code = "sensitive_answer_missing" if control.sensitive else (
                 "legal_answer_missing" if control.legal else "ambiguous_question"
             )
             blockers.append(code)
             items.append(FillPlanItem(control, "review", reason=resolved.reason))
         else:
-            items.append(FillPlanItem(control, "skip", reason=resolved.reason))
+            items.append(FillPlanItem(control, "skip", reason=f"optional question skipped ({resolved.reason})"))
     return FillPlan(items=items, blockers=sorted(set(blockers)))
+
+
+def _digits(value: Any) -> str:
+    return re.sub(r"\D", "", str(value or ""))
+
+
+def phone_values_equivalent(actual: Any, expected: Any) -> bool:
+    """Verify equivalent national, international, and formatted phone representations.
+
+    Handles differences in dial code prefixes (+1), European national trunk zeros
+    (020/01 vs +44/+33), punctuation, parentheses, and masked DOM inputs.
+    """
+    actual_digits = _digits(actual)
+    expected_digits = _digits(expected)
+    if not actual_digits or not expected_digits:
+        return False
+    if min(len(actual_digits), len(expected_digits)) < 7:
+        return False
+    if actual_digits == expected_digits:
+        return True
+    if actual_digits.endswith(expected_digits) or expected_digits.endswith(actual_digits):
+        return True
+    # European national trunk prefix 0 (e.g. 020... in UK, 01... in France)
+    actual_trim = actual_digits.lstrip("0")
+    expected_trim = expected_digits.lstrip("0")
+    if min(len(actual_trim), len(expected_trim)) >= 7:
+        if actual_digits.endswith(expected_trim) or expected_digits.endswith(actual_trim):
+            return True
+    return False
 
 
 def verify_filled(control: FormControl, expected: Any, actual: Any) -> bool:
@@ -336,4 +452,6 @@ def verify_filled(control: FormControl, expected: Any, actual: Any) -> bool:
         return True
     if control.control_type == ControlType.CHECKBOX:
         return bool(actual) == bool(expected)
+    if control.control_type is ControlType.TEL or "phone" in (control.key or "").lower():
+        return phone_values_equivalent(actual, expected)
     return str(actual).strip() == str(expected).strip()

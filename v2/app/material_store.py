@@ -28,8 +28,8 @@ KINDS = ("resume", "cover_letter")
 DRAFT, APPROVED, REJECTED, SUPERSEDED = "draft", "approved", "rejected", "superseded"
 # Greenhouse field names (and generic equivalents) that take a material.
 VAULT_KEYS = {
-    "resume": (("resume", "file"), ("resume_text", "text")),
-    "cover_letter": (("cover_letter", "file"), ("cover_letter_text", "text")),
+    "resume": (("resume", "file"), ("_systemfield_resume", "file"), ("resume_text", "text")),
+    "cover_letter": (("cover_letter", "file"), ("_systemfield_cover_letter", "file"), ("cover_letter_text", "text")),
 }
 
 

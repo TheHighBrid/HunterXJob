@@ -17,7 +17,8 @@ export interface paths {
         post?: never;
         delete?: never;
         options?: never;
-        head?: never;
+        /** Dashboard */
+        head: operations["dashboard__get"];
         patch?: never;
         trace?: never;
     };
@@ -38,7 +39,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agent/champion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Agent Champion
+         * @description Retrieve the current active champion agent configuration.
+         */
+        get: operations["get_agent_champion_api_agent_champion_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/answers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Answers */
+        get: operations["list_answers_api_answers_get"];
+        put?: never;
+        /** Save Answer */
+        post: operations["save_answer_api_answers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/answers/{answer_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -47,9 +86,9 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Save Answer */
-        post: operations["save_answer_api_answers_post"];
-        delete?: never;
+        post?: never;
+        /** Delete Answer */
+        delete: operations["delete_answer_api_answers__answer_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -146,6 +185,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/autofill/bundle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Autofill Bundle
+         * @description Return full verified profile, answer policies, and taxonomy in a single payload.
+         */
+        get: operations["get_autofill_bundle_api_autofill_bundle_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autofill/evaluate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Evaluate Form Fields
+         * @description Evaluate DOM fields extracted by the extension against verified profile & answer vault.
+         */
+        post: operations["evaluate_form_fields_api_autofill_evaluate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autofill/log-application": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Log External Application
+         * @description Log an application completed through the extension into HunterXJob SQLite DB.
+         */
+        post: operations["log_external_application_api_autofill_log_application_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autonomous/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Trigger Autonomous Run */
+        post: operations["trigger_autonomous_run_api_autonomous_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autonomous/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Autonomous Status */
+        get: operations["autonomous_status_api_autonomous_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/backups": {
         parameters: {
             query?: never;
@@ -158,6 +291,43 @@ export interface paths {
          * @description Backup file names, sizes and times (newest first). Never the file contents.
          */
         get: operations["backups_api_backups_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/certification/dossier": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Certification Dossier */
+        get: operations["get_certification_dossier_api_certification_dossier_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/diagnostics/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export System Diagnostics
+         * @description Compiles a complete offline diagnostic snapshot of the autonomous engine.
+         */
+        get: operations["export_system_diagnostics_api_diagnostics_export_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -237,6 +407,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/follow-ups/due": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Due Follow Ups */
+        get: operations["list_due_follow_ups_api_follow_ups_due_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/follow-ups/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Due Follow Ups */
+        post: operations["run_due_follow_ups_api_follow_ups_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/follow-ups/{task_id}/dispatch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dispatch Follow Up */
+        post: operations["dispatch_follow_up_api_follow_ups__task_id__dispatch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -251,6 +472,27 @@ export interface paths {
         get: operations["health_api_health_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        /**
+         * Health
+         * @description Liveness probe. Open to everyone; details only for authenticated callers.
+         */
+        head: operations["health_api_health_get"];
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inbox/match": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Match Inbox Email */
+        post: operations["match_inbox_email_api_inbox_match_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -291,6 +533,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs/{job_id}/artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Job Artifacts */
+        get: operations["list_job_artifacts_api_jobs__job_id__artifacts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{job_id}/artifacts/{artifact_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Job Artifact */
+        get: operations["get_job_artifact_api_jobs__job_id__artifacts__artifact_name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs/{job_id}/check-liveness": {
         parameters: {
             query?: never;
@@ -308,6 +584,46 @@ export interface paths {
          *     only marks the posting suspect; errors never close it.
          */
         post: operations["check_liveness_api_jobs__job_id__check_liveness_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{job_id}/claims-verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Job Claims Verification
+         * @description Inspects all claims generated for this job and validates against candidate truth facts.
+         */
+        get: operations["get_job_claims_verification_api_jobs__job_id__claims_verification_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{job_id}/clear-uncertain-hold": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clear Job Uncertain Hold
+         * @description Owner override: resolve a stuck submission_uncertain hold (re-queue or withdraw).
+         */
+        post: operations["clear_job_uncertain_hold_api_jobs__job_id__clear_uncertain_hold_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -368,6 +684,23 @@ export interface paths {
          * @description Create new DRAFT versions from verified facts. Approved versions are kept; nothing is attached or sent.
          */
         post: operations["generate_job_materials_api_jobs__job_id__materials_generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{job_id}/run-autonomous": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Job Autonomous */
+        post: operations["run_job_autonomous_api_jobs__job_id__run_autonomous_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -645,6 +978,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/review-tasks/batch-approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Batch Approve Reviews
+         * @description Batch approve review tasks. Never applies or submits.
+         */
+        post: operations["batch_approve_reviews_api_review_tasks_batch_approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/review-tasks/batch-reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Batch Reject Reviews
+         * @description Batch reject review tasks.
+         */
+        post: operations["batch_reject_reviews_api_review_tasks_batch_reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/review-tasks/batch-resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Batch Resolve Reviews
+         * @description Batch resolve review tasks.
+         */
+        post: operations["batch_resolve_reviews_api_review_tasks_batch_resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/review-tasks/revalidate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revalidate Reviews
+         * @description Re-evaluate review tasks against candidate profile facts and answer vault.
+         */
+        post: operations["revalidate_reviews_api_review_tasks_revalidate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/review-tasks/{task_id}": {
         parameters: {
             query?: never;
@@ -853,6 +1266,60 @@ export interface paths {
         patch: operations["patch_remote_settings_api_settings_patch"];
         trace?: never;
     };
+    "/api/telemetry/trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record Telemetry Trace
+         * @description Receive and evaluate live conversation telemetry traces emitted by client apps.
+         */
+        post: operations["record_telemetry_trace_api_telemetry_trace_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/vault/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Vault Catalog */
+        get: operations["get_vault_catalog_api_vault_catalog_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/vault/simulate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Simulate Vault Matching */
+        post: operations["simulate_vault_matching_api_vault_simulate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -940,12 +1407,32 @@ export interface components {
             /** Retention */
             retention: number;
         };
+        /** BatchReviewResultOut */
+        BatchReviewResultOut: {
+            /** Failed */
+            failed: number;
+            /** Results */
+            results: {
+                [key: string]: unknown;
+            }[];
+            /** Succeeded */
+            succeeded: number;
+            /** Total */
+            total: number;
+        };
+        /** BatchTaskIdsIn */
+        BatchTaskIdsIn: {
+            /** Task Ids */
+            task_ids?: string[];
+        };
         /** BlockedFieldOut */
         BlockedFieldOut: {
             /** Key */
             key: string;
             /** Label */
             label: string | null;
+            /** Options */
+            options: string[];
             /** Reason */
             reason: string | null;
             /**
@@ -955,6 +1442,52 @@ export interface components {
             required: boolean;
             /** Section */
             section: string | null;
+        };
+        /** ClaimsVerificationOut */
+        ClaimsVerificationOut: {
+            /** Claims Total */
+            claims_total: number;
+            /** Company */
+            company: string;
+            /** Job Id */
+            job_id: string;
+            /** Material Hash */
+            material_hash: string;
+            /** Policy Version */
+            policy_version: string;
+            /** Profile Facts Grounding Rate */
+            profile_facts_grounding_rate: number;
+            /** Resume Artifact */
+            resume_artifact: {
+                [key: string]: unknown;
+            };
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
+            /** Truth Grounded */
+            truth_grounded: boolean;
+            /** Unsupported Claims */
+            unsupported_claims: {
+                [key: string]: unknown;
+            }[];
+            /** Unsupported Count */
+            unsupported_count: number;
+            /** Verified Claims */
+            verified_claims: {
+                [key: string]: unknown;
+            }[];
+            /** Verified Count */
+            verified_count: number;
+        };
+        /** ClearUncertainHoldIn */
+        ClearUncertainHoldIn: {
+            /**
+             * Action
+             * @default requeue
+             * @enum {string}
+             */
+            action: "requeue" | "withdraw";
         };
         /** CycleOut */
         CycleOut: {
@@ -1022,6 +1555,62 @@ export interface components {
             /** Today */
             today: number;
         };
+        /** EvaluateFormIn */
+        EvaluateFormIn: {
+            /** Fields */
+            fields?: components["schemas"]["FieldDescriptorIn"][];
+            /**
+             * Platform
+             * @default generic
+             */
+            platform: string;
+            /**
+             * Url
+             * @default
+             */
+            url: string;
+        };
+        /** EvaluateFormOut */
+        EvaluateFormOut: {
+            /** Answers */
+            answers: components["schemas"]["EvaluatedFieldOut"][];
+            /** Fields Evaluated */
+            fields_evaluated: number;
+            /** Fields Matched */
+            fields_matched: number;
+            /** Platform */
+            platform: string;
+            /** Url */
+            url: string;
+        };
+        /** EvaluatedFieldOut */
+        EvaluatedFieldOut: {
+            /**
+             * Confidence
+             * @default 0
+             */
+            confidence: number;
+            /** Control Type */
+            control_type: string;
+            /** Field Id */
+            field_id: string;
+            /** Label */
+            label: string;
+            /** Matched Option */
+            matched_option?: string | null;
+            /**
+             * Review Required
+             * @default false
+             */
+            review_required: boolean;
+            /**
+             * Source
+             * @default unmatched
+             */
+            source: string;
+            /** Value */
+            value?: unknown;
+        };
         /** EventOut */
         EventOut: {
             /** Created At */
@@ -1072,6 +1661,31 @@ export interface components {
             /** Verified */
             verified: boolean;
         };
+        /** FieldDescriptorIn */
+        FieldDescriptorIn: {
+            /**
+             * Control Type
+             * @default text
+             */
+            control_type: string;
+            /**
+             * Id
+             * @default
+             */
+            id: string;
+            /**
+             * Label
+             * @default
+             */
+            label: string;
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+            /** Options */
+            options?: string[];
+        };
         /** FlagIn */
         FlagIn: {
             /**
@@ -1096,8 +1710,23 @@ export interface components {
             /** Note */
             note: string;
         };
+        /** FollowUpDispatchIn */
+        FollowUpDispatchIn: {
+            /**
+             * Dry Run
+             * @default false
+             */
+            dry_run: boolean;
+            /** Recipient Email */
+            recipient_email?: string | null;
+        };
         /** FormFieldOut */
         FormFieldOut: {
+            /**
+             * Choices
+             * @default []
+             */
+            choices: string[];
             /** Key */
             key: string;
             /** Label */
@@ -1120,6 +1749,11 @@ export interface components {
             type: string;
             /** Value */
             value: unknown;
+            /**
+             * Vault Keys
+             * @default []
+             */
+            vault_keys: string[];
         };
         /** FormPreviewOut */
         FormPreviewOut: {
@@ -1154,7 +1788,7 @@ export interface components {
              * State
              * @enum {string}
              */
-            state: "no_application" | "not_checked" | "validated" | "unavailable" | "blocked" | "in_progress";
+            state: "no_application" | "not_checked" | "validated" | "unavailable" | "blocked" | "in_progress" | "submission_uncertain";
             /** Warnings */
             warnings: string[];
         };
@@ -1210,6 +1844,22 @@ export interface components {
             discovered: number;
             /** Dry Runs */
             dry_runs: number;
+        };
+        /** InboxEmailIn */
+        InboxEmailIn: {
+            /** Body */
+            body: string;
+            /** Received At */
+            received_at?: string | null;
+            /**
+             * Recipient
+             * @default
+             */
+            recipient: string;
+            /** Sender */
+            sender: string;
+            /** Subject */
+            subject: string;
         };
         /** JobApplicationOut */
         JobApplicationOut: {
@@ -1319,11 +1969,8 @@ export interface components {
             job_id: string;
             /** Job Stage */
             job_stage: string;
-            /**
-             * Live Submission Locked
-             * @constant
-             */
-            live_submission_locked: true;
+            /** Live Submission Locked */
+            live_submission_locked: boolean;
             /** Llm Enabled */
             llm_enabled: boolean;
         };
@@ -1467,13 +2114,10 @@ export interface components {
         LiveSubmissionOut: {
             /** Env Allow Live Submission */
             env_allow_live_submission: boolean;
-            /**
-             * Locked
-             * @constant
-             */
-            locked: true;
+            /** Locked */
+            locked: boolean;
             /** Reason */
-            reason: string;
+            reason: string | null;
         };
         /** LivenessCheckOut */
         LivenessCheckOut: {
@@ -1514,6 +2158,35 @@ export interface components {
             /** Status */
             status: string | null;
         };
+        /** LogApplicationIn */
+        LogApplicationIn: {
+            /** Company */
+            company: string;
+            /**
+             * Fields Filled Count
+             * @default 0
+             */
+            fields_filled_count: number;
+            /**
+             * Location
+             * @default
+             */
+            location: string;
+            /**
+             * Notes
+             * @default
+             */
+            notes: string;
+            /**
+             * Platform
+             * @default extension
+             */
+            platform: string;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
+        };
         /** MaterialActionOut */
         MaterialActionOut: {
             /** Application Stage */
@@ -1525,9 +2198,9 @@ export interface components {
             materials_ready: boolean;
             /**
              * Submitted
-             * @constant
+             * @default false
              */
-            submitted: false;
+            submitted: boolean;
         };
         /** MaterialDecisionIn */
         MaterialDecisionIn: {
@@ -1733,6 +2406,21 @@ export interface components {
             /** Text */
             text: string;
         };
+        /** RevalidateReviewResultOut */
+        RevalidateReviewResultOut: {
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            }[];
+            /** Examined */
+            examined: number;
+            /** Promoted To Ready */
+            promoted_to_ready: number;
+            /** Resolved */
+            resolved: number;
+            /** Retained */
+            retained: number;
+        };
         /** ReviewActionOut */
         ReviewActionOut: {
             /** Action */
@@ -1741,16 +2429,13 @@ export interface components {
             application_stage: string | null;
             /** Job Stage */
             job_stage: string | null;
-            /**
-             * Live Submission Locked
-             * @constant
-             */
-            live_submission_locked: true;
+            /** Live Submission Locked */
+            live_submission_locked: boolean;
             /**
              * Submitted
-             * @constant
+             * @default false
              */
-            submitted: false;
+            submitted: boolean;
             task: components["schemas"]["ReviewTaskOut"];
         };
         /** ReviewApplicationOut */
@@ -1835,11 +2520,8 @@ export interface components {
             job_id: string | null;
             /** Job Title */
             job_title: string | null;
-            /**
-             * Live Submission Locked
-             * @constant
-             */
-            live_submission_locked: true;
+            /** Live Submission Locked */
+            live_submission_locked: boolean;
             /** Materials */
             materials: components["schemas"]["MaterialOut"][];
             /** Reason Code */
@@ -2070,11 +2752,8 @@ export interface components {
             /** History */
             history: components["schemas"]["HistoryDayOut"][];
             jobs: components["schemas"]["JobsSummaryOut"];
-            /**
-             * Live Submission Locked
-             * @constant
-             */
-            live_submission_locked: true;
+            /** Live Submission Locked */
+            live_submission_locked: boolean;
             review: components["schemas"]["ReviewSummaryOut"];
             submissions: components["schemas"]["SubmissionSummaryOut"];
             /** Timezone */
@@ -2096,6 +2775,29 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /** VaultSimulateIn */
+        VaultSimulateIn: {
+            /**
+             * Control Type
+             * @default text
+             */
+            control_type: string;
+            /**
+             * Options
+             * @default []
+             */
+            options: string[];
+            /**
+             * Question
+             * @default
+             */
+            question: string;
+            /**
+             * Scope
+             * @default global
+             */
+            scope: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -2105,6 +2807,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    dashboard__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+        };
+    };
     dashboard__get: {
         parameters: {
             query?: never;
@@ -2147,6 +2869,72 @@ export interface operations {
             };
         };
     };
+    get_agent_champion_api_agent_champion_get: {
+        parameters: {
+            query?: {
+                project?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_answers_api_answers_get: {
+        parameters: {
+            query?: {
+                scope?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     save_answer_api_answers_post: {
         parameters: {
             query?: never;
@@ -2159,6 +2947,39 @@ export interface operations {
                 "application/json": components["schemas"]["AnswerIn"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_answer_api_answers__answer_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                answer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -2323,6 +3144,152 @@ export interface operations {
             };
         };
     };
+    get_autofill_bundle_api_autofill_bundle_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    evaluate_form_fields_api_autofill_evaluate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvaluateFormIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluateFormOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    log_external_application_api_autofill_log_application_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LogApplicationIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trigger_autonomous_run_api_autonomous_run_post: {
+        parameters: {
+            query?: {
+                live?: boolean | null;
+                headed?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    autonomous_status_api_autonomous_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
     backups_api_backups_get: {
         parameters: {
             query?: never;
@@ -2339,6 +3306,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BackupsOut"];
+                };
+            };
+        };
+    };
+    get_certification_dossier_api_certification_dossier_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    export_system_diagnostics_api_diagnostics_export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
@@ -2455,6 +3466,87 @@ export interface operations {
             };
         };
     };
+    list_due_follow_ups_api_follow_ups_due_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+        };
+    };
+    run_due_follow_ups_api_follow_ups_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    dispatch_follow_up_api_follow_ups__task_id__dispatch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FollowUpDispatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     health_api_health_get: {
         parameters: {
             query?: never;
@@ -2471,6 +3563,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthOut"];
+                };
+            };
+        };
+    };
+    health_api_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthOut"];
+                };
+            };
+        };
+    };
+    match_inbox_email_api_inbox_match_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InboxEmailIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -2540,6 +3687,71 @@ export interface operations {
             };
         };
     };
+    list_job_artifacts_api_jobs__job_id__artifacts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_job_artifact_api_jobs__job_id__artifacts__artifact_name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                artifact_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     check_liveness_api_jobs__job_id__check_liveness_post: {
         parameters: {
             query?: never;
@@ -2550,6 +3762,72 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_job_claims_verification_api_jobs__job_id__claims_verification_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimsVerificationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clear_job_uncertain_hold_api_jobs__job_id__clear_uncertain_hold_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ClearUncertainHoldIn"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -2651,6 +3929,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobMaterialsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_job_autonomous_api_jobs__job_id__run_autonomous_post: {
+        parameters: {
+            query?: {
+                dry_run?: boolean;
+                headed?: boolean;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -3155,6 +4469,138 @@ export interface operations {
             };
         };
     };
+    batch_approve_reviews_api_review_tasks_batch_approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["BatchTaskIdsIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchReviewResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    batch_reject_reviews_api_review_tasks_batch_reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["BatchTaskIdsIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchReviewResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    batch_resolve_reviews_api_review_tasks_batch_resolve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["BatchTaskIdsIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchReviewResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revalidate_reviews_api_review_tasks_revalidate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["BatchTaskIdsIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevalidateReviewResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     review_task_api_review_tasks__task_id__get: {
         parameters: {
             query?: never;
@@ -3491,6 +4937,96 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SettingsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_telemetry_trace_api_telemetry_trace_post: {
+        parameters: {
+            query?: {
+                project?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_vault_catalog_api_vault_catalog_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    simulate_vault_matching_api_vault_simulate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VaultSimulateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

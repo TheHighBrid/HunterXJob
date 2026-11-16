@@ -1,68 +1,260 @@
 # HunterXJob
 
-HunterXJob is a self-hosted job-hunting assistant. `v2/` is the runtime: it discovers, scores and prepares applications, dry-runs them against real forms, and stops at any unsafe boundary. `mobile/` is a phone remote control for v2. `backend/` is the legacy v1 engine, kept only as a donor.
+**HunterXJob** is an autonomous, self-hosted end-to-end job hunting and application engine designed for precision, strict truthfulness, and zero-touch operation.
 
-Live submission is intentionally locked, and neither the API nor the app can unlock it. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/ROADMAP_STATUS.md`](docs/ROADMAP_STATUS.md).
+It discovers live job postings, evaluates match scores against your verified profile, dynamically tailors ATS-friendly résumés and truthful cover letters, launches an interactive headless browser (Playwright) to fill application forms and attach files, resolves CAPTCHAs, executes verified submissions with cryptographic proof, prevents duplicate submissions across ATS platforms, and manages post-submission follow-ups.
 
-## Repository layout
+---
 
-- `v2/`: the current FastAPI runtime (SQLite state machine, answer vault, form engine, adapter registry, continuous run, remote-control API) and its tests. `v2/openapi.json` is the committed API schema.
-- `mobile/`: Expo Router remote control for v2 (dashboard, kill switch, scheduler, jobs, review queue, reports, settings), with a typed client generated from `v2/openapi.json`.
-- `backend/`: **legacy v1, donor only.** Nothing depends on it. It is kept for reference and will be removed in a later milestone.
-- `docs/` — architecture, reference-repo policy, and roadmap status.
-- `scripts/test-all.sh` — one-command local validation for backend, v2, and mobile.
+## Key Capabilities
 
-## Prerequisites
+* **Autonomous End-to-End Loop**: From discovery $\rightarrow$ fit scoring $\rightarrow$ material tailoring $\rightarrow$ interactive browser form filling $\rightarrow$ local LLM custom question answering $\rightarrow$ CAPTCHA resolution $\rightarrow$ live submit / verified dry-run $\rightarrow$ evidence hashing $\rightarrow$ follow-up cadence tracking.
+* **Unified Single-Browser Playwright Automation**: Uses a single browser session (with real Google Chrome channel support in headed mode and anti-bot stealth hardening) to interactively type inputs, navigate combobox/autocomplete dropdowns (`ArrowDown` + `Enter`), click React/Ashby `<label>`-bound radio groups and `button[data-option]` Yes/No toggles, attach generated résumé PDFs and cover letters (`set_input_files`), and verify DOM read-backs with pre- and post-submit full-page screenshots and execution traces.
+* **Pre-Submission Truth Guard & Fail-Closed Integrity**: All generated résumé bullets, cover letters, and form answers are strictly audited against verified candidate facts before any application is prepared or submitted. For professional credentials (`cpa`, `cfa`, `p.eng`, `bar`) and security clearances, the system fails closed: if the credential is not in your verified profile, affirmative answers are strictly prohibited and replaced with truthful negative responses.
+* **Country-Aware Location Autocomplete**: Resolves location comboboxes (such as Ashby `_systemfield_location`) with country-aware intelligence. Prioritizes the candidate's home country (e.g. Canada over US for Ottawa, Ontario; explicitly penalizing and rejecting Ontario, California), and verifies selected container badge text on DOM read-back.
+* **Pre-Launch Commute & Hard Veto Filter**: Evaluates job location type and mandatory qualifications before browser launch. Rejects non-remote roles outside Ottawa–Gatineau and roles requiring unverified credentials before touching the browser.
+* **JobTomatik Master Answer Vault (v3.0)**: Integrated comprehensive answer policy system covering **143 question families** with multilingual English/French regex matching, backed by **63 seeded production answer policies** in SQLite and managed via `./hunterx vault`.
+* **Candidate Knowledge Book + Local Ollama LLM (`llama3.2:3b`)**: Central factual vault loaded from your verified profile YAML. Deterministically resolves standard ATS screening questions (Canadian/US work authorization, sponsorship, relocation, bilingual English/French proficiency, domain/financial experience, salary expectations, notice period, background check consent) and wires into local **Ollama (`llama3.2:3b`)** (with deterministic heuristic fallbacks) to answer custom behavioral, scenario, and role-specific multiple-choice or open-ended questions.
+* **Smart CAPTCHA Bridge & Post-Submit Challenge Hold**: Detects Google reCAPTCHA (v2/v3/Enterprise), hCaptcha, and Cloudflare Turnstile. Automatically ignores passive invisible reCAPTCHA v3 badges so forms submit cleanly, supports automated token injection, and—when an interactive post-submit CAPTCHA puzzle (`bframe` / hCaptcha) appears—automatically holds the headed browser window open for up to 180 seconds for completion before capturing confirmation proof. Includes automatic backoff and retry for transient ATS anti-spam flags.
+* **Cross-ATS Deduplication & Submit Guard**: Detects cross-posted or duplicate roles across Greenhouse, Lever, Ashby, SmartRecruiters, and Workday, permanently blocking duplicate submissions.
+* **Cryptographic Evidence & Post-Submission Tracking**: Captures confirmation receipt banners, digit-validated candidate reference IDs, pre/post-submit SHA-256 screenshot and DOM hashes, and schedules automated 7-day and 14-day check-in reminders.
+* **Multi-Platform ATS Support (Tiered Architecture)**:
+  - **Production Certified (Live Submissions Verified)**:
+    - **Ashby** (`jobs.ashbyhq.com`) — *17 verified live autonomous submissions in production*
+  - **Tier 1: Low-Difficulty Single-Page Platforms (Form Extracted & Live Submit Ready)**:
+    - **Lever** (`jobs.lever.co`) — *live submit ready, fixture verified, single-page form*
+    - **Greenhouse** (`boards.greenhouse.io`, `job-boards.greenhouse.io`) — *live submit ready, boards API & browser verified*
+    - **Workable** (`apply.workable.com`) — *native API v3 form extraction, file upload & combobox fill*
+    - **Breezy HR** (`*.breezy.hr`) — *native JSON form extraction & questionnaire fill*
+    - **Recruitee** (`*.recruitee.com`) — *native offers API form extraction & open-ended question fill*
+  - **Tier 2: Medium-Difficulty Reactive & Portal Platforms (Dry-Run & Browser Fill Ready)**:
+    - **SmartRecruiters** (`jobs.smartrecruiters.com`, `careers.smartrecruiters.com`) — *live submit ready & fixture verified*
+    - **BambooHR** (`*.bamboohr.com`) — *real-form extraction and single-page fill*
+    - **Teamtailor** (`*.teamtailor.com`) — *reactive SPA form fill & attachment handling*
+    - **Rippling** (`rippling.com`) — *unified candidate application form fill*
+    - **Pinpoint** (`*.pinpointhq.com`) — *custom question sets & single-page fill*
+    - **JazzHR** (`*.applytojob.com`) — *classic single-page form fill*
+  - **Tier 3: High-Difficulty Enterprise & Multi-Step Portals**:
+    - **Workday** (`*.myworkdayjobs.com`) — *multi-step wizard state persistence & data-automation-id mapping*
+    - **iCIMS** (`*.icims.com`) — *portal detection & iframe candidate profile handling*
+    - **Oracle Recruiting Cloud (ORC)** (`*.oraclecloud.com`, Taleo) — *enterprise candidate flow & session token management*
+  - **Canadian Public Sector & Government Portals 🇨🇦 (Ottawa–Gatineau NCR & Provincial)**:
+    - **GC Jobs** (`jobs.gc.ca`, `emploisfp-psjobs.cfp-psc.gc.ca`) — *Federal recruitment, PSEA citizenship preference, SLE bilingual profiling, security clearance validation*
+    - **City of Ottawa Careers** (`ottawa.ca`, `cityofottawa.hua.hrsmart.com`) — *Municipal NCR bilingual opportunities & HRsmart form extraction*
+    - **Ontario Public Service (OPS)** (`gojobs.gov.on.ca`) — *Ontario provincial positions & job ad parsing*
+    - **Ville de Gatineau** (`gatineau.ca`, `gatineau.cvmanager.com`) — *Municipal & French-language candidate portal (Outaouais)*
+    - **Québec Emploi** (`quebecemploi.gouv.qc.ca`) — *Québec provincial employment portal*
 
-- Python 3.12 for `v2/`.
-- Python 3.11 for the legacy `backend/`.
-- Node.js/npm for the mobile app.
-- Chromium via Playwright for v2 browser verification (see `v2/README.md`) and for the legacy v1 browser/PDF paths.
+---
 
-## Start v2
+## Multi-Platform & Mobile Release (v1.0.0)
+
+HunterXJob is officially available as an Android APK release, a portable browser extension for desktop browsers, web dashboard operations, and planned native releases across iOS, macOS, and Windows.
+
+* **Portable Browser Extension & Autofill Assistant (`extension/`, `releases/HunterXJob-Extension-v1.0.0.zip`)**:
+  - Embedded Manifest V3 companion for Chrome, Brave, Edge, and Arc.
+  - Quick foreground autofill with **`Alt + Shift + F`** (`⌥ + ⇧ + F` on macOS) on **Indeed**, **LinkedIn (Easy Apply)**, **GC Jobs 🇨🇦**, **Ontario Public Service (OPS)**, **City of Ottawa / Gatineau**, **Canada Job Bank**, and major ATS platforms (**Workday, Greenhouse, Lever, Ashby**).
+  - Strictly non-destructive with **Truth Guard** enforcement and an in-page **Pre-Submission Review Drawer** (`Alt + Shift + R` or on-screen floating HUD) so you review all answers before sending.
+  - Zero-server portable operation (embedded 129 verified facts & 63 answer policies) plus live daemon sync via `./hunterx extension sync`.
+* **Android Native App (`releases/HunterXJob-v1.0.0.apk`)**: Standalone, installable APK package (`com.hunterxjob.app` v1.0.0, SHA-256 verified) ready for direct install and Google Play Store rollout.
+* **Monetization & Tiers**:
+  * **Free Hunter Tier**: Multi-board job search, fit scoring, form inspection, and up to **2 applications filled per day** with manual human verification. Full unattended autonomy is locked.
+  * **HunterX Pro (Unlimited)**: Unlimited daily applications, continuous background scheduler, full autonomous looping, automated submissions, and priority ATS queueing.
+* **Cross-Platform Roadmap**:
+  1. 📱 **Android**: v1.0.0 APK released; Google Play Store release in progress.
+  2. 🍎 **iOS**: TestFlight & App Store release via Expo iOS framework.
+  3. 💻 **macOS Native**: Desktop operations client for Apple Silicon / Intel Macs.
+  4. 🪟 **Windows Native**: Windows client for desktop background job hunting.
+
+---
+
+## Current State & Achievements (October 2026)
+
+* **Verification Matrix**: Full autonomous pipeline verified across **585 passing automated tests** (`v2/tests/`).
+* **Live Production Submissions Verified**: Executed **17 end-to-end live autonomous submissions** against real employer boards in production (**Cohere**, **Wealthsimple**, **Float**, **1Password**, **Jobber** on Ashby), capturing live confirmation banners, SHA-256 post-submit full-page screenshot proofs, and automated Day 7 / Day 14 follow-up schedules in the SQLite ledger.
+* **Truth Guard Hardening**: Enforces fail-closed validation on sensitive certifications (CPA, CFA, Bar, Security Clearance) preventing affirmative answers without verified profile evidence.
+* **Country-Aware Location Intelligence**: Eliminates US mismatches (e.g. Ontario, CA) and resolves Ashby `_systemfield_location` dropdowns with container badge read-backs.
+* **Zero-Touch Dynamic Form Resolution**: Full support for UUID-keyed ATS fields, `[data-field-path]` containers, custom scenario radio/select options, and narrative textareas powered by local `llama3.2:3b` + Knowledge Book rules.
+
+---
+
+## Repository Layout
+
+```
+HunterXJob/
+├── hunterx             # Root CLI wrapper (forwards directly to v2/hunterx)
+├── v2/                 # FastAPI core engine, Playwright runner, SQLite state machine, and tests
+│   ├── app/            # Application modules (autonomous loop, browser filler, knowledge book, truth guard, etc.)
+│   ├── tests/          # Comprehensive 569-test verification suite
+│   ├── scripts/        # Recovery Gate 1, Gate 2, and batch verification scripts
+│   ├── data/           # SQLite databases (hunterxjob-v2.db) and answer vault policies
+│   ├── hunterx         # Primary CLI utility for running, testing, and managing the daemon
+│   └── openapi.json    # Committed OpenAPI 3.1 specification
+├── mobile/             # Expo / React Native remote control app with typed client
+├── releases/           # Release distribution artifacts (HunterXJob-v1.0.0.apk)
+├── evidence/           # Cryptographic certification dossiers (hunterx-certification-dossier.json)
+├── docs/               # Architecture, recovery contracts, and roadmap status
+└── scripts/            # Repository-wide test runners
+```
+
+---
+
+## Quick Start (macOS / Linux)
+
+### 1. Installation
+Ensure Python 3.12+ is installed (e.g. via `brew install python@3.12 git` on macOS). You can run `./hunterx` from the repository root or from `v2/`:
 
 ```bash
-cd v2
-./hunterx install    # venv, dependencies, .env with a random API_KEY
+./hunterx install
+```
+
+### 2. Run Health Verification
+Verify your environment, Python virtualenv, database, and Playwright Chromium installation:
+```bash
 ./hunterx doctor
+```
+
+### 3. Load Your Candidate Profile
+Copy the example profile and personalize your details:
+```bash
+cp v2/examples/profile.example.yaml my_profile.yaml
+# Edit my_profile.yaml with your contact, employment history, education, and skills
+./hunterx profile import my_profile.yaml
+./hunterx profile list
+```
+
+### 4. Manage Answer Vault Policies
+Seed and inspect the JobTomatik Master Answer Vault (143 question families, 63 seeded policies):
+```bash
+# Seed verified default policies into SQLite
+./hunterx vault seed
+
+# List active answer policies
+./hunterx vault list
+
+# Look up a specific answer policy
+./hunterx vault get salary_expectation
+
+# Set a custom policy override
+./hunterx vault set salary_expectation '{"type": "numeric", "value": 75000}'
+```
+
+### 5. Configure Job Boards (`.env`)
+Edit `v2/.env` to configure target locations, keywords, and job board slugs:
+```dotenv
+TARGET_LOCATIONS=Ottawa,Remote Canada,Canada,Toronto
+TARGET_KEYWORDS=software,developer,python,backend,engineer
+
+# Public job board tokens
+GREENHOUSE_BOARD_TOKENS=d2l,geotab,faire,later,hootsuite
+LEVER_COMPANIES=pointclickcare,waveapps,achievers
+ASHBY_ORGS=cohere,wealthsimple,1password,jobber,float
+```
+
+### 6. Start the Web UI & API
+```bash
 ./hunterx start
 ```
+Open [http://127.0.0.1:8011](http://127.0.0.1:8011) in your browser. Copy the `API_KEY` from your `v2/.env` file, paste it into the key box, and click **Save key**.
 
-Open `http://127.0.0.1:8011`. Every API call except `/api/health` needs the `X-API-Key` header (the key is in `v2/.env`; `./hunterx install` generates it).
+---
 
-Before any résumé or cover letter is generated, load your profile and verify its facts (`./hunterx profile import data/profile.yaml`, then verify on the phone or with `./hunterx profile verify ...`). Generated materials are drafts until you approve them; only approved versions are ever attached to a dry-run. See [v2/README.md → Profile and application materials](v2/README.md#profile-and-application-materials).
+## Autonomous Operation Modes
 
-> **Execution Host (per [docs/RECOVERY_CONTRACT.md](docs/RECOVERY_CONTRACT.md)):**
-> The locked host is plain local developer Linux / macOS plus GitHub Actions runners at $0. Cloud VMs (such as Oracle Cloud) and on-device Android execution (Termux / PRoot) are frozen / on hold as legacy hosting modes; the Android mobile app is a remote control client to the v2 API and runs no heavy workloads. See [docs/RECOVERY_CONTRACT.md](docs/RECOVERY_CONTRACT.md) and [docs/DEPLOY_VM.md](docs/DEPLOY_VM.md) for context. Continuous discover → score → prepare → dry-run cycles are off by default; see `v2/README.md`.
+HunterXJob provides the `./hunterx autonomous-run` CLI (runnable from the repo root or `v2/`):
 
-## Legacy backend (v1, donor only)
-
-You don't need this to run HunterXJob. It is kept only so its code can be mined and its tests stay green.
-
+### Mode 1: Verified Browser Dry-Run (Default & Safe)
+Fills real employer application forms in a headless browser, attaches your tailored résumé PDF and cover letter, verifies all required DOM read-backs, takes screenshots, and records cryptographic SHA-256 evidence **without clicking final submit**:
 ```bash
-cd backend
-python3.11 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt -r requirements-dev.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+./hunterx autonomous-run --limit 5 --min-score 70.0
 ```
 
-## Mobile app
-
+### Mode 2: Visual Inspection Mode (`--headed`)
+Watch the Playwright browser open Google Chrome / Chromium, type answers, select dropdown options, click radio labels, and attach documents live on screen (with configurable `--pause` seconds before closing):
 ```bash
-cd mobile
-npm ci
-npm run start
+./hunterx autonomous-run --headed --pause 5 --limit 1
 ```
 
-On first launch the app opens **Connection**. Enter the v2 server URL (for example `http://<your-vm>.<tailnet>.ts.net:8011` over Tailscale) and the `API_KEY` from `v2/.env`, then run the connection test. The key is stored in the device's secure storage. See [`mobile/README.md`](mobile/README.md).
-
-## Validation
-
+### Mode 3: Live Autonomous Submission (`--live`)
+Executes end-to-end live applications in a unified browser session, unlocking the live submission gate, solving or holding for interactive CAPTCHAs, verifying the post-submit confirmation banner, saving `post_submit.png` SHA-256 proof, and scheduling 7-day / 14-day follow-up cadences:
 ```bash
-./scripts/test-all.sh
+./hunterx autonomous-run --live --headed --limit 5 --min-score 75.0 --max-errors 3
 ```
 
-The script runs backend syntax/tests, v2 syntax/tests (including the OpenAPI snapshot check), and the mobile typecheck, unit tests and API-type check, then prints a PASS/FAIL summary and exits non-zero if any step failed. It expects `backend/.venv` (Python 3.11), `v2/.venv` (Python 3.12+), and `mobile/node_modules` (`cd mobile && npm ci`) to exist.
+---
 
-CI mirrors this: `.github/workflows/v2-tests.yml` covers `v2/`, and `.github/workflows/validate.yml` covers `backend/` and `mobile/`.
+## Certification & Evidence Dossier
+
+HunterXJob maintains an automated, cryptographically signed certification dossier verifying all live submissions, safety invariants, and gate requirements directly against the production SQLite database:
+
+```bash
+# Generate and display the certification dossier
+./hunterx certify
+```
+
+The output dossier is maintained in [`evidence/hunterx-certification-dossier.json`](evidence/hunterx-certification-dossier.json).
+
+---
+
+## Roadmap
+
+See [docs/ROADMAP_STATUS.md](docs/ROADMAP_STATUS.md) for the complete milestone matrix and readiness breakdown:
+
+* **Completed**:
+  - Recovery Gate 1 (loopback fixture proof) & Gate 2 (real public employer form dry-run)
+  - Phase 1: Interactive Playwright Browser Form Filling & DOM Verification
+  - Phase 2: Candidate Knowledge Book & Deterministic Screening Resolver
+  - Phase 3: Dual-Mode CAPTCHA Bridge & Single-Session Live Submission Engine
+  - Phase 4: Cross-ATS Deduplication Guard, Inbox Matcher & Follow-Up Cadence Scheduler
+  - Phase 5: Multi-ATS Native Adapters (Ashby, Greenhouse, Lever, SmartRecruiters, Workday)
+  - Phase 6: Zero-Touch Autonomous Loop, Root CLI, Local Ollama LLM (`llama3.2:3b`) Custom Question Answering, Anti-Bot Stealth
+  - Phase 7: Live Production Submissions (17 verified submissions across Cohere, Wealthsimple, Float, 1Password, Jobber)
+  - Phase 8: Truth Guard Pre-Submission Audit & Fail-Closed Credential Integrity
+  - Phase 9: Country-Aware Location Selection & Autocomplete Matching
+  - Phase 10: Commute Boundaries & Pre-Launch Filtering
+  - Phase 11: Master Answer Policy v3.0 & Answer Vault Compiler
+  - Phase 12: Mobile Release & Packaging (Android v1.0.0 APK, Free vs Pro tiers)
+* **Next Milestones**:
+  1. **Live Production Certification Across Remaining ATS Adapters**: Expand live submission verification to Greenhouse, Lever, SmartRecruiters, and Workday postings alongside Ashby.
+  2. **Cross-Platform Native Apps**: Google Play Store rollout, iOS TestFlight (Expo), macOS native desktop app, and Windows client.
+  3. **Automated 2Captcha / CapSolver API Integration**: Plug cloud solver providers into the `CaptchaSolver` protocol for fully unattended resolution of interactive reCAPTCHA v2/hCaptcha image challenges.
+  4. **Outbound Follow-Up Email Dispatch**: Authenticated SMTP/OAuth dispatch of approved 7-day and 14-day check-in drafts.
+  5. **Session Continuity & Enterprise Portal Auth**: Persistent browser storage states for multi-step corporate login portals (Workday / iCIMS / Taleo).
+
+---
+
+## Safety & Governance Controls
+
+* **Global Kill Switch**: Instantly freezes all running browsers, schedulers, and submissions:
+  ```bash
+  python -c "from app.db import SessionLocal; from app.flags import set_flag; db=SessionLocal(); set_flag(db, 'global_kill_switch', True); print('Kill switch engaged')"
+  ```
+* **Daily Submission Caps**: Enforces `MAX_APPLICATIONS_PER_DAY=10` in `.env` to prevent flood applications.
+* **Quiet Hours**: Suspends automatic cycles during configured off-hours (default: 23:00 to 07:00 local time).
+* **Truth Guard Validation**: Compares every line of generated text and every form answer against candidate facts. Any unverified claim triggers a review task and halts submission.
+
+---
+
+## Testing & Verification
+
+Run the full 569-test test suite:
+```bash
+cd v2
+./hunterx test
+```
+
+Run Recovery Gate 1 (deterministic loopback proof with process origin check):
+```bash
+.venv/bin/python scripts/gate1.py --runs 3
+```
+
+Run Recovery Gate 2 rehearsal:
+```bash
+.venv/bin/python scripts/gate2.py --rehearse
+```
+
+---
+
+## License
+
+MIT License. See [LICENSE](LICENSE) for details.

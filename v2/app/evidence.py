@@ -11,11 +11,29 @@ from app.models import Application, PipelineStage, SubmissionEvidence
 CONFIRMATION_MARKERS = (
     "thank you for applying",
     "thanks for applying",
+    "thank you for your application",
+    "thank you for submitting",
     "application has been submitted",
+    "application submitted",
     "successfully submitted",
     "we have received your application",
+    "we've received your application",
+    "we received your application",
     "your application was submitted",
+    "your application has been received",
     "application received",
+    "submission successful",
+    "thank you for your interest",
+    "thanks for your interest",
+    "application confirmed",
+    # French & Canadian Public Sector confirmation signals
+    "merci d'avoir postulé",
+    "votre candidature a été soumise",
+    "candidature reçue",
+    "votre demande a été soumise",
+    "demande transmise avec succès",
+    "nous avons bien reçu votre candidature",
+    "votre demande d'emploi a été reçue",
 )
 
 

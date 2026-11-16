@@ -65,7 +65,7 @@ class LocalAI:
             response.raise_for_status()
             models = [item.get("name") for item in response.json().get("models", [])]
             return {"ok": True, "models": models}
-        except (httpx.HTTPError, ValueError, AttributeError) as exc:
+        except Exception as exc:
             return {"ok": False, "error": str(exc)}
 
     def evaluate_job(self, compact_resume: str, job_text: str) -> dict[str, object]:

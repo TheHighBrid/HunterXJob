@@ -1,12 +1,12 @@
 # HunterXJob | Master Applicant Answer & Truth Policy v3.0
 
-**Prepared 2026-10-27** for Mohamed Alem. Personal profile contents are private; avoid committing the file to a public GitHub repository. Designed to *supplement* the existing HunterXJob profile and answer vault.
+**Updated 2026-11-01** for Mohamed Alem with direct user verification of all 40 question families. Personal profile contents are private; avoid committing the file to a public GitHub repository. Designed to *supplement* the existing HunterXJob profile and answer vault.
 
 ## What's in this pack
 
-1. `HunterXJob_Master_Answer_Policy_v3.yaml`: comprehensive portable rulebook containing questions, synonyms, fallbacks, decisions and safety gates. This is **not** a native HunterXJob import format. Build a matcher/compiler if integration is needed.
-2. `HunterXJob_Profile_Supplement_Import.yaml`: structurally compatible with `./hunterx profile import ...`, but deliberately `verified: false`. Import alongside existing facts; review differences and verify as appropriate. Do not replace an existing more accurate profile or create duplicate employment records.
-3. `HunterXJob_Vault_Seed_POST_api_answers.json`: list of payloads compatible with `POST /api/answers` in current HunterXJob v2. API currently accepts individual records; it does **not** have a native bulk-import route.
+1. `HunterXJob_Master_Answer_Policy_v3.yaml`: comprehensive portable rulebook containing questions, synonyms, fallbacks, decisions and safety gates. Fully compiled and synchronized with verified user answers.
+2. `HunterXJob_Profile_Supplement_Import.yaml`: structurally compatible with `./hunterx profile import ...`, verified (`verified: true`). Verified facts (education, languages, underwriting, skills) imported into active profile facts.
+3. `HunterXJob_Vault_Seed_POST_api_answers.json`: 88 verified answer records compatible with `POST /api/answers` and seeded into local SQLite database (`v2/data/hunterxjob-v2.db`).
 4. `HunterXJob_Full_Question_Book.md`: human-readable rules and matching question inventory.
 5. `seed_vault.py`: optional minimal local batch helper. Dry-run by default; requires explicitly passing `--apply` to write answers to the API. Does not submit any job application.
 

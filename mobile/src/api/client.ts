@@ -120,8 +120,12 @@ export function createClient(getConfig: () => ClientConfig, fetchImpl: FetchLike
     return body as T;
   }
 
-  function post<T>(path: string, payload?: unknown): Promise<T> {
-    return request<T>(path, { method: "POST", body: payload === undefined ? undefined : JSON.stringify(payload) });
+  function post<T>(path: string, payload?: unknown, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
+    return request<T>(
+      path,
+      { method: "POST", body: payload === undefined ? undefined : JSON.stringify(payload) },
+      timeoutMs
+    );
   }
 
   function put<T>(path: string, payload: unknown): Promise<T> {
@@ -149,6 +153,8 @@ export function createClient(getConfig: () => ClientConfig, fetchImpl: FetchLike
     job: (id: string) => request<JobDetail>(`/api/jobs/${encodeURIComponent(id)}`),
     previewForm: (id: string) => request<FormPreview>(`/api/jobs/${encodeURIComponent(id)}/form`, {}, 60000),
     unlinkDuplicate: (id: string) => post<JobDetail>(`/api/jobs/${encodeURIComponent(id)}/unlink-duplicate`),
+    clearUncertainHold: (id: string, action: "requeue" | "withdraw" = "requeue") =>
+      post<JobDetail>(`/api/jobs/${encodeURIComponent(id)}/clear-uncertain-hold`, { action }),
     checkLiveness: (id: string) => post<JobDetail>(`/api/jobs/${encodeURIComponent(id)}/check-liveness`),
 
     reviewTasks: (status: "open" | "closed" | "all" = "open") => request<ReviewTask[]>(`/api/review-tasks?status=${status}`),
@@ -157,6 +163,76 @@ export function createClient(getConfig: () => ClientConfig, fetchImpl: FetchLike
     rejectTask: (id: string) => post<ReviewAction>(`/api/review-tasks/${encodeURIComponent(id)}/reject`),
     resolveTask: (id: string, resolution: ReviewResolution = "resolved") =>
       post<ReviewAction>(`/api/review-tasks/${encodeURIComponent(id)}/resolve`, { resolution }),
+    revalidateReviews: (taskIds?: string[]) =>
+      post<{
+        examined?: number;
+        resolved?: number;
+        retained?: number;
+        promoted_to_ready?: number;
+        revalidated?: number;
+        remaining_open?: number;
+        details: any[];
+      }>("/api/review-tasks/revalidate", {
+        task_ids: taskIds,
+      }),
+
+    // Answer Vault & Policies
+    saveAnswer: (payload: {
+      key: string;
+      value: string;
+      scope?: string;
+      source?: string;
+      note?: string;
+      confidence?: number;
+      sensitive?: boolean;
+    }) => post<{ id: string; key: string; scope: string; source: string }>("/api/answers", payload),
+    listAnswers: (scope?: string) =>
+      request<Array<{ id: string; key: string; value: string; source: string; scope: string; note: string }>>(
+        `/api/answers${scope ? `?scope=${encodeURIComponent(scope)}` : ""}`
+      ),
+    deleteAnswer: (answerId: string) =>
+      request<{ deleted: boolean; id: string; key: string }>(`/api/answers/${encodeURIComponent(answerId)}`, { method: "DELETE" }),
+    vaultCatalog: () =>
+      request<{ catalog_size: number; items: any[]; candidate: any }>("/api/vault/catalog"),
+    simulateVault: (question: string, options?: string[]) =>
+      post<any>("/api/vault/simulate", { question, options }),
+
+    runJobAutonomous: (jobId: string, dryRun = false) =>
+      post<{
+        job_id: string;
+        status: string;
+        submitted: boolean;
+        platform: string;
+        stage?: string;
+        evidence_sha256?: string;
+        error?: string;
+      }>(`/api/jobs/${encodeURIComponent(jobId)}/run-autonomous?dry_run=${dryRun ? "true" : "false"}`, undefined, 90000),
+    runAutonomousBatch: () =>
+      post<{
+        started_at: string;
+        finished_at: string;
+        aborted_by_kill_switch: boolean;
+        candidates_considered: number;
+        shortlisted: number;
+        submitted_live: number;
+        verified_dry_runs: number;
+        skipped_duplicates: number;
+        errors: string[];
+      }>("/api/autonomous/run", undefined, 120000),
+    approveApplication: (applicationId: string) =>
+      post<{ id: string; stage: string; job_stage: string }>(`/api/applications/${encodeURIComponent(applicationId)}/approve`),
+    executeApply: (applicationId: string) =>
+      post<{
+        status: string;
+        reason?: string;
+        detail?: string;
+        application_id: string;
+        submitted?: boolean;
+      }>(`/api/applications/${encodeURIComponent(applicationId)}/apply`, undefined, 60000),
+    jobArtifacts: (jobId: string) =>
+      request<{ job_id: string; artifacts: Array<{ name: string; size_bytes: number; url: string }> }>(
+        `/api/jobs/${encodeURIComponent(jobId)}/artifacts`
+      ),
 
     schedulerStatus: () => request<SchedulerStatus>("/api/scheduler/status"),
     cycles: (limit = 10) => request<Cycle[]>(`/api/scheduler/cycles?limit=${limit}`),
