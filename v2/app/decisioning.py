@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 
 
@@ -23,6 +23,51 @@ class JobFacts:
 
 
 @dataclass(frozen=True, slots=True)
+class TargetingPolicy:
+    """Profile-level toggles for which role families and locations are in scope.
+
+    ``broad`` (the default) keeps every role family aligned with the target
+    keywords but ranks core individual-contributor roles highest. ``core``
+    rejects leadership, data-science, sales/account-management and adjacent
+    (insurance / physical surveillance) investigation roles, and keeps
+    in-person work limited to Ottawa-Gatineau or explicitly targeted cities.
+    """
+
+    preset: str = "broad"
+    allow_senior_leadership: bool = True
+    allow_data_science: bool = True
+    allow_sales_account_mgmt: bool = True
+    allow_adjacent_investigations: bool = True
+    allow_onsite_canada: bool = True
+
+
+TARGETING_PRESETS: dict[str, TargetingPolicy] = {
+    "broad": TargetingPolicy(),
+    "core": TargetingPolicy(
+        preset="core",
+        allow_senior_leadership=False,
+        allow_data_science=False,
+        allow_sales_account_mgmt=False,
+        allow_adjacent_investigations=False,
+        allow_onsite_canada=False,
+    ),
+}
+DEFAULT_TARGETING_PRESET = "broad"
+
+
+def targeting_policy(preset: str | None = None, **overrides: bool | None) -> TargetingPolicy:
+    """Build a policy from a preset name plus optional per-toggle overrides (``None`` = keep preset)."""
+    name = (preset or DEFAULT_TARGETING_PRESET).strip().lower()
+    if name not in TARGETING_PRESETS:
+        raise ValueError(f"unknown targeting preset: {preset!r} (expected one of {sorted(TARGETING_PRESETS)})")
+    changes = {key: value for key, value in overrides.items() if value is not None}
+    unknown = set(changes) - set(TargetingPolicy.__dataclass_fields__)
+    if unknown:
+        raise ValueError(f"unknown targeting toggles: {sorted(unknown)}")
+    return replace(TARGETING_PRESETS[name], **changes)
+
+
+@dataclass(frozen=True, slots=True)
 class DecisionContext:
     target_locations: tuple[str, ...] = ()
     target_keywords: tuple[str, ...] = ()
@@ -30,6 +75,7 @@ class DecisionContext:
     excluded_titles: tuple[str, ...] = ()
     blacklisted_companies: tuple[str, ...] = ()
     shortlist_threshold: float = 60.0
+    policy: TargetingPolicy = TARGETING_PRESETS[DEFAULT_TARGETING_PRESET]
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +130,14 @@ def _keyword_matches(text: str, keywords: Iterable[str]) -> tuple[str, ...]:
             if keyword.strip() and (normalized_keyword := _normalize(keyword)) and normalized_keyword in normalized
         )
     )
+
+
+def _term_in(normalized_text: str, term: str) -> bool:
+    """Word-start match on normalized text, so "aml" does not hit "streamline" but "claim" hits "claims"."""
+    normalized_term = _normalize(term)
+    if not normalized_term or not normalized_text:
+        return False
+    return re.search(rf"(?<![^\W_]){re.escape(normalized_term)}", normalized_text) is not None
 
 
 def _bounded_score(value: float) -> float:
@@ -166,7 +220,12 @@ _NON_TARGET_ROLE_PATTERNS = (
 )
 
 _TITLE_SYNONYMS: dict[str, tuple[str, ...]] = {
-    "fraud": ("fincrime", "financial crime", "fraud", "scam", "trust & safety", "trust and safety"),
+    "fraud": (
+        "fincrime", "financial crime", "fraud", "scam", "trust & safety", "trust and safety",
+        "investigation", "investigator", "claims", "disputes", "dispute", "chargeback",
+        "risk", "aml", "kyc", "anti-money laundering", "sanctions", "transaction monitoring",
+        "loss prevention", "identity theft",
+    ),
     "aml": ("kyc", "kyb", "edd", "cdd", "sanctions", "fintrac", "anti-money laundering", "financial crime", "fincrime"),
     "kyc": ("aml", "kyb", "edd", "cdd", "onboarding", "verification", "compliance"),
     "compliance": ("aml", "kyc", "regulatory", "fintrac", "sanctions", "governance", "risk"),
@@ -194,20 +253,89 @@ _MANDATORY_CPA_PATTERNS = (
 )
 
 
+# Role families that are toggled by TargetingPolicy (allowed but ranked lower in "broad",
+# rejected in "core"). Clearly unrelated families stay in _NON_TARGET_ROLE_PATTERNS.
+_SENIOR_LEADERSHIP_RE = re.compile(
+    r"\b(?:senior|sr\.?)\s+manager\b|\bhead\s+of\b|\b(?:associate\s+|managing\s+|senior\s+)?director\b"
+    r"|\bdirecteur\b|\bdirectrice\b",
+    re.IGNORECASE,
+)
+_PEOPLE_MANAGER_RE = re.compile(r"\b(?:manager|supervisor|team\s+lead|gestionnaire)\b", re.IGNORECASE)
+_DATA_SCIENCE_RE = re.compile(
+    r"\b(?:data\s+scientist|data\s+science|machine\s+learning|ml\s+engineer|data\s+engineer|"
+    r"research\s+scientist|applied\s+scientist|quantitative\s+(?:analyst|researcher|developer))\b",
+    re.IGNORECASE,
+)
+_SALES_ACCOUNT_RE = re.compile(
+    r"\b(?:account\s+manager|account\s+director|key\s+account|strategic\s+account|client\s+partner|"
+    r"customer\s+success\s+manager|sales\s+manager|territory\s+manager)\b",
+    re.IGNORECASE,
+)
+_ADJACENT_INVESTIGATION_RE = re.compile(
+    r"\b(?:insurance|claims?\s+(?:investigator|adjuster|examiner)|private\s+investigator|surveillance|"
+    r"loss\s+adjuster|special\s+investigations?\s+unit|siu)\b",
+    re.IGNORECASE,
+)
+# Titles containing these stay "core" even if they also match an adjacent pattern
+# (e.g. "AML Transaction Surveillance Analyst").
+_CORE_DOMAIN_RE = re.compile(
+    r"\b(?:fraud|aml|kyc|anti[- ]money|financial\s+crime|fincrime|sanctions|disputes?|chargebacks?|"
+    r"collections?|credit|loan|lending|bank(?:ing)?|card(?:s)?|payments?|transaction)\b",
+    re.IGNORECASE,
+)
+
+
+def _role_families(title: str) -> tuple[str, ...]:
+    families: list[str] = []
+    if _SENIOR_LEADERSHIP_RE.search(title):
+        families.append("senior_leadership")
+    if _DATA_SCIENCE_RE.search(title):
+        families.append("data_science")
+    if _SALES_ACCOUNT_RE.search(title):
+        families.append("sales_account_mgmt")
+    if _ADJACENT_INVESTIGATION_RE.search(title) and not (
+        _CORE_DOMAIN_RE.search(title) and not re.search(r"\binsurance\b", title, re.IGNORECASE)
+    ):
+        families.append("adjacent_investigations")
+    return tuple(families)
+
+
+_FAMILY_TOGGLES = {
+    "senior_leadership": "allow_senior_leadership",
+    "data_science": "allow_data_science",
+    "sales_account_mgmt": "allow_sales_account_mgmt",
+    "adjacent_investigations": "allow_adjacent_investigations",
+}
+# In "broad", non-core families stay eligible but their role relevance is capped so
+# core fraud/banking individual-contributor roles rank above them.
+_NON_CORE_ROLE_CAP = 3.6
+
+
+def _family_veto(title: str, policy: TargetingPolicy) -> DecisionReport | None:
+    for family in _role_families(title):
+        if not getattr(policy, _FAMILY_TOGGLES[family]):
+            return DecisionReport(
+                Decision.REJECT,
+                f"role family '{family}' is disabled by targeting preset '{policy.preset}': {title}",
+                0.0,
+                vetoes=(f"role_family_{family}",),
+            )
+    return None
+
+
 def _title_alignment_matches(title: str, target_keywords: tuple[str, ...]) -> tuple[str, ...]:
     """Match job title against target keywords and strictly related domain synonyms."""
     direct = _keyword_matches(title, target_keywords)
     if direct:
         return direct
-    if len(target_keywords) <= 1:
-        return ()
 
+    # Synonyms always expand, including for a single target keyword such as "fraud".
     norm_title = _normalize(title)
     expanded: list[str] = []
     seen: set[str] = set()
     for kw in target_keywords:
         for syn in _TITLE_SYNONYMS.get(_normalize(kw), ()):
-            if syn not in seen and _contains_any(norm_title, (syn,)):
+            if syn not in seen and _term_in(norm_title, syn):
                 seen.add(syn)
                 expanded.append(syn)
     return tuple(expanded)
@@ -231,6 +359,9 @@ def _hard_veto(job: JobFacts, context: DecisionContext) -> tuple[DecisionReport 
             0.0,
             vetoes=("excluded_title",),
         ), False
+    family_veto = _family_veto(job.title or "", context.policy)
+    if family_veto is not None:
+        return family_veto, False
 
     # 1. Truth Guard Veto: Mandatory qualifications not held in profile (e.g. CPA required)
     desc_full = (job.description or "").lower()
@@ -278,9 +409,12 @@ def _hard_veto(job: JobFacts, context: DecisionContext) -> tuple[DecisionReport 
         if _normalize(target) not in ("canada", "remote canada", "remote", "anywhere")
     )
 
-    # Candidate rule: In-person or hybrid work is allowed ONLY in Ottawa–Gatineau (or explicitly targeted city).
-    # All other Canadian locations must be remote.
-    if (not is_remote or is_explicit_hybrid_or_onsite) and not is_ottawa_ncr and not explicit_city_target and location:
+    # Candidate rule: In-person or hybrid work is allowed ONLY in Ottawa–Gatineau (or explicitly targeted city),
+    # unless the targeting policy allows in-person work anywhere in Canada ("broad").
+    onsite_elsewhere = (not is_remote or is_explicit_hybrid_or_onsite) and not is_ottawa_ncr and not explicit_city_target
+    if onsite_elsewhere and location and context.policy.allow_onsite_canada and explicit_canada:
+        return None, False
+    if onsite_elsewhere and location:
         return DecisionReport(
             Decision.REJECT,
             f"non-remote or hybrid position outside Ottawa-Gatineau: {location}",
@@ -301,10 +435,17 @@ _LANGUAGE_TERMS = ("bilingual", "french", "français", "english and french", "fr
 _IC_TITLE_TERMS = ("analyst", "officer", "specialist", "associate", "coordinator", "representative", "advisor", "investigator")
 
 
-def _seniority(title: str) -> tuple[float, list[str]]:
-    if _contains_any(title, ("director", "vice president", "vp", "head of", "principal")):
+def _seniority(title: str, policy: TargetingPolicy) -> tuple[float, list[str]]:
+    if _contains_any(title, ("vice president", "vp", "principal")):
         return 1.5, ["seniority may exceed target level"]
+    if _SENIOR_LEADERSHIP_RE.search(title):
+        # Only reachable when the policy allows senior leadership (otherwise vetoed earlier).
+        return 1.5, [] if policy.allow_senior_leadership else ["seniority may exceed target level"]
     if _contains_any(title, ("manager", "lead")) and not _contains_any(title, _IC_TITLE_TERMS):
+        if _SALES_ACCOUNT_RE.search(title):
+            return 2.5, []
+        if not policy.allow_senior_leadership and _PEOPLE_MANAGER_RE.search(title):
+            return 2.5, ["manager title may be a people-management role"]
         return 2.5, []
     return 4.5, []
 
@@ -315,6 +456,7 @@ def _dimensions(
     matched_keywords: tuple[str, ...],
     title_keywords: tuple[str, ...],
     target_location: bool,
+    families: tuple[str, ...] = (),
 ) -> tuple[tuple[DimensionScore, ...], list[str]]:
     """Score the six dimensions. Returns (dimensions, review flags)."""
     description = job.description or ""
@@ -323,10 +465,12 @@ def _dimensions(
     title_score = min(3.2, 2.0 + 0.6 * max(0, len(title_keywords) - 1)) if title_keywords else 0.0
     desc_ratio = len(matched_keywords) / max(1, min(5, len(context.target_keywords)))
     role_score = _bounded_score(title_score + desc_ratio * 1.8)
+    if families:
+        role_score = min(role_score, _NON_CORE_ROLE_CAP)
 
     sector_hits = _keyword_matches(combined, _SECTOR_TERMS)
     language_hits = _keyword_matches(combined, _LANGUAGE_TERMS)
-    seniority_score, seniority_flags = _seniority(job.title or "")
+    seniority_score, seniority_flags = _seniority(job.title or "", context.policy)
     description_words = len(_WORD_RE.findall(description))
 
     review_flags = list(seniority_flags)
@@ -369,6 +513,11 @@ def evaluate_job(job: JobFacts, context: DecisionContext) -> DecisionReport:
         return veto
 
     title_keywords = _title_alignment_matches(job.title or "", context.target_keywords)
+    families = _role_families(job.title or "")
+    if not title_keywords and "sales_account_mgmt" in families:
+        # An enabled account-management title (e.g. "Strategic Account Manager") is aligned when the
+        # posting itself is about the target domain; unrelated titles still need title alignment.
+        title_keywords = _title_alignment_matches(job.description or "", context.target_keywords)
     if not title_keywords:
         return DecisionReport(
             Decision.REJECT,
@@ -381,7 +530,7 @@ def evaluate_job(job: JobFacts, context: DecisionContext) -> DecisionReport:
     if not matched_keywords:
         matched_keywords = title_keywords
 
-    dimensions, review_flags = _dimensions(job, context, matched_keywords, title_keywords, target_location)
+    dimensions, review_flags = _dimensions(job, context, matched_keywords, title_keywords, target_location, families)
     total = round(sum(item.weighted_points for item in dimensions), 2)
     decision, reason = _decide(total, review_flags, context.shortlist_threshold)
     return DecisionReport(

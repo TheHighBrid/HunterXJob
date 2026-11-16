@@ -73,6 +73,16 @@ class Settings(BaseSettings):
     excluded_locations: str = "United States,US Remote,Bengaluru,Dublin,Tokyo"
     excluded_titles: str = "software engineer,legal counsel,product manager"
     blacklisted_companies: str = ""
+    # Targeting preset: "broad" keeps every role family aligned with TARGET_KEYWORDS (leadership,
+    # data science, account management, adjacent investigations, in-person anywhere in Canada) but
+    # ranks core individual-contributor roles highest; "core" rejects those families and keeps
+    # in-person work to Ottawa-Gatineau. Each TARGETING_ALLOW_* toggle overrides the preset when set.
+    targeting_preset: str = Field(default="broad", pattern="^(broad|core)$")
+    targeting_allow_senior_leadership: bool | None = None
+    targeting_allow_data_science: bool | None = None
+    targeting_allow_sales_account_mgmt: bool | None = None
+    targeting_allow_adjacent_investigations: bool | None = None
+    targeting_allow_onsite_canada: bool | None = None
 
     # Public job boards to discover from (comma-separated board tokens/slugs).
     # Editable from the phone (Settings > Job sources); see examples/boards.canada.example.env.
@@ -159,6 +169,16 @@ class Settings(BaseSettings):
     @property
     def blacklisted_company_list(self) -> list[str]:
         return self._csv(self.blacklisted_companies)
+
+    @property
+    def targeting_overrides(self) -> dict[str, bool | None]:
+        return {
+            "allow_senior_leadership": self.targeting_allow_senior_leadership,
+            "allow_data_science": self.targeting_allow_data_science,
+            "allow_sales_account_mgmt": self.targeting_allow_sales_account_mgmt,
+            "allow_adjacent_investigations": self.targeting_allow_adjacent_investigations,
+            "allow_onsite_canada": self.targeting_allow_onsite_canada,
+        }
 
     def source_counts(self) -> dict[str, int]:
         """How many job sources are configured (feed URLs are never revealed; board slugs are public)."""

@@ -1,7 +1,8 @@
+from dataclasses import replace
 from pathlib import Path
 from app.knowledge_book import KnowledgeBook
 from app.truth_guard import audit_form_answers, enforce_answer_truthfulness
-from app.decisioning import Decision, DecisionContext, JobFacts, evaluate_job
+from app.decisioning import Decision, DecisionContext, JobFacts, evaluate_job, targeting_policy
 from app.profile import Fact, VerifiedProfile
 
 EXAMPLE_YAML = Path(__file__).parent.parent / "examples" / "profile.example.yaml"
@@ -75,11 +76,12 @@ def test_audit_and_enforce_form_answers_truthfulness():
 
 
 def test_job_eligibility_vetoes_hybrid_outside_ottawa():
-    """Hybrid/on-site outside Ottawa–Gatineau must be rejected before browser launch."""
+    """Under the "core" preset, hybrid/on-site outside Ottawa–Gatineau is rejected before browser launch."""
     ctx = DecisionContext(
         target_locations=("Ottawa", "Gatineau", "National Capital Region", "Remote Canada", "Canada"),
         target_keywords=("fraud", "compliance", "operations"),
         shortlist_threshold=50.0,
+        policy=targeting_policy("core"),
     )
 
     # 1. Cohere London UK hybrid -> REJECT
@@ -105,6 +107,11 @@ def test_job_eligibility_vetoes_hybrid_outside_ottawa():
     rep_toronto = evaluate_job(toronto_hybrid, ctx)
     assert rep_toronto.decision is Decision.REJECT
     assert "non_remote_outside_ottawa" in rep_toronto.vetoes
+
+    # 2b. The default "broad" preset allows in-person work elsewhere in Canada, never abroad.
+    broad_ctx = replace(ctx, policy=targeting_policy("broad"))
+    assert "non_remote_outside_ottawa" not in evaluate_job(toronto_hybrid, broad_ctx).vetoes
+    assert evaluate_job(cohere_uk, broad_ctx).decision is Decision.REJECT
 
     # 3. Ottawa in-person role -> ACCEPT (not vetoed by location)
     ottawa_job = JobFacts(
