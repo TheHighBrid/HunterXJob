@@ -97,6 +97,7 @@ ALLOWED: dict[str, frozenset[str]] = {
     PipelineStage.submission_uncertain.value: frozenset({
         PipelineStage.submitted.value,
         PipelineStage.confirmed.value,
+        PipelineStage.ready_to_apply.value,
         PipelineStage.needs_review.value,
         PipelineStage.failed.value,
         PipelineStage.withdrawn.value,

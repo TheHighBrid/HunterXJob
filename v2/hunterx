@@ -63,7 +63,7 @@ ensure_api_key() {
   if [ -z "$(env_value API_KEY '')" ]; then
     key="$(.venv/bin/python -m app.cli api-key)"
     if grep -q '^API_KEY=' .env; then
-      sed -i "s|^API_KEY=.*|API_KEY=${key}|" .env
+      .venv/bin/python -c "import re; p='.env'; c=open(p).read(); open(p,'w').write(re.sub(r'(?m)^API_KEY=.*', f'API_KEY=${key}', c))"
     else
       printf '\nAPI_KEY=%s\n' "$key" >> .env
     fi
@@ -114,8 +114,12 @@ start_app() {
   echo $! > run/api.pid
 
   for _ in 1 2 3 4 5 6 7 8 9 10; do
-    if command -v curl >/dev/null && curl -fsS "http://${host}:${port}/api/health" >/dev/null 2>&1; then
-      echo "HunterXJob v2 running at http://${host}:${port}"
+    if command -v curl >/dev/null && curl -fsS "http://127.0.0.1:${port}/api/health" >/dev/null 2>&1; then
+      if [ "$host" = "0.0.0.0" ]; then
+        echo "HunterXJob v2 running at http://localhost:${port} (or http://127.0.0.1:${port})"
+      else
+        echo "HunterXJob v2 running at http://${host}:${port}"
+      fi
       return 0
     fi
     sleep 1
@@ -202,7 +206,7 @@ PY
       2) echo "API auth         WARN (${auth_detail})" ;;
       *) echo "API auth         FAIL (${auth_detail}; run ./hunterx api-key and set API_KEY in .env)"; failures=$((failures+1)) ;;
     esac
-    env_mode="$(stat -c %a .env 2>/dev/null || echo unknown)"
+    env_mode="$(stat -c %a .env 2>/dev/null || stat -f %Lp .env 2>/dev/null || echo unknown)"
     case "$env_mode" in
       600|400) echo "Secrets file     OK (.env mode ${env_mode})" ;;
       *) echo "Secrets file     WARN (.env mode ${env_mode}; run chmod 600 .env)" ;;
@@ -273,18 +277,33 @@ case "$cmd" in
   backups) shift; py_cli backups "$@" ;;
   migrate) py_cli migrate ;;
   cycle) py_cli cycle ;;
+  autonomous-run) shift; py_cli autonomous-run "$@" ;;
+  dryrun-new-units) shift; py_cli dryrun-new-units "$@" ;;
+  certify) shift; py_cli certify "$@" ;;
   dedup-scan) py_cli dedup-scan ;;
   liveness) py_cli liveness ;;
-  api-key) py_cli api-key ;;
+  api-key)
+    if [ -f .env ]; then
+      current="$(env_value API_KEY '')"
+      if [ -n "$current" ]; then
+        echo "$current"
+        exit 0
+      fi
+    fi
+    py_cli api-key
+    ;;
   version) py_cli version ;;
   openapi) shift; py_cli openapi "$@" ;;
   profile) shift; py_cli profile "$@" ;;
   materials) shift; py_cli materials "$@" ;;
+  vault) shift; py_cli vault "$@" ;;
+  improve) shift; py_cli improve "$@" ;;
+  extension) shift; py_cli extension "$@" ;;
   stop) stop_app ;;
   restart) stop_app; start_app ;;
   status) status_app ;;
   doctor) doctor_app ;;
   test) .venv/bin/pytest -q ;;
   logs) tail -n 100 -f logs/api.log ;;
-  *) echo "Usage: ./hunterx {install|start|serve|stop|restart|status|doctor|test|logs|backup [--keep N]|backups|migrate|cycle|dedup-scan|liveness|api-key|version|openapi [--check]|profile ...|materials ...|service-install|boot-install}" ;;
+  *) echo "Usage: ./hunterx {install|start|serve|stop|restart|status|doctor|test|logs|backup [--keep N]|backups|migrate|cycle|autonomous-run|dryrun-new-units|certify|improve ...|extension {build|sync|info}|dedup-scan|liveness|api-key|version|openapi [--check]|profile ...|materials ...|vault ...|service-install|boot-install}" ;;
 esac

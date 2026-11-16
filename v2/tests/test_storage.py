@@ -55,15 +55,17 @@ def test_pre_versioning_database_is_adopted_without_losing_data(tmp_path):
     assert not inspect(engine).has_table("scheduler_cycles")
 
     seen = []
-    assert run_migrations(engine, before=lambda pending: seen.append([m.version for m in pending])) == [1, 2, 3, 4, 5]
-    assert seen == [[1, 2, 3, 4, 5]]
+    assert run_migrations(engine, before=lambda pending: seen.append([m.version for m in pending])) == list(range(1, LATEST_VERSION + 1))
+    assert seen == [list(range(1, LATEST_VERSION + 1))]
     assert inspect(engine).has_table("scheduler_cycles")
     assert inspect(engine).has_table("setting_overrides")
     assert inspect(engine).has_table("profile_facts")
     assert inspect(engine).has_table("application_materials")
+    assert inspect(engine).has_table("agent_versions")
+    assert inspect(engine).has_table("kernel_runs")
     with Session() as db:
         assert db.execute(select(Job.title)).scalar_one() == "Fraud Analyst"
-        assert [row.version for row in db.execute(select(SchemaVersion)).scalars()] == [1, 2, 3, 4, 5]
+        assert [row.version for row in db.execute(select(SchemaVersion)).scalars()] == list(range(1, LATEST_VERSION + 1))
 
 
 _V4_JOBS = """
@@ -94,7 +96,7 @@ def test_v4_jobs_table_gains_identity_columns_and_backfilled_canonical_ids(tmp_p
                 text("INSERT INTO schema_version (version, description, applied_at) VALUES (:version, :description, '2026-01-01')"),
                 {"version": version, "description": f"v{version}"},
             )
-    assert run_migrations(engine) == [5]
+    assert run_migrations(engine) == [5, 6]
     columns = {column["name"] for column in inspect(engine).get_columns("jobs")}
     assert {"canonical_id", "board", "duplicate_of_id", "liveness_next_check_at", "closed_at"} <= columns
     with engine.connect() as connection:

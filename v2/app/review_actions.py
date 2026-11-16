@@ -20,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import Settings
-from app.flags import kill_switch_engaged
+from app.flags import is_enabled, kill_switch_engaged
 from app.material_store import MaterialsError, material_view, materials_for, materials_ready
 from app.material_workflow import REVIEW_REASON, approve_pending
 from app.models import Application, Job, PipelineStage, ReviewTask, iso_utc
@@ -134,7 +134,7 @@ def task_detail(db: Session, task: ReviewTask) -> dict[str, Any]:
         "blocked_fields": blocked_fields,
         "actions": available_actions(db, task),
         "approve_effect": _approve_effect(db, task, job),
-        "live_submission_locked": True,
+        "live_submission_locked": not is_enabled(db, "allow_live_submission"),
     }
 
 
@@ -192,7 +192,7 @@ def _result(db: Session, task: ReviewTask, action: str) -> dict[str, Any]:
         "job_stage": job.stage if job else None,
         "application_stage": application.stage if application else None,
         "submitted": False,
-        "live_submission_locked": True,
+        "live_submission_locked": not is_enabled(db, "allow_live_submission"),
     }
 
 
@@ -252,5 +252,73 @@ def reject_task(db: Session, task_id: str) -> dict[str, Any]:
 
 def resolve_task(db: Session, task_id: str, resolution: Resolution = "resolved") -> dict[str, Any]:
     task = _open_task(db, task_id)
+    job = _task_job(db, task)
+    application = _task_application(db, task, job)
+    if (
+        task.reason_code == "submission_confirmation_uncertain"
+        and job is not None
+        and job.stage == PipelineStage.submission_uncertain.value
+    ):
+        target = PipelineStage.ready_to_apply if resolution == "resolved" else PipelineStage.withdrawn
+        reason_msg = (
+            "owner verified submission was not received; cleared unconfirmed hold for retry"
+            if resolution == "resolved"
+            else "owner dismissed unconfirmed submission hold (handled manually)"
+        )
+        transition(db, job, target, reason_msg)
+        if application is not None:
+            application.stage = target.value
+            if resolution == "resolved":
+                application.last_error = None
+            db.add(application)
+            db.commit()
     _close(db, task, resolution)
     return _result(db, task, resolution)
+
+
+def clear_uncertain_hold(
+    db: Session,
+    job_id: str,
+    action: Literal["requeue", "withdraw"] = "requeue",
+) -> Job:
+    """Clear a stuck ``submission_uncertain`` hold even when all review tasks were already closed."""
+    job = db.get(Job, job_id)
+    if job is None:
+        raise ReviewActionError(404, "job not found")
+    application = db.execute(select(Application).where(Application.job_id == job.id)).scalar_one_or_none()
+    in_uncertain = (
+        job.stage == PipelineStage.submission_uncertain.value
+        or (application is not None and application.stage == PipelineStage.submission_uncertain.value)
+    )
+    if not in_uncertain:
+        raise ReviewActionError(409, f"job is in {job.stage}; no unconfirmed submission hold to clear")
+
+    target = PipelineStage.ready_to_apply if action == "requeue" else PipelineStage.withdrawn
+    msg = (
+        "owner cleared unconfirmed submission hold; re-queued to ready_to_apply"
+        if action == "requeue"
+        else "owner dismissed unconfirmed submission hold (handled manually / withdrawn)"
+    )
+    if job.stage == PipelineStage.submission_uncertain.value:
+        transition(db, job, target, msg)
+    if application is not None and application.stage == PipelineStage.submission_uncertain.value:
+        application.stage = target.value
+        if action == "requeue":
+            application.last_error = None
+        db.add(application)
+
+    open_uncertain = db.execute(
+        select(ReviewTask).where(
+            ReviewTask.job_id == job.id,
+            ReviewTask.status == "open",
+            ReviewTask.reason_code == "submission_confirmation_uncertain",
+        )
+    ).scalars().all()
+    now = datetime.now(UTC)
+    for t in open_uncertain:
+        t.status = "resolved" if action == "requeue" else "dismissed"
+        t.resolved_at = now
+        db.add(t)
+    db.commit()
+    db.refresh(job)
+    return job

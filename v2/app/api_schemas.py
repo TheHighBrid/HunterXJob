@@ -56,9 +56,9 @@ class HealthOut(BaseModel):
 
 
 class LiveSubmissionOut(Out):
-    locked: Literal[True]
+    locked: bool
     env_allow_live_submission: bool
-    reason: str
+    reason: str | None = None
 
 
 class SourcesOut(Out):
@@ -284,10 +284,15 @@ class BlockedFieldOut(Out):
     section: str | None = None
     required: bool = False
     reason: str | None = None
+    options: list[str] = Field(default_factory=list)
+
+
+class ClearUncertainHoldIn(BaseModel):
+    action: Literal["requeue", "withdraw"] = "requeue"
 
 
 class FormStatusOut(Out):
-    state: Literal["no_application", "not_checked", "validated", "unavailable", "blocked", "in_progress"]
+    state: Literal["no_application", "not_checked", "validated", "unavailable", "blocked", "in_progress", "submission_uncertain"]
     source: str | None = None
     fields_total: int | None = None
     fields_required: int | None = None
@@ -376,6 +381,8 @@ class FormFieldOut(Out):
     sensitive: bool
     legal: bool
     options: int
+    choices: list[str] = []
+    vault_keys: list[str] = []
     status: str
     reason: str
     value: Any = None
@@ -428,7 +435,7 @@ class JobMaterialsOut(Out):
     llm_enabled: bool
     approved: dict[str, str]
     items: list[MaterialOut]
-    live_submission_locked: Literal[True]
+    live_submission_locked: bool
 
 
 class MaterialDecisionIn(BaseModel):
@@ -440,7 +447,7 @@ class MaterialActionOut(Out):
     job_stage: str
     application_stage: str
     materials_ready: bool
-    submitted: Literal[False]
+    submitted: bool = False
 
 
 # ---------------------------------------------------------------------- profile
@@ -538,7 +545,7 @@ class ReviewTaskDetailOut(ReviewTaskOut):
     blocked_fields: list[BlockedFieldOut] = Field(default_factory=list)
     actions: list[Literal["approve", "reject", "resolve"]]
     approve_effect: str | None = None
-    live_submission_locked: Literal[True]
+    live_submission_locked: bool
 
 
 class ReviewActionOut(Out):
@@ -546,12 +553,48 @@ class ReviewActionOut(Out):
     action: str
     job_stage: str | None = None
     application_stage: str | None = None
-    submitted: Literal[False]
-    live_submission_locked: Literal[True]
+    submitted: bool = False
+    live_submission_locked: bool
 
 
 class ReviewResolveIn(BaseModel):
     resolution: Literal["resolved", "dismissed"] = "resolved"
+
+
+class BatchTaskIdsIn(BaseModel):
+    task_ids: list[str] = Field(default_factory=list)
+
+
+class BatchReviewResultOut(Out):
+    total: int
+    succeeded: int
+    failed: int
+    results: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class RevalidateReviewResultOut(Out):
+    examined: int
+    resolved: int
+    retained: int
+    promoted_to_ready: int
+    details: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ClaimsVerificationOut(Out):
+    job_id: str
+    company: str
+    title: str
+    status: str
+    truth_grounded: bool
+    claims_total: int
+    verified_count: int
+    unsupported_count: int
+    verified_claims: list[dict[str, Any]] = Field(default_factory=list)
+    unsupported_claims: list[dict[str, Any]] = Field(default_factory=list)
+    resume_artifact: dict[str, Any] = Field(default_factory=dict)
+    material_hash: str
+    policy_version: str
+    profile_facts_grounding_rate: float
 
 
 # ---------------------------------------------------------------------- reports
@@ -606,7 +649,7 @@ class HistoryDayOut(Out):
 class SummaryOut(Out):
     generated_at: str
     timezone: str
-    live_submission_locked: Literal[True]
+    live_submission_locked: bool
     jobs: JobsSummaryOut
     applications: ApplicationsSummaryOut
     dry_runs: DryRunSummaryOut

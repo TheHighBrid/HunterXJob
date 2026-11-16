@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HunterXJob Extension Settings & Profile Vault</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="brand">
+        <span class="logo">⚡</span>
+        <div>
+          <h1>HunterXJob Portable Settings</h1>
+          <p class="subtitle">Candidate Profile, Answer Vault & Daemon Integration</p>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="btn-save">Save Settings</button>
+    </header>
+
+    <div class="grid">
+      <!-- Connection & Hotkeys -->
+      <section class="card">
+        <h2>Connection & Shortcuts</h2>
+        <div class="form-group">
+          <label for="daemon-url">Local Daemon Base URL</label>
+          <input type="url" id="daemon-url" placeholder="http://localhost:8000" value="http://localhost:8000">
+          <span class="help-text">Point to running HunterXJob v2 FastAPI backend for live database synchronization.</span>
+        </div>
+        <div class="form-group">
+          <label for="api-key">Daemon API Key (optional)</label>
+          <input type="password" id="api-key" placeholder="Enter HUNTERX_API_KEY if configured">
+        </div>
+        <div class="hotkey-box">
+          <div class="hotkey-row">
+            <span>Autofill Active Form:</span>
+            <kbd>Alt + Shift + F</kbd>
+          </div>
+          <div class="hotkey-row">
+            <span>Toggle Review Panel:</span>
+            <kbd>Alt + Shift + R</kbd>
+          </div>
+        </div>
+        <button class="btn btn-secondary" id="btn-test-daemon">Test Daemon Connection</button>
+        <span id="test-status" class="status-msg"></span>
+      </section>
+
+      <!-- Candidate Profile Preview -->
+      <section class="card">
+        <h2>Verified Candidate Facts</h2>
+        <p class="section-desc">Facts used strictly by Truth Guard to fill contact and background questions.</p>
+        <div class="profile-preview-box">
+          <div class="fact-row">
+            <span class="fact-label">Full Name:</span>
+            <span class="fact-val" id="profile-name">Loading...</span>
+          </div>
+          <div class="fact-row">
+            <span class="fact-label">Email:</span>
+            <span class="fact-val" id="profile-email">Loading...</span>
+          </div>
+          <div class="fact-row">
+            <span class="fact-label">Phone:</span>
+            <span class="fact-val" id="profile-phone">Loading...</span>
+          </div>
+          <div class="fact-row">
+            <span class="fact-label">Location:</span>
+            <span class="fact-val" id="profile-location">Loading...</span>
+          </div>
+          <div class="fact-row">
+            <span class="fact-label">Work Auth:</span>
+            <span class="fact-val">Canadian Citizen (Authorized CA & US)</span>
+          </div>
+          <div class="fact-row">
+            <span class="fact-label">Languages:</span>
+            <span class="fact-val">Bilingual English/French (SLE Level C)</span>
+          </div>
+        </div>
+        <div class="sync-actions">
+          <button class="btn btn-secondary" id="btn-sync-daemon">↻ Sync from Running Daemon</button>
+          <button class="btn btn-secondary" id="btn-reset-defaults">Reset to Bundled Defaults</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- Answer Vault Table Preview -->
+    <section class="card full-width">
+      <div class="vault-header">
+        <div>
+          <h2>Master Answer Vault Policies</h2>
+          <p class="section-desc">Pre-verified answers for screening questions across Indeed, LinkedIn, GC Jobs, and ATS platforms.</p>
+        </div>
+        <input type="text" id="vault-filter" placeholder="Filter policies (e.g. salary, sponsorship)..." class="filter-input">
+      </div>
+      <div class="table-container">
+        <table class="vault-table">
+          <thead>
+            <tr>
+              <th>Policy Key</th>
+              <th>Configured Answer Value</th>
+              <th>Scope</th>
+              <th>Confidence</th>
+            </tr>
+          </thead>
+          <tbody id="vault-tbody">
+            <!-- Dynamic rows -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HunterXJob Assistant</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-wrapper">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <span class="brand-icon">⚡</span>
+        <div class="brand-text">
+          <span class="brand-title">HunterXJob</span>
+          <span class="brand-version">v1.0 Portable</span>
+        </div>
+      </div>
+      <div class="status-indicator" id="status-indicator">
+        <span class="dot"></span>
+        <span class="status-text" id="status-text">Standalone</span>
+      </div>
+    </header>
+
+    <!-- Candidate Card -->
+    <section class="card candidate-card">
+      <div class="candidate-header">
+        <span class="candidate-avatar">MA</span>
+        <div class="candidate-info">
+          <h2 class="candidate-name" id="candidate-name">Mohamed Alem</h2>
+          <p class="candidate-meta" id="candidate-meta">Bilingual Banking & AML | Ottawa, ON</p>
+        </div>
+      </div>
+      <div class="candidate-tags">
+        <span class="tag">🇨🇦 Canadian Citizen</span>
+        <span class="tag">🗣 Bilingual EN/FR</span>
+        <span class="tag">🛡 Truth Guard Active</span>
+      </div>
+    </section>
+
+    <!-- Active Foreground Detection Card -->
+    <section class="card detection-card">
+      <div class="section-title">
+        <span>Foreground Target</span>
+        <span class="pill-badge" id="platform-badge">Detecting...</span>
+      </div>
+      <div class="job-meta-box">
+        <div class="job-title" id="job-title">Scanning page...</div>
+        <div class="job-company" id="job-company"></div>
+      </div>
+      <div class="fields-detected-row">
+        <span>Form Fields in View:</span>
+        <strong id="input-count">0 controls</strong>
+      </div>
+
+      <!-- Main Action Button -->
+      <button class="btn btn-primary" id="btn-autofill">
+        <span class="btn-icon">⚡</span>
+        <span class="btn-label">Autofill Application</span>
+        <kbd class="kbd-hint">⌥⇧F</kbd>
+      </button>
+    </section>
+
+    <!-- Pre-Submission Review Summary -->
+    <section class="card review-card">
+      <div class="section-title">
+        <span>Safety & Review Guarantee</span>
+        <span class="shield-badge">Strict Truth Guard</span>
+      </div>
+      <ul class="guarantee-list">
+        <li>✓ <strong>Zero Unauthorized Claims:</strong> Certified facts only.</li>
+        <li>✓ <strong>Fail-Closed Screening:</strong> Verified clearance & work auth.</li>
+        <li>✓ <strong>You Retain Control:</strong> Review all inputs before submitting.</li>
+      </ul>
+      <div class="review-actions-row">
+        <button class="btn btn-secondary" id="btn-toggle-hud">In-Page HUD</button>
+        <button class="btn btn-secondary" id="btn-open-options">Settings</button>
+      </div>
+    </section>
+
+    <!-- Status Toast / Message -->
+    <div class="toast-area" id="toast-area" style="display: none;"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

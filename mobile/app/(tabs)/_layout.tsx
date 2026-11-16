@@ -53,6 +53,10 @@ export default function TabsLayout() {
         options={{ title: "Review", headerShown: false, tabBarIcon: ({ focused, color }) => <TabIcon symbol="📝" focused={focused} color={color} /> }}
       />
       <Tabs.Screen
+        name="vault"
+        options={{ title: "Answer Vault", tabBarIcon: ({ focused, color }) => <TabIcon symbol="🧠" focused={focused} color={color} /> }}
+      />
+      <Tabs.Screen
         name="reports"
         options={{ title: "Reports", tabBarIcon: ({ focused, color }) => <TabIcon symbol="📊" focused={focused} color={color} /> }}
       />

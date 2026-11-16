@@ -1,0 +1,317 @@
+"""CAPTCHA Detection, Solving Bridge, and Token Injection.
+
+Detects and resolves challenges commonly found on ATS application forms:
+- Google reCAPTCHA v2 / v3 / Enterprise
+- hCaptcha
+- Cloudflare Turnstile
+- AWS WAF Challenge
+
+Supports:
+1. Passive and active DOM detection of challenge widgets & sitekeys.
+2. Supervised interactive mode (monitoring for manual user resolution).
+3. Automated API-based solver hook (injecting response tokens into DOM).
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
+import re
+from dataclasses import dataclass
+from typing import Any, Protocol
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class CaptchaChallenge:
+    detected: bool
+    captcha_type: str | None = None  # "recaptcha_v2", "recaptcha_v3", "hcaptcha", "turnstile"
+    sitekey: str | None = None
+    selector: str | None = None
+    resolved: bool = False
+    response_token: str | None = None
+
+
+CAPTCHA_DETECT_JS = r"""
+() => {
+  // 1. Google reCAPTCHA
+  const recaptchaEl = document.querySelector('[name="g-recaptcha-response"], .g-recaptcha, iframe[src*="recaptcha"]');
+  if (recaptchaEl) {
+    // Invisible reCAPTCHA v3 / Enterprise badges execute automatically on form submit
+    const isInvisible = !!(
+      document.querySelector('iframe[src*="recaptcha"][src*="size=invisible"]') ||
+      document.querySelector('.g-recaptcha[data-size="invisible"]')
+    );
+    if (isInvisible) {
+      return { detected: false };
+    }
+    const sitekey = recaptchaEl.getAttribute('data-sitekey') ||
+                    (document.querySelector('[data-sitekey]') ? document.querySelector('[data-sitekey]').getAttribute('data-sitekey') : null);
+    const resp = document.querySelector('[name="g-recaptcha-response"]');
+    const token = resp ? resp.value : null;
+    return {
+      detected: true,
+      captcha_type: 'recaptcha',
+      sitekey: sitekey,
+      selector: '[name="g-recaptcha-response"]',
+      resolved: !!(token && token.trim().length > 0),
+      response_token: token || null
+    };
+  }
+
+  // 2. hCaptcha
+  const hcaptchaEl = document.querySelector('[name="h-captcha-response"], .h-captcha, iframe[src*="hcaptcha"]');
+  if (hcaptchaEl) {
+    const sitekey = hcaptchaEl.getAttribute('data-sitekey') ||
+                    (document.querySelector('[data-sitekey]') ? document.querySelector('[data-sitekey]').getAttribute('data-sitekey') : null);
+    const resp = document.querySelector('[name="h-captcha-response"]');
+    const token = resp ? resp.value : null;
+    return {
+      detected: true,
+      captcha_type: 'hcaptcha',
+      sitekey: sitekey,
+      selector: '[name="h-captcha-response"]',
+      resolved: !!(token && token.trim().length > 0),
+      response_token: token || null
+    };
+  }
+
+  // 3. Cloudflare Turnstile
+  const turnstileEl = document.querySelector('[name="cf-turnstile-response"], .cf-turnstile, iframe[src*="challenges.cloudflare.com"]');
+  if (turnstileEl) {
+    const sitekey = turnstileEl.getAttribute('data-sitekey') ||
+                    (document.querySelector('[data-sitekey]') ? document.querySelector('[data-sitekey]').getAttribute('data-sitekey') : null);
+    const resp = document.querySelector('[name="cf-turnstile-response"]');
+    const token = resp ? resp.value : null;
+    return {
+      detected: true,
+      captcha_type: 'turnstile',
+      sitekey: sitekey,
+      selector: '[name="cf-turnstile-response"]',
+      resolved: !!(token && token.trim().length > 0),
+      response_token: token || null
+    };
+  }
+
+  return { detected: false };
+}
+"""
+
+
+class CaptchaSolver(Protocol):
+    """Protocol for external automated solving services (e.g. 2Captcha, CapSolver)."""
+
+    async def solve(self, captcha_type: str, sitekey: str, page_url: str) -> str: ...
+
+
+class MockCaptchaSolver:
+    """Mock solver for testing and controlled rehearsals."""
+
+    def __init__(self, token: str = "mock-captcha-token-valid-abc123xyz"):
+        self.token = token
+
+    async def solve(self, captcha_type: str, sitekey: str, page_url: str) -> str:
+        await asyncio.sleep(0.05)
+        return self.token
+
+
+async def detect_captcha(page: Any) -> CaptchaChallenge:
+    """Scan the page DOM for known CAPTCHA elements and sitekeys."""
+    try:
+        data = await page.evaluate(CAPTCHA_DETECT_JS)
+        return CaptchaChallenge(
+            detected=bool(data.get("detected")),
+            captcha_type=data.get("captcha_type"),
+            sitekey=data.get("sitekey"),
+            selector=data.get("selector"),
+            resolved=bool(data.get("resolved")),
+            response_token=data.get("response_token"),
+        )
+    except Exception as exc:
+        logger.debug("Captcha detection error: %s", exc)
+        return CaptchaChallenge(detected=False)
+
+
+async def inject_captcha_token(page: Any, challenge: CaptchaChallenge, token: str) -> bool:
+    """Inject a resolved token into the page DOM and trigger relevant callbacks."""
+    if not challenge.selector:
+        challenge.selector = '[name="g-recaptcha-response"]'
+
+    injection_js = r"""
+    ([selector, token, captchaType]) => {
+      // 1. Set the hidden textarea response
+      const elements = document.querySelectorAll(selector);
+      for (const el of elements) {
+        el.value = token;
+        el.innerHTML = token;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+
+      // 2. Trigger data-callback if present on widget
+      const widget = document.querySelector('[data-callback]');
+      if (widget) {
+        const fnName = widget.getAttribute('data-callback');
+        if (fnName && typeof window[fnName] === 'function') {
+          try { window[fnName](token); } catch(e) {}
+        }
+      }
+
+      // 3. Trigger grecaptcha callback if defined
+      if (captchaType === 'recaptcha' && window.___grecaptcha_cfg && window.___grecaptcha_cfg.clients) {
+        try {
+          Object.values(window.___grecaptcha_cfg.clients).forEach(client => {
+            Object.values(client).forEach(item => {
+              if (item && item.callback && typeof item.callback === 'function') {
+                item.callback(token);
+              }
+            });
+          });
+        } catch(e) {}
+      }
+
+      return true;
+    }
+    """
+    try:
+        await page.evaluate(injection_js, [challenge.selector, token, challenge.captcha_type or "recaptcha"])
+        challenge.resolved = True
+        challenge.response_token = token
+        return True
+    except Exception as exc:
+        logger.error("Failed to inject captcha token: %s", exc)
+        return False
+
+
+async def is_captcha_challenge_visible(page: Any) -> bool:
+    """Return True if an interactive CAPTCHA challenge modal/iframe (e.g. reCAPTCHA bframe or hCaptcha) is visibly open on screen."""
+    popup_js = r"""
+    () => {
+      const frames = Array.from(document.querySelectorAll(
+        'iframe[src*="recaptcha"][src*="bframe"], iframe[title*="recaptcha challenge" i], iframe[src*="hcaptcha.com"]'
+      ));
+      for (const f of frames) {
+        const rect = f.getBoundingClientRect();
+        if (rect.width < 200 || rect.height < 200) continue;
+        if (rect.bottom <= 0 || rect.right <= 0) continue;
+        let el = f;
+        let visible = true;
+        while (el && el !== document.body) {
+          const style = window.getComputedStyle(el);
+          if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity || '1') === 0) {
+            visible = false;
+            break;
+          }
+          el = el.parentElement;
+        }
+        if (visible) return true;
+      }
+      return false;
+    }
+    """
+    try:
+        return bool(await page.evaluate(popup_js))
+    except Exception:
+        return False
+
+
+async def wait_for_user_captcha_resolution(
+    page: Any,
+    poll_interval: float = 1.0,
+    timeout_seconds: float = 60.0,
+) -> CaptchaChallenge:
+    """Poll page until user interactively solves the CAPTCHA in supervised mode."""
+    start = asyncio.get_event_loop().time()
+    while asyncio.get_event_loop().time() - start < timeout_seconds:
+        status = await detect_captcha(page)
+        if status.detected and status.resolved and status.response_token:
+            return status
+        await asyncio.sleep(poll_interval)
+    return await detect_captcha(page)
+
+
+class CloudCaptchaSolver:
+    """Production automated cloud CAPTCHA solver plugin.
+
+    Supports 2Captcha, CapSolver, and Anti-Captcha HTTP API protocols:
+    - Submits challenge task (sitekey + page_url).
+    - Polls for completion token.
+    - Injects the resolved token directly into the Playwright DOM.
+    """
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        provider: str = "2captcha",
+        base_url: str | None = None,
+    ) -> None:
+        self.api_key = api_key or ""
+        self.provider = provider.lower()
+        self.base_url = base_url or ("https://api.capsolver.com" if "capsolver" in self.provider else "https://2captcha.com")
+
+    async def solve(self, challenge: CaptchaChallenge, page_url: str, timeout_seconds: float = 90.0) -> str | None:
+        """Resolve a detected challenge using cloud solving service."""
+        if not self.api_key or not challenge.sitekey:
+            logger.warning("CloudCaptchaSolver called without API key or sitekey")
+            return None
+
+        import httpx
+
+        task_type_map = {
+            "recaptcha": "ReCaptchaV2TaskProxyLess",
+            "recaptcha_v2": "ReCaptchaV2TaskProxyLess",
+            "recaptcha_v3": "ReCaptchaV3TaskProxyLess",
+            "hcaptcha": "HCaptchaTaskProxyLess",
+            "turnstile": "AntiTurnstileTaskProxyLess",
+        }
+        task_type = task_type_map.get(challenge.captcha_type or "recaptcha", "ReCaptchaV2TaskProxyLess")
+
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            try:
+                # 1. Create Task
+                create_payload = {
+                    "clientKey": self.api_key,
+                    "task": {
+                        "type": task_type,
+                        "websiteURL": page_url,
+                        "websiteKey": challenge.sitekey,
+                    },
+                }
+                res = await client.post(f"{self.base_url}/createTask", json=create_payload)
+                data = res.json()
+                if data.get("errorId", 0) != 0 or not data.get("taskId"):
+                    logger.error("CloudCaptchaSolver task creation failed: %s", data)
+                    return None
+
+                task_id = data["taskId"]
+                logger.info("CloudCaptchaSolver created task %s for %s", task_id, task_type)
+
+                # 2. Poll for Result
+                start = asyncio.get_event_loop().time()
+                while asyncio.get_event_loop().time() - start < timeout_seconds:
+                    await asyncio.sleep(3.0)
+                    poll_res = await client.post(
+                        f"{self.base_url}/getTaskResult",
+                        json={"clientKey": self.api_key, "taskId": task_id},
+                    )
+                    poll_data = poll_res.json()
+                    status = poll_data.get("status")
+
+                    if status == "ready":
+                        solution = poll_data.get("solution", {})
+                        token = solution.get("gRecaptchaResponse") or solution.get("token") or solution.get("text")
+                        if token:
+                            logger.info("CloudCaptchaSolver resolved token for task %s", task_id)
+                            return token
+                    elif status == "processing":
+                        continue
+                    else:
+                        logger.error("CloudCaptchaSolver polling error: %s", poll_data)
+                        return None
+
+            except Exception as exc:
+                logger.error("CloudCaptchaSolver exception: %s", exc)
+                return None
+
+        return None
+

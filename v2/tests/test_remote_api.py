@@ -393,6 +393,8 @@ def test_reject_and_resolve(env):
 MUTATING_ROUTES = {
     ("PUT", "/api/resume-facts"),
     ("POST", "/api/answers"),
+    ("DELETE", "/api/answers/{answer_id}"),
+    ("POST", "/api/vault/simulate"),
     ("POST", "/api/discovery/run"),
     ("POST", "/api/scoring/run"),
     ("POST", "/api/applications/{application_id}/generate"),
@@ -402,6 +404,10 @@ MUTATING_ROUTES = {
     ("POST", "/api/review-tasks/{task_id}/approve"),
     ("POST", "/api/review-tasks/{task_id}/reject"),
     ("POST", "/api/review-tasks/{task_id}/resolve"),
+    ("POST", "/api/review-tasks/batch-approve"),
+    ("POST", "/api/review-tasks/batch-resolve"),
+    ("POST", "/api/review-tasks/batch-reject"),
+    ("POST", "/api/review-tasks/revalidate"),
     ("POST", "/api/scheduler/run"),
     ("POST", "/api/scheduler/pause"),
     ("POST", "/api/scheduler/resume"),
@@ -416,7 +422,16 @@ MUTATING_ROUTES = {
     ("POST", "/api/materials/{material_id}/approve"),
     ("POST", "/api/materials/{material_id}/reject"),
     ("POST", "/api/jobs/{job_id}/unlink-duplicate"),
+    ("POST", "/api/jobs/{job_id}/clear-uncertain-hold"),
     ("POST", "/api/jobs/{job_id}/check-liveness"),
+    ("POST", "/api/jobs/{job_id}/run-autonomous"),
+    ("POST", "/api/autonomous/run"),
+    ("POST", "/api/inbox/match"),
+    ("POST", "/api/follow-ups/run"),
+    ("POST", "/api/follow-ups/{task_id}/dispatch"),
+    ("POST", "/api/autofill/evaluate"),
+    ("POST", "/api/autofill/log-application"),
+    ("POST", "/api/telemetry/trace"),
 }
 
 HOSTILE_BODIES = [
@@ -461,6 +476,7 @@ def test_no_route_can_unlock_live_submission_or_record_a_submission(env, monkeyp
             "job_id": [ready.id, blocked.id, review_job.id],
             "material_id": list(db.execute(select(ApplicationMaterial.id)).scalars()),
             "fact_id": list(db.execute(select(ProfileFact.id)).scalars())[:3],
+            "answer_id": ["dummy_answer_id"],
         }
     client = TestClient(main.app, client=("203.0.113.9", 50000), raise_server_exceptions=False)
     for method, path in sorted(MUTATING_ROUTES):
@@ -554,3 +570,65 @@ def test_manual_liveness_check_records_evidence_without_closing(env, monkeypatch
     assert body["liveness"] == "suspect"
     assert body["liveness_detail"]["checks"][0]["trigger"] == "manual"
     assert body["liveness_detail"]["checks"][0]["action"] == "suspect"
+
+
+def test_vault_simulate_endpoint(env):
+    with env["Session"]() as db:
+        load_example_profile(db)
+    client = env["client"]
+
+    # 1. Exact / boolean fallback matching
+    res = client.post("/api/vault/simulate", headers=AUTH, json={
+        "question": "Are you legally eligible to work in Canada without restrictions?",
+        "options": ["Yes, I am a Canadian citizen/PR", "No, I need sponsorship"],
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "resolved"
+    assert data["canonical_key"] == "work_authorization_ca"
+    assert data["stored_value"] == "Yes"
+    assert data["matched_option"] == "Yes, I am a Canadian citizen/PR"
+    assert "Tier 2" in data["tier"]
+
+    # 2. Empty question safely returns missing
+    empty_res = client.post("/api/vault/simulate", headers=AUTH, json={"question": ""})
+    assert empty_res.status_code == 200
+    assert empty_res.json()["status"] == "missing"
+
+    # 3. Missing / unanswerable question
+    unmapped = client.post("/api/vault/simulate", headers=AUTH, json={
+        "question": "Have you worked with proprietary quantum cryptography libraries in production?",
+        "options": ["Yes", "No"],
+    })
+    assert unmapped.status_code == 200
+    assert unmapped.json()["status"] == "missing"
+
+
+def test_clear_uncertain_hold_unblocks_jobs_with_no_open_tasks(env):
+    client = env["client"]
+    with env["Session"]() as db:
+        job1 = _job(db, title="Role One", stage=PipelineStage.submission_uncertain.value)
+        app1 = _application(db, job1, PipelineStage.submission_uncertain.value, last_error="Submission not confirmed")
+        job2 = _job(db, title="Role Two", company="OtherCo", stage=PipelineStage.submission_uncertain.value)
+        _application(db, job2, PipelineStage.submission_uncertain.value, last_error="Submission not confirmed")
+        normal = _job(db, title="Normal", company="ThirdCo", stage=PipelineStage.ready_to_apply.value)
+        j1_id, a1_id, j2_id, n_id = job1.id, app1.id, job2.id, normal.id
+
+    # Non-uncertain job returns 409 safely
+    assert client.post(f"/api/jobs/{n_id}/clear-uncertain-hold", headers=AUTH, json={"action": "requeue"}).status_code == 409
+
+    # Job with zero open review tasks can be re-queued to ready_to_apply
+    res1 = client.post(f"/api/jobs/{j1_id}/clear-uncertain-hold", headers=AUTH, json={"action": "requeue"})
+    assert res1.status_code == 200, res1.text
+    assert res1.json()["stage"] == "ready_to_apply"
+    assert res1.json()["application"]["stage"] == "ready_to_apply"
+    assert res1.json()["application"]["last_error"] is None
+
+    # Job can also be withdrawn cleanly if handled manually
+    res2 = client.post(f"/api/jobs/{j2_id}/clear-uncertain-hold", headers=AUTH, json={"action": "withdraw"})
+    assert res2.status_code == 200, res2.text
+    assert res2.json()["stage"] == "withdrawn"
+    assert res2.json()["application"]["stage"] == "withdrawn"
+    with env["Session"]() as db:
+        assert db.get(Application, a1_id).stage == "ready_to_apply"
+

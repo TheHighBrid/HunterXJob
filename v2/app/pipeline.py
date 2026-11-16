@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -26,6 +27,8 @@ from app.vault_store import load_vault
 
 if TYPE_CHECKING:
     from app.real_forms import FormProvider
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -158,6 +161,8 @@ def score_pending_jobs(db: Session, settings: Settings, resume_facts: str, use_a
     processed = 0
 
     for job in jobs:
+        if job.stage not in {PipelineStage.discovered.value, PipelineStage.normalized.value}:
+            continue
         processed += 1
         job.platform = platform_for_job(job)
         result = deterministic_gate(job, settings)
@@ -215,9 +220,11 @@ def _blocker_detail(plan: FillPlan) -> str:
     return "\n".join(lines)
 
 
-def preview_form(db: Session, form: RealForm) -> tuple[FillPlan, dict[str, object]]:
+def preview_form(db: Session, form: RealForm, application: Application | None = None) -> tuple[FillPlan, dict[str, object]]:
     """Plan a real form against the vault without changing any state."""
     vault = load_vault(db, form.vault_scopes)
+    if application is not None:
+        vault = _with_materials(db, application, vault)
     plan = plan_fill(form.controls, vault)
     return plan, form.summary()
 
@@ -316,6 +323,7 @@ def _record_blockers(application: Application, form: _LoadedForm, blockers: list
         "section": item.control.section,
         "required": item.control.required,
         "reason": item.reason,
+        "options": list(item.control.options or []),
     } for item in plan.items if item.status == "review"]
     application.validation_json = json.dumps(
         {"ok": False, "form": form.summary, "blockers": blockers, "blocked_fields": blocked, "planned": _planned(plan)},

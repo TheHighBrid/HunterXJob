@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>GC Jobs / Emplois FP - Public Service of Canada</title>
+</head>
+<body>
+  <h2>Analyste de politiques / Policy Analyst (EC-05)</h2>
+  <form id="gc_jobs_form" method="POST">
+    <fieldset>
+      <legend>Renseignements personnels / Personal Information</legend>
+      <label for="first_name">Prénom / First Name</label>
+      <input type="text" id="first_name" name="first_name" required />
+
+      <label for="last_name">Nom / Last Name</label>
+      <input type="text" id="last_name" name="last_name" required />
+
+      <label for="email">Courriel / Email</label>
+      <input type="email" id="email" name="email" required />
+
+      <label for="phone">Téléphone / Telephone</label>
+      <input type="tel" id="phone" name="phone" required />
+
+      <label for="location">Ville, Province / City, Province</label>
+      <input type="text" id="location" name="location" required />
+    </fieldset>
+
+    <fieldset>
+      <legend>Admissibilité et citoyenneté / Eligibility & Citizenship (PSEA)</legend>
+      <p>Statut de citoyenneté / Citizenship Status</p>
+      <label><input type="radio" name="canadian_citizenship" value="Canadian Citizen / Citoyen canadien" /> Citoyen canadien / Canadian Citizen</label>
+      <label><input type="radio" name="canadian_citizenship" value="Permanent Resident / Résident permanent" /> Résident permanent / Permanent Resident</label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Exigences linguistiques / Official Languages</legend>
+      <label for="language_proficiency">Profil linguistique / Language Proficiency</label>
+      <select id="language_proficiency" name="language_proficiency">
+        <option value="">Sélectionner / Select</option>
+        <option value="Bilingual / Bilingue (English & French / Anglais et Français)">Bilingual / Bilingue (English & French / Anglais et Français)</option>
+        <option value="English Essential / Anglais essentiel">English Essential / Anglais essentiel</option>
+      </select>
+    </fieldset>
+
+    <fieldset>
+      <legend>Sécurité / Security</legend>
+      <label for="security_clearance">Cote de sécurité / Security Clearance</label>
+      <select id="security_clearance" name="security_clearance">
+        <option value="None / Aucune">None / Aucune</option>
+        <option value="Reliability Status / Cote de fiabilité">Cote de fiabilité / Reliability Status</option>
+        <option value="Secret (Level II) / Secret (Niveau II)">Secret (Niveau II) / Secret (Level II)</option>
+      </select>
+    </fieldset>
+
+    <fieldset>
+      <legend>Documents</legend>
+      <label for="resume">Curriculum Vitae / Résumé</label>
+      <input type="file" id="resume" name="resume" required />
+    </fieldset>
+
+    <button type="submit" id="gc_submit">Soumettre la demande / Submit application</button>
+  </form>
+</body>
+</html>

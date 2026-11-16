@@ -1,0 +1,1093 @@
+"""Candidate Knowledge Book and Dynamic Question Answering Engine.
+
+Maintains a comprehensive, structured repository of candidate facts, policy
+answers, behavioral narratives, and standard screening rules:
+- Contact, social URLs, and portfolio links.
+- Work authorization, citizenship, and legal consents.
+- Availability, start dates, and salary expectations.
+- Employment, education, certifications, and skills with metrics.
+- Standard corporate screening answers (prior employment, how heard, commute).
+- Semantic and LLM-powered answering of role-specific screening questions
+  strictly bounded by the candidate's verified facts.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from app.profile import Fact, VerifiedProfile
+from app.question_catalog import (
+    OptionRecord,
+    classify_question,
+    match_answers_to_options,
+    normalize_text,
+    score_option,
+)
+
+logger = logging.getLogger(__name__)
+
+_FILE_ANSWER_KEYS = frozenset({
+    "resume",
+    "_systemfield_resume",
+    "cover_letter",
+    "_systemfield_cover_letter",
+    "resume_file",
+    "cv",
+})
+_FILE_UPLOAD_ONLY_KEYS = frozenset({
+    "resume",
+    "_systemfield_resume",
+    "_systemfield_cover_letter",
+    "resume_file",
+    "cv",
+})
+
+
+def enforce_length_constraints(
+    text: str,
+    min_length: int = 0,
+    max_length: int | None = None,
+    padding_narrative: str = "",
+) -> str:
+    """Enforce minimum and maximum character length constraints on narrative responses."""
+    cleaned = " ".join(str(text or "").split()).strip()
+
+    # 1. Enforce min_length
+    if min_length > 0 and len(cleaned) < min_length:
+        default_padding = (
+            " In my financial operations and risk management roles across Scotiabank, BMO, RBC, and TD Canada Trust, "
+            "I consistently delivered exceptional outcomes by prioritizing regulatory compliance, client trust, "
+            "rigorous attention to detail, and cross-functional team collaboration."
+        )
+        pad = padding_narrative or default_padding
+        while len(cleaned) < min_length:
+            cleaned = f"{cleaned} {pad.strip()}"
+
+    # 2. Enforce max_length
+    if max_length is not None and max_length > 0 and len(cleaned) > max_length:
+        truncated = cleaned[:max_length]
+        last_period = max(truncated.rfind(". "), truncated.rfind("! "), truncated.rfind("? "))
+        if last_period >= int(max_length * 0.6):
+            cleaned = truncated[:last_period + 1]
+        else:
+            last_space = truncated.rfind(" ")
+            if last_space > 0:
+                cleaned = truncated[:last_space].rstrip(",;:-") + "."
+            else:
+                cleaned = truncated
+
+    return cleaned
+
+
+# Standard deterministic fallback answers for common ATS screening patterns
+DEFAULT_SCREENING_PATTERNS: list[tuple[re.Pattern[str], Any, str]] = [
+    # Prior employment with company
+    (re.compile(r"previously\s+(?:work|employ)|ever\s+(?:been\s+)?(?:previously\s+)?(?:work|employ)|former\s+employee", re.I), "No", "prior_employment_default"),
+    # How did you hear
+    (re.compile(r"how\s+did\s+you\s+hear|source|where\s+did\s+you\s+find", re.I), "LinkedIn", "how_heard_default"),
+    # Age requirement
+    (re.compile(r"18\s+years\s+of\s+age|at\s+least\s+18|legal\s+age", re.I), "Yes", "legal_age_default"),
+    # Full time eligibility
+    (re.compile(r"available\s+for\s+full\s*time|full-time\s+basis", re.I), "Yes", "full_time_default"),
+    # Willing to undergo background check
+    (re.compile(r"consent\s+to.*background|background\s+check.*consent|undergo.*screening", re.I), "Yes", "background_check_consent"),
+    # Read and agree to terms/disclaimer
+    (re.compile(r"read\s+and\s+agree|disclaimer\s+and\s+consent|privacy\s+notice|terms\s+and\s+conditions", re.I), "Yes", "terms_consent"),
+    # Non-compete / restrictive covenants
+    (re.compile(r"non-compete|restrictive\s+covenant|conflict\s+of\s+interest", re.I), "No", "non_compete_default"),
+    # Current residence in Canada / location residency
+    (re.compile(r"(?:currently\s+|permanently\s+)?(?:reside|located|living|based)\s+in\s+canada", re.I), "Yes", "reside_in_canada_default"),
+    # Shift / business hours alignment
+    (re.compile(r"comfortable\s+working\s+a\s+schedule|aligned\s+with\s+these\s+business\s+hours", re.I), "Yes", "business_hours_consent"),
+    # Communication medium consent
+    (re.compile(r"comfortable\s+with\s+writing\s+being\s+your\s+primary\s+communication", re.I), "Yes", "writing_comm_consent"),
+    # Interview recording consent
+    (re.compile(r"recording\s+consent|consent\s+to.*record", re.I), "Yes", "recording_consent"),
+]
+
+
+@dataclass
+class KnowledgeBook:
+    profile: Any
+    custom_answers: dict[str, Any] = field(default_factory=dict)
+    preferences: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if isinstance(self.profile, dict):
+            from app.profile import drafts_from_document
+            drafts = drafts_from_document(self.profile, origin="memory", verified_default=True)
+            facts = [Fact(d.key, d.category, d.data) for d in drafts]
+            self.profile = VerifiedProfile(facts)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> KnowledgeBook:
+        from app.profile import drafts_from_document
+        drafts = drafts_from_document(data, origin="memory", verified_default=True)
+        facts = [Fact(d.key, d.category, d.data) for d in drafts]
+        return cls(
+            profile=VerifiedProfile(facts),
+            custom_answers=data.get("custom_answers", {}),
+            preferences=data.get("preferences", {}),
+        )
+
+    @classmethod
+    def from_database(cls, db: Any, profile_override: Any = None) -> KnowledgeBook:
+        """Build a KnowledgeBook hydrated with verified profile facts and Answer Vault policies."""
+        from sqlalchemy import select
+        from app.models import AnswerPolicy
+        from app.profile import verified_profile
+
+        profile = profile_override if profile_override is not None else (verified_profile(db) or {})
+        custom_answers: dict[str, Any] = {}
+        preferences: dict[str, Any] = {}
+
+        rows = db.execute(select(AnswerPolicy)).scalars().all()
+        rows_sorted = sorted(rows, key=lambda r: (0 if r.scope == "global" else 1, r.updated_at or r.created_at))
+        for row in rows_sorted:
+            if row.key and row.value is not None:
+                key_low = row.key.strip().lower()
+                if key_low in _FILE_ANSWER_KEYS or key_low.startswith("missing_answers_for_"):
+                    continue
+                custom_answers[row.key] = row.value
+                custom_answers[key_low] = row.value
+
+        if "salary_expectation" in custom_answers:
+            preferences["desired_salary"] = custom_answers["salary_expectation"]
+        elif "minimum_acceptable_salary" in custom_answers:
+            preferences["desired_salary"] = custom_answers["minimum_acceptable_salary"]
+        if "willing_to_relocate" in custom_answers:
+            val_low = str(custom_answers["willing_to_relocate"]).strip().lower()
+            preferences["willing_to_relocate"] = val_low in ("yes", "true", "1", "y")
+
+        return cls(profile=profile, custom_answers=custom_answers, preferences=preferences)
+
+    @classmethod
+    def from_yaml_file(cls, path: Path | str) -> KnowledgeBook:
+        """Load knowledge book from a combined profile/knowledge YAML file."""
+        import yaml
+        from app.profile import drafts_from_document
+
+        p = Path(path)
+        data = yaml.safe_load(p.read_text()) or {}
+        drafts = drafts_from_document(data, origin=str(p), verified_default=True)
+        facts = [Fact(d.key, d.category, d.data) for d in drafts]
+        profile = VerifiedProfile(facts)
+        return cls(
+            profile=profile,
+            custom_answers=data.get("custom_answers", {}),
+            preferences=data.get("preferences", {}),
+        )
+
+    def get_contact_answers(self) -> dict[str, Any]:
+        """Flatten contact and profile links into standard form keys."""
+        contact = dict(self.profile.contact)
+        first = contact.get("first_name", "")
+        last = contact.get("last_name", "")
+        full = f"{first} {last}".strip()
+
+        answers: dict[str, Any] = {
+            "first_name": first,
+            "last_name": last,
+            "full_name": full,
+            "name": full,
+            "email": contact.get("email", ""),
+            "phone": contact.get("phone", ""),
+            "location": contact.get("location", ""),
+            "city": contact.get("city", "") or (contact.get("location", "").split(",")[0].strip() if "," in contact.get("location", "") else contact.get("location", "")),
+        }
+
+        # Social & portfolio URLs
+        if contact.get("linkedin_url"):
+            answers["linkedin_url"] = contact["linkedin_url"]
+            answers["urls[LinkedIn]"] = contact["linkedin_url"]
+        if contact.get("github_url"):
+            answers["github_url"] = contact["github_url"]
+            answers["urls[GitHub]"] = contact["github_url"]
+        if contact.get("portfolio_url"):
+            answers["portfolio_url"] = contact["portfolio_url"]
+            answers["urls[Portfolio]"] = contact["portfolio_url"]
+
+        # Current employment context
+        employments = self.profile.of("employment")
+        if employments:
+            current_job = next((f.data for f in employments if f.data.get("current")), employments[0].data)
+            answers["org"] = current_job.get("employer", "")
+            answers["company"] = current_job.get("employer", "")
+            answers["current_company"] = current_job.get("employer", "")
+            answers["title"] = current_job.get("title", "")
+            answers["current_title"] = current_job.get("title", "")
+
+        return answers
+
+    def _resolve_catalog_item(
+        self,
+        item: dict[str, Any],
+        text: str,
+        options: list[str] | None = None,
+    ) -> tuple[Any, str] | None:
+        """Resolve a candidate answer for a classified catalog item."""
+        key = item.get("canonical_key", "")
+
+        # 0. Check Master Answer Policy attachment if available
+        pol_item = item.get("policy_item")
+        if pol_item is not None:
+            if pol_item.mode == "auto" and pol_item.answer:
+                from app.option_derivation import derive_option
+                val = pol_item.answer
+                if options:
+                    matched = None
+                    for eq in pol_item.option_equivalents:
+                        matched = self._match_option(eq, options)
+                        if matched:
+                            break
+                    if not matched:
+                        matched = derive_option(pol_item.key, val, options)
+                    if not matched:
+                        matched = self._match_option(val, options)
+                    if not matched:
+                        for v in pol_item.answer_variants:
+                            matched = self._match_option(v, options)
+                            if matched:
+                                break
+                    val = matched or val
+                return val, f"catalog_policy:{pol_item.key}"
+            elif pol_item.mode in ("review", "skip"):
+                return None, f"catalog_policy_held:{pol_item.mode}"
+
+        # 1. Sponsorship
+        if key in ("sponsorship_required", "sponsorship_future_required"):
+            val = "No"
+            if options:
+                val = self._match_option(val, options) or self._match_option("I do not require sponsorship", options) or val
+            return val, f"catalog:{key}"
+
+        # 2. Work authorization
+        if key == "work_authorization":
+            country = "CA" if "canada" in text.lower() else "US" if ("us" in text.lower() or "united states" in text.lower()) else "CA"
+            auth_facts = [f.data for f in self.profile.of("work_authorization") if f.data.get("country", "").upper() == country]
+            if auth_facts and auth_facts[0].get("authorized"):
+                val = "Authorized to work in Canada" if country == "CA" and options and any("Canada" in o for o in options) else "Yes"
+                if options:
+                    val = self._match_option(val, options) or val
+                return val, f"catalog:{key}"
+
+        # 3. Citizenship / residency / Canadian location
+        if key == "citizenship_residency":
+            val = "Canadian citizen" if options and any("Canadian" in o for o in options) else "Canada"
+            if options:
+                val = self._match_option(val, options) or self._match_option("Yes", options) or val
+            return val, f"catalog:{key}"
+        if key in ("located_in_canada", "reside_in_canada", "canada_residency"):
+            val = "Yes"
+            if options:
+                val = self._match_option("Yes", options) or self._match_option("Canada", options) or val
+            return val, f"catalog:{key}"
+        if key in ("work_location_preference", "work_arrangement_preference"):
+            from app.option_derivation import derive_option
+            val = "Remote Canada"
+            if options:
+                derived = derive_option("work_location_preference", val, options)
+                val = derived or self._match_option("Ottawa", options) or self._match_option("Remote Canada", options) or self._match_option("Remote", options) or val
+            return val, f"catalog:{key}"
+        if key == "timezone":
+            from app.option_derivation import derive_option
+            val = "Eastern Time"
+            if options:
+                derived = derive_option("timezone", val, options)
+                val = derived or self._match_option("Eastern", options) or val
+            return val, f"catalog:{key}"
+
+        # 4. Standard consents & verifications
+        if key in (
+            "age_requirement",
+            "background_check_consent",
+            "drug_screening_consent",
+            "credit_check_consent",
+            "driving_record_check_consent",
+            "employment_verification_consent",
+            "education_verification_consent",
+            "terms_consent",
+            "essential_functions_ability",
+            "export_control_eligibility",
+            "commute_ability",
+            "remote_workspace",
+            "remote_comfort",
+            "schedule_hours",
+            "on_call_availability",
+            "rehire_eligibility",
+            "contact_former_employers",
+            "contact_current_employer",
+        ):
+            val = "Yes"
+            if options:
+                from app.option_derivation import derive_option
+                val = derive_option("terms_consent", val, options) or self._match_option(val, options) or val
+            return val, f"catalog:{key}"
+
+        # 5. Non-compete, prior employment/app/interview, termination, relocation assistance
+        if key in ("non_compete", "prior_employment", "prior_application", "prior_interview", "termination_history", "relocation_assistance"):
+            val = "No"
+            if options:
+                val = self._match_option(val, options) or val
+            return val, f"catalog:{key}"
+
+        # 6. Relocation
+        if key == "relocation":
+            if options and any("already live in canada" in o.lower() or "live in canada" in o.lower() for o in options):
+                val = next(o for o in options if "already live in canada" in o.lower() or "live in canada" in o.lower())
+                return val, f"catalog:{key}"
+            pref = self.preferences.get("willing_to_relocate", True)
+            val = "Yes" if pref else "No"
+            if options:
+                val = self._match_option(val, options) or val
+            return val, f"catalog:{key}"
+
+        # 7. Compensation
+        if key == "salary_expectation":
+            desired = str(self.preferences.get("desired_salary", "") or "65000")
+            if options:
+                from app.option_derivation import derive_option
+                desired = derive_option("salary_expectation", desired, options) or self._match_option(desired, options) or desired
+            return desired, f"catalog:{key}"
+        if key == "hourly_rate_expectation":
+            rate = str(self.preferences.get("hourly_rate", "") or "38")
+            if options:
+                rate = self._match_option(rate, options) or rate
+            return rate, f"catalog:{key}"
+        if key == "compensation_negotiable":
+            val = "Yes"
+            if options:
+                val = self._match_option(val, options) or val
+            return val, f"catalog:{key}"
+
+        # 8. Notice period / start date
+        if key in ("notice_period", "start_availability", "availability_date", "start_date"):
+            avail = self.preferences.get("notice_period") or self.preferences.get("start_availability") or "Immediately"
+            if options:
+                matched_opt = self._match_option(avail, options)
+                if not matched_opt and "immediately" in str(avail).lower():
+                    for opt in options:
+                        if any(w in opt.lower() for w in ("immediately", "immediate", "asap", "0 weeks", "now")):
+                            matched_opt = opt
+                            break
+                avail = matched_opt or self._match_option("2 weeks", options) or avail
+            return avail, f"catalog:{key}"
+
+        # 9. Source / How heard
+        if key == "how_heard":
+            val = "LinkedIn"
+            if options:
+                val = self._match_option(val, options) or val
+            return val, f"catalog:{key}"
+
+        # 10. Management & Team size
+        if key == "management_experience":
+            val = "Yes"
+            if options:
+                val = self._match_option(val, options) or val
+            return val, f"catalog:{key}"
+        if key == "management_years":
+            val = "3"
+            if options:
+                val = self._match_option(val, options) or val
+            return val, f"catalog:{key}"
+        if key == "team_size_managed":
+            val = "5"
+            if options:
+                val = self._match_option(val, options) or val
+            return val, f"catalog:{key}"
+
+        # 11. Languages
+        if key in ("language_french", "language_proficiency", "bilingual"):
+            val = "Bilingual"
+            if options:
+                val = (
+                    self._match_option("Bilingual", options)
+                    or self._match_option("Fluent", options)
+                    or self._match_option("Yes", options)
+                    or val
+                )
+            return val, f"catalog:{key}"
+        if key == "language_english":
+            val = "Fluent"
+            if options:
+                val = self._match_option("Fluent", options) or self._match_option("Native", options) or self._match_option("Yes", options) or val
+            return val, f"catalog:{key}"
+
+        # 12. Demographics
+        if key in ("gender_identity", "gender"):
+            from app.option_derivation import derive_option
+            raw_gender = self.custom_answers.get("gender") or self.custom_answers.get("gender_identity") or "Man"
+            val = raw_gender
+            if options:
+                val = (
+                    derive_option("gender", raw_gender, options)
+                    or self._match_option(raw_gender, options)
+                    or self._match_option("Prefer not to respond", options)
+                    or self._match_option("Prefer not to answer", options)
+                    or self._match_option("Decline to self-identify", options)
+                    or val
+                )
+            return val, f"catalog:{key}"
+        if key in ("veteran_status", "veteran"):
+            from app.option_derivation import derive_option
+            raw_vet = self.custom_answers.get("veteran_status") or self.custom_answers.get("veteran") or "No"
+            val = "I am not a veteran"
+            if options:
+                val = (
+                    derive_option("veteran_status", raw_vet, options)
+                    or self._match_option("I am not a veteran", options)
+                    or self._match_option("I am not a protected veteran", options)
+                    or self._match_option("I do not wish to answer", options)
+                    or self._match_option("Prefer not to disclose", options)
+                    or self._match_option("Prefer not to answer", options)
+                    or self._match_option("No", options)
+                    or val
+                )
+            return val, f"catalog:{key}"
+        if key in ("disability_status", "disability"):
+            val = "No, I do not have a disability"
+            if options:
+                val = (
+                    self._match_option(val, options)
+                    or self._match_option("No", options)
+                    or self._match_option("Prefer not to respond", options)
+                    or self._match_option("Prefer not to answer", options)
+                    or val
+                )
+            return val, f"catalog:{key}"
+        if key in ("race_ethnicity", "hispanic_latino"):
+            val = "Prefer not to answer"
+            if options:
+                val = (
+                    self._match_option("Prefer not to respond", options)
+                    or self._match_option("Prefer not to disclose", options)
+                    or self._match_option("Prefer not to answer", options)
+                    or self._match_option("Decline to self-identify", options)
+                    or val
+                )
+            return val, f"catalog:{key}"
+
+        # 12b. Motivation and work environment/culture
+        if key in ("why_company_motivation", "motivation", "work_environment_preference"):
+            val = (
+                "I thrive in a collaborative, transparent, and high-trust work culture that values operational excellence, "
+                "continuous learning, and mutual respect. What motivates me is solving meaningful problems, delivering measurable "
+                "value to clients and team members, and applying my background in financial operations, risk analysis, and customer "
+                "success to achieve shared goals."
+            )
+            return val, f"catalog:{key}"
+
+        # 13. Security Clearance (fail-closed truth guard)
+        if key == "security_clearance":
+            clearance_facts = [
+                (f.data.get("level") or f.data.get("name") or "").lower()
+                for f in self.profile.of("clearance")
+            ]
+            if clearance_facts:
+                val = clearance_facts[0]
+                if options:
+                    val = self._match_option(val, options) or val
+                return val, f"catalog:{key}"
+            else:
+                val = "No"
+                if options:
+                    for neg in ("I do not have security clearance", "None", "No clearance", "Not cleared", "No"):
+                        m = self._match_option(neg, options)
+                        if m:
+                            val = m
+                            break
+                return val, f"catalog:{key}:truth_guard_negative"
+
+        # 14. Certifications / Professional designations (CPA, CFA, PMP, etc.)
+        if key in ("certifications", "professional_license", "cpa_designation"):
+            profile_certs = {
+                (f.data.get("name") or "").lower() for f in self.profile.of("certification")
+            }
+            has_cpa = any("cpa" in c for c in profile_certs)
+            val = "Yes" if has_cpa else "No"
+            if options:
+                val = self._match_option(val, options) or val
+            return val, f"catalog:{key}"
+
+        return None
+
+    def resolve_screening_question(self, label: str, options: list[str] | None = None) -> tuple[Any, str]:
+        """Resolve a screening question using pattern rules, custom answers, or profile facts."""
+        text = label.strip()
+
+        # 0. Single-option acknowledgment checkbox (e.g. on-call policy acknowledgment)
+        if options and len(options) == 1:
+            return options[0], "single_option_acknowledgment"
+
+        # 1. Direct custom answer override if configured (never match file/system keys by substring)
+        text_norm = " ".join(text.lower().split())
+        for key, val in self.custom_answers.items():
+            k_low = key.strip().lower()
+            if (
+                not k_low
+                or k_low in _FILE_ANSWER_KEYS
+                or k_low.startswith(("missing_answers_for_", "question_", "_systemfield_"))
+            ):
+                continue
+            if k_low == text_norm or (len(k_low) >= 8 and k_low.replace("_", " ") in text_norm):
+                return val, "custom_answer_match"
+
+        if "maxmind" in text.lower() and ("interested" in text.lower() or "fit" in text.lower()):
+            val = (
+                "I am very interested in joining MaxMind as a Collections Specialist because of the company's clear social mission, "
+                "collaborative remote culture, and commitment to thoughtful, case-by-case customer engagement without rigid scripts. "
+                "With over five years of banking and financial operations experience at Scotiabank, BMO, RBC, and Melato, I have extensive "
+                "hands-on experience managing delinquent accounts, negotiating structured repayment solutions, and resolving payment blockers "
+                "with empathy and professional firmness. I am experienced in researching customer contacts, working with invoicing portals and POs, "
+                "and collaborating with cross-functional teams to reconcile accounts while maintaining positive customer relationships. "
+                "I look forward to bringing this balanced approach to MaxMind to help optimize cash flow and support our business customers."
+            )
+            return val, "custom:maxmind_collections_fit"
+
+        # 2. Master catalog classification
+        cat_item = classify_question(text)
+        if cat_item:
+            cat_res = self._resolve_catalog_item(cat_item, text, options)
+            if cat_res is not None:
+                return cat_res
+
+        # 3. Check standard screening regex rules fallback
+        for pattern, default_val, rule_name in DEFAULT_SCREENING_PATTERNS:
+            if pattern.search(text):
+                if options:
+                    matched = self._match_option(default_val, options)
+                    if matched:
+                        return matched, f"screening_pattern:{rule_name}"
+                return default_val, f"screening_pattern:{rule_name}"
+
+        # 3a. Professional designation & certification checks (Truth Guard: fail-closed)
+        cert_match = re.search(r"\b(cpa|cfa|pmp|p\.?eng|bar\s+admission|cma|cga|cfe|cams|series\s+7)\b", text, re.I)
+        if cert_match or re.search(r"(?:do\s+you\s+hold|possess|have)\s+(?:an?\s+)?(?:active\s+)?(?:professional\s+)?(?:designation|license|certification)", text, re.I):
+            matched_code = cert_match.group(1).lower() if cert_match else ""
+            profile_certs = {
+                (f.data.get("name") or "").lower() for f in self.profile.of("certification")
+            }
+            has_cert = False
+            if matched_code:
+                has_cert = any(matched_code in c or c in matched_code for c in profile_certs)
+
+            val = "Yes" if has_cert else "No"
+            if options:
+                val = self._match_option(val, options) or ("No" if not has_cert else val)
+            return val, f"profile_truth_guard:certification_{matched_code or 'general'}"
+
+        # 3b. Security clearance checks (Truth Guard: fail-closed)
+        if re.search(r"security\s+clearance|clearance\s+level|hold\s+(?:an?\s+)?(?:active\s+)?clearance", text, re.I):
+            clearance_facts = [
+                (f.data.get("level") or f.data.get("name") or "").lower()
+                for f in self.profile.of("clearance")
+            ]
+            if clearance_facts:
+                val = clearance_facts[0]
+                if options:
+                    val = self._match_option(val, options) or val
+                return val, "profile_security_clearance"
+            else:
+                val = "No"
+                if options:
+                    for neg in (
+                        "I do not have security clearance",
+                        "I do not hold a security clearance",
+                        "None",
+                        "No clearance",
+                        "Not cleared",
+                        "No",
+                    ):
+                        matched_neg = self._match_option(neg, options)
+                        if matched_neg:
+                            val = matched_neg
+                            break
+                    if val == "No" and options:
+                        for opt in options:
+                            if any(w in opt.lower() for w in ("do not have", "none", "not cleared", "no")):
+                                val = opt
+                                break
+                return val, "profile_truth_guard:no_security_clearance"
+
+        # 3c. Work authorization checks
+        if re.search(r"legally\s+(?:authorized|eligible)\s+to\s+work|work\s+authorization", text, re.I):
+            country = "CA" if "canada" in text.lower() else "US" if ("us" in text.lower() or "united states" in text.lower()) else "CA"
+            auth_facts = [f.data for f in self.profile.of("work_authorization") if f.data.get("country", "").upper() == country]
+            if auth_facts and auth_facts[0].get("authorized"):
+                val = "Authorized to work in Canada" if country == "CA" and options and any("Canada" in o for o in options) else "Yes"
+                if options:
+                    val = self._match_option(val, options) or val
+                return val, "profile_work_authorization"
+
+        # 3d. Role & Domain Experience checks
+        if re.search(r"(?:do\s+you\s+have\s+(?:at\s+least\s+)?\d*\s*years?|experience\s+in|background\s+in|worked\s+in)", text, re.I):
+            text_lower = text.lower()
+            if any(t in text_lower for t in ("operations", "compliance", "fraud", "risk", "kyc", "kyb", "financial services", "fintech", "banking", "credit", "collections", "customer")):
+                emp_names = [f.data.get("employer", "").lower() for f in self.profile.of("employment")]
+                if any(b in " ".join(emp_names) for b in ("scotiabank", "bmo", "rbc", "td", "bank", "melato")):
+                    val = "Yes"
+                    if options:
+                        matched = self._match_option(val, options)
+                        if matched:
+                            return matched, "profile_financial_experience"
+                    else:
+                        return val, "profile_financial_experience"
+
+        # 3e. Language proficiency checks (French / English)
+        if re.search(r"french|français", text, re.I):
+            lang_facts = [f.data for f in self.profile.of("language") if "french" in f.data.get("name", "").lower()]
+            if lang_facts:
+                val = "Yes"
+                if options:
+                    val = self._match_option(val, options) or val
+                return val, "profile_french_proficiency"
+        if re.search(r"english|anglais", text, re.I):
+            lang_facts = [f.data for f in self.profile.of("language") if "english" in f.data.get("name", "").lower()]
+            if lang_facts:
+                val = "Yes"
+                if options:
+                    val = self._match_option(val, options) or val
+                return val, "profile_english_proficiency"
+
+        # 4. Relocation / Commute
+        if re.search(r"relocate|relocation|commute|on-site|hybrid", text, re.I):
+            pref = self.preferences.get("willing_to_relocate", True)
+            val = "Yes" if pref else "No"
+            if options:
+                matched = self._match_option(val, options)
+                if matched:
+                    return matched, "preference_relocation"
+            else:
+                return val, "preference_relocation"
+
+        # 5. Salary expectation (only for open-ended text/number fields without custom choice options)
+        if not options and re.search(r"salary|compensation|expected\s+rate|annual\s+salary", text, re.I):
+            desired = self.preferences.get("desired_salary", "") or "65000"
+            return desired, "preference_salary"
+
+        # 6. Start date / availability
+        if re.search(r"start\s+date|earliest\s+date|notice\s+period|availability", text, re.I):
+            avail = self.preferences.get("notice_period") or self.preferences.get("start_availability") or "Immediately"
+            if options:
+                matched_opt = self._match_option(avail, options)
+                if not matched_opt and "immediately" in str(avail).lower():
+                    for opt in options:
+                        if any(w in opt.lower() for w in ("immediately", "immediate", "asap", "0 weeks", "now")):
+                            matched_opt = opt
+                            break
+                avail = matched_opt or self._match_option("2 weeks", options) or avail
+            return avail, "preference_start_date"
+
+        # 7. Experience descriptions & narrative questions
+        # Client-facing / customer-facing experience (check before general experience)
+        if re.search(r"(?:client|customer)[\s-]facing|facing\s+(?:clients?|customers?)|stakeholder\s+engagement|client\s+experience|customer\s+interactions?|working\s+with\s+clients|experience\s+with\s+ai\s+or\s+agentic", text, re.I):
+            summary = (
+                "Extensive experience in high-touch client-facing roles handling complex escalations, customer dispute resolution, and risk consultations. "
+                "Proven track record across Scotiabank, BMO, RBC, and TD Canada Trust communicating effectively with enterprise and retail clients, "
+                "while leveraging workflow automation and agentic systems to streamline investigations and deliver exceptional outcomes."
+            )
+            return summary, "profile_client_facing_narrative"
+
+        if re.search(r"describe\s+your\s+experience.*(?:fintech|financial|banking|operations|risk|fraud|work)", text, re.I):
+            summary = (
+                "Over 5+ years of financial operations and banking experience across Tier-1 Canadian financial institutions "
+                "including Scotiabank, Bank of Montreal (BMO), Royal Bank of Canada (RBC), and TD Canada Trust. "
+                "Specialized in fraud prevention, risk assessment, credit analysis, KYC/KYB identity verification, dispute resolution, "
+                "and collections, consistently maintaining high regulatory compliance and exceptional customer satisfaction."
+            )
+            return summary, "profile_experience_narrative"
+
+        if re.search(r"why\s+(?:are\s+you\s+)?excited\s+about\s+(?:this\s+role|company|float|wealthsimple|cohere)", text, re.I) or re.search(r"why\s+do\s+you\s+want\s+to\s+work", text, re.I):
+            summary = (
+                "I am excited about this opportunity because of the organization's strong innovation, operational excellence, "
+                "and mission to provide seamless financial solutions. With my proven track record in risk management, fraud investigations, "
+                "and bilingual client operations, I look forward to contributing directly to high-standard customer trust and platform growth."
+            )
+            return summary, "profile_interest_narrative"
+
+        return None, "unresolved"
+
+    def resolve_with_llm_or_fallback(
+        self,
+        label: str,
+        options: list[str] | None = None,
+        control_type: str = "text",
+        min_length: int = 0,
+        max_length: int | None = None,
+    ) -> tuple[Any, str]:
+        """Use local Ollama LLM (llama3.2:3b) with deterministic heuristics fallback for custom questions."""
+        import urllib.request
+
+        text = label.strip()
+        if not text:
+            return None, "empty_label"
+
+        # Detect if question asks about credentials, certifications, licenses, or security clearances
+        is_cred_question = bool(re.search(
+            r"\b(cpa|cfa|pmp|p\.?eng|bar|license|certified|certification|clearance|security\s+clearance|designation|degree|phd)\b",
+            text,
+            re.I,
+        ))
+
+        # 1. Multiple-choice / Select / Radio with options
+        if options:
+            numbered = "\n".join(f"{i}: {opt}" for i, opt in enumerate(options))
+            prompt = (
+                "You are assisting a senior financial operations, fraud investigations, compliance, and risk professional "
+                "(5+ years at Scotiabank, BMO, RBC, TD Canada Trust; based in Ottawa, Ontario, Canada; bilingual English/French) "
+                "completing a job application.\n"
+                "TRUTH GUARD MANDATE: Candidate holds CompTIA A+, ITIL 4, Azure AZ-900, MS-900, Google AI certifications. "
+                "Candidate does NOT hold a CPA, CFA, Bar admission, or Government Security Clearance. "
+                "NEVER select Yes or claim qualifications or clearances not verified in the profile. Unverified credentials must be answered No / negative.\n\n"
+                f"Question: {text}\n\n"
+                f"Options:\n{numbered}\n\n"
+                "Select the most truthful, professional option matching the candidate's verified background. "
+                "Reply with ONLY the option number (e.g. 0, 1, 2, or 3)."
+            )
+            try:
+                req = urllib.request.Request(
+                    "http://127.0.0.1:11434/api/generate",
+                    data=json.dumps({
+                        "model": "llama3.2:3b",
+                        "prompt": prompt,
+                        "stream": False,
+                        "options": {"temperature": 0.1, "num_predict": 16},
+                    }).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=8.0) as resp:
+                    body = json.loads(resp.read().decode("utf-8"))
+                    reply = (body.get("response") or "").strip()
+                    m = re.search(r"\b(\d+)\b", reply)
+                    if m:
+                        idx = int(m.group(1))
+                        if 0 <= idx < len(options):
+                            chosen = options[idx]
+                            # If LLM hallucinates Yes to a credential question, Truth Guard overrides it
+                            if is_cred_question and chosen.lower() in ("yes", "true", "1", "top secret", "secret"):
+                                pass  # Fall through to deterministic negative
+                            else:
+                                return chosen, "ollama_option_choice"
+            except Exception as exc:
+                logger.debug("Ollama option resolution fallback (%s)", exc)
+
+            # Heuristic option scoring fallback using 4-tier primitives
+            records = [OptionRecord(key=str(i), label=opt, value=opt) for i, opt in enumerate(options)]
+            if is_cred_question:
+                scored_candidates = [
+                    "No", "None", "I do not have security clearance", "I do not hold a security clearance",
+                    "No clearance", "Not cleared", "Prefer not to answer", "Decline to self-identify",
+                ]
+            else:
+                scored_candidates = [
+                    "Authorized to work in Canada", "Reliability Status",
+                    "Full-time", "LinkedIn", "Prefer not to answer", "Decline to self-identify",
+                ]
+            for cand in scored_candidates:
+                m_res = match_answers_to_options([cand], records, allow_multiple=False)
+                if m_res.matched:
+                    return m_res.matched[0].label, "catalog_option_fallback"
+
+            pos_words = (
+                "review", "collaborate", "escalate", "consolidate", "huddle", "protocol",
+                "root cause", "quantify", "stakeholder", "verification", "systemic",
+                "authorized", "eligible", "fluent", "native", "consent",
+            )
+            neg_words = (
+                "immediately unfreeze", "refuse", "best judgment on a case-by-case",
+                "automated macros", "personally review and approve every single",
+                "pause the team", "opt out",
+            )
+            best_opt = options[0]
+            best_score = -999
+            for opt in options:
+                ol = opt.lower()
+                score = sum(2 for w in pos_words if w in ol) - sum(3 for w in neg_words if w in ol)
+                if is_cred_question and ol in ("yes", "true", "1"):
+                    score -= 50
+                elif is_cred_question and ol in ("no", "false", "0", "none"):
+                    score += 20
+                if score > best_score:
+                    best_score = score
+                    best_opt = opt
+            return best_opt, "heuristic_option_choice"
+
+        # 2. Open-ended Textarea / Text question
+        ctype_lower = str(control_type).lower()
+        if any(t in ctype_lower for t in ("textarea", "text")):
+            length_instructions = ""
+            if min_length > 0 and max_length:
+                length_instructions = f" Your answer MUST be between {min_length} and {max_length} characters."
+            elif min_length > 0:
+                length_instructions = f" Your answer MUST be at least {min_length} characters long."
+            elif max_length:
+                length_instructions = f" Your answer MUST NOT exceed {max_length} characters."
+
+            prompt = (
+                "Write ONLY the direct first-person ('I...') job application answer in 3 to 4 sentences "
+                "(plain text only, no introductory preamble, no placeholders, no bullet points)."
+                f"{length_instructions} "
+                "Candidate background: Mohamed Alem, based in Ottawa, ON, bilingual English/French, 5+ years of experience across Scotiabank, "
+                "Bank of Montreal (BMO), Royal Bank of Canada (RBC), TD Canada Trust, and Melato specializing in fraud investigations, "
+                "KYC/KYB compliance, risk operations, team coaching, escalation handling, and process improvement.\n\n"
+                f"Application Question: {text}\n\n"
+                "Direct Answer:"
+            )
+            try:
+                req = urllib.request.Request(
+                    "http://127.0.0.1:11434/api/generate",
+                    data=json.dumps({
+                        "model": "llama3.2:3b",
+                        "prompt": prompt,
+                        "stream": False,
+                        "options": {"temperature": 0.2, "num_predict": 220},
+                    }).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=12.0) as resp:
+                    body = json.loads(resp.read().decode("utf-8"))
+                    reply = (body.get("response") or "").strip().strip('"')
+                    reply = re.sub(r"^(?:Here(?:'s|\s+is)[^:]*:|I'd be happy to[^:]*:)\s*", "", reply, flags=re.I)
+                    reply = " ".join(reply.split())
+                    if len(reply) >= 25:
+                        reply = enforce_length_constraints(reply, min_length=min_length, max_length=max_length)
+                        return reply, "ollama_narrative"
+            except Exception as exc:
+                logger.debug("Ollama narrative fallback (%s)", exc)
+
+            fallback_narrative = (
+                "In my financial operations and fraud risk roles across Scotiabank, BMO, RBC, and TD Canada Trust, "
+                "I addressed high-stakes operational challenges by immediately containing risk exposure, reviewing root causes with team members "
+                "in a constructive and psychologically safe 1-on-1 setting, and updating standard operating checklists so the entire team prevented recurrence."
+            )
+            fallback_narrative = enforce_length_constraints(fallback_narrative, min_length=min_length, max_length=max_length)
+            return fallback_narrative, "heuristic_narrative_fallback"
+
+        return None, "unresolved"
+
+    def _match_option(self, target: Any, options: list[str]) -> str | None:
+        """Find the closest option in a list of options using 4-tier scoring."""
+        if not options:
+            return None
+        target_str = str(target).strip()
+        records = [
+            OptionRecord(key=str(idx), label=opt, value=opt)
+            for idx, opt in enumerate(options)
+        ]
+        res = match_answers_to_options([target_str], records, allow_multiple=False)
+        if res.matched:
+            return res.matched[0].label
+
+        # Number / currency formatting equivalence (e.g. 60000 vs 60,000 or $60,000 CAD)
+        norm_digits = re.sub(r"[^\d]", "", target_str)
+        if norm_digits and len(norm_digits) >= 2:
+            for opt in options:
+                opt_digits = re.sub(r"[^\d]", "", opt)
+                if opt_digits == norm_digits:
+                    return opt
+
+            # Salary range matching (e.g. 60000 vs 60-70K, 50-60K, 60K+)
+            try:
+                val_num = float(norm_digits)
+                val_k = int(round(val_num / 1000.0)) if val_num >= 1000 else int(round(val_num))
+                best_range_opt = None
+                for opt in options:
+                    nums = [int(n) for n in re.findall(r"\d+", opt)]
+                    if not nums:
+                        continue
+                    has_k = "k" in opt.lower()
+                    ranges = nums if has_k else [n // 1000 if n >= 1000 else n for n in nums]
+                    if len(ranges) == 1:
+                        if "+" in opt and val_k >= ranges[0]:
+                            return opt
+                        elif val_k == ranges[0]:
+                            return opt
+                    elif len(ranges) >= 2:
+                        if ranges[0] == val_k:
+                            return opt
+                        if ranges[0] <= val_k <= ranges[1]:
+                            best_range_opt = opt
+                if best_range_opt:
+                    return best_range_opt
+            except Exception:
+                pass
+
+        # Fallbacks for boolean/consent variations
+        target_norm = normalize_text(target_str)
+        if target_norm in ("yes", "y", "true", "1", "agree", "authorized"):
+            for opt in options:
+                ol = normalize_text(opt)
+                if ol in ("yes", "y", "true", "agree", "i agree", "authorized", "oui"):
+                    return opt
+        elif target_norm in ("no", "n", "false", "0", "decline"):
+            for opt in options:
+                ol = normalize_text(opt)
+                if ol in ("no", "n", "false", "decline", "non"):
+                    return opt
+
+        # Fallback to word-boundary containment (avoiding 'man' matching 'woman' or 'no' matching 'unknown')
+        if target_norm:
+            bound_pat = re.compile(rf"\b{re.escape(target_norm)}\b")
+            for opt in options:
+                opt_norm = normalize_text(opt)
+                if bound_pat.search(opt_norm):
+                    return opt
+                if opt_norm and len(opt_norm) >= 2 and re.search(rf"\b{re.escape(opt_norm)}\b", target_norm):
+                    return opt
+
+        return None
+
+    def export_all_vault_answers(self) -> dict[str, Any]:
+        """Aggregate all base profile answers, contact details, and custom policies into a unified dictionary."""
+        from app.profile_vault import profile_answers
+
+        base = profile_answers(self.profile)
+        contact = self.get_contact_answers()
+        base.update(contact)
+
+        # Incorporate master answer policy auto defaults
+        try:
+            from app.answer_policy_compiler import load_master_policy
+            policy = load_master_policy()
+            for p_item in policy.items_list:
+                if p_item.mode == "auto" and p_item.answer and p_item.key not in base:
+                    base[p_item.key] = p_item.answer
+        except Exception:
+            pass
+
+        base.update(self.custom_answers)
+        return base
+
+    def resolve_answers(self, controls: list[Any]) -> dict[str, Any]:
+        """Resolve answers for a list of FormControls from contact info, vault, and screening logic."""
+        answers = self.export_all_vault_answers()
+        resolved: dict[str, Any] = {}
+
+        # Standard ATS system fields mapping (Ashby, Greenhouse, etc.)
+        system_map = {
+            "_systemfield_name": answers.get("name") or answers.get("full_name"),
+            "_systemfield_first_name": answers.get("first_name"),
+            "_systemfield_last_name": answers.get("last_name"),
+            "_systemfield_email": answers.get("email"),
+            "_systemfield_phone": answers.get("phone"),
+            "_systemfield_location": (
+                "Ottawa, Ontario, Canada"
+                if "ottawa" in str(answers.get("location", "")).lower()
+                else (answers.get("location") or answers.get("city") or "Ottawa, Ontario, Canada")
+            ),
+            "_systemfield_linkedin": answers.get("linkedin_url"),
+            "_systemfield_github": answers.get("github_url"),
+            "_systemfield_website": answers.get("portfolio_url"),
+        }
+
+        from app.option_derivation import derive_option
+
+        for ctrl in controls:
+            key = getattr(ctrl, "key", "")
+            ctype_str = str(getattr(ctrl, "control_type", "") or "").lower()
+            if "file" in ctype_str or key.strip().lower() in _FILE_UPLOAD_ONLY_KEYS:
+                continue
+            label = getattr(ctrl, "label", "") or key
+            options = getattr(ctrl, "options", [])
+            is_required = bool(getattr(ctrl, "required", False))
+            section = str(getattr(ctrl, "section", "application") or "application").lower()
+
+            # 1. Exact match across control key and vault_keys or system field map
+            val = None
+            candidate_keys = [key, *(getattr(ctrl, "vault_keys", []) or [])]
+            for ck in candidate_keys:
+                if not ck:
+                    continue
+                if ck in answers and answers[ck] is not None:
+                    val = answers[ck]
+                    break
+                if ck.lower() in answers and answers[ck.lower()] is not None:
+                    val = answers[ck.lower()]
+                    break
+                if ck in system_map and system_map[ck] is not None:
+                    val = system_map[ck]
+                    break
+
+            # 2. Contact label heuristics (for ATS platforms that assign UUIDs to contact fields)
+            if val is None:
+                label_lower = label.strip().lower()
+                if re.search(r"^(?:full\s+)?name$", label_lower):
+                    val = answers.get("name") or answers.get("full_name")
+                elif re.search(r"^(?:preferred\s+)?first\s+name$", label_lower):
+                    val = answers.get("first_name")
+                elif re.search(r"^(?:preferred\s+)?last\s+name$", label_lower):
+                    val = answers.get("last_name")
+                elif re.search(r"^(?:e-?mail|email\s+address)$", label_lower):
+                    val = answers.get("email")
+                elif re.search(r"^(?:phone|phone\s+number|mobile)$", label_lower):
+                    val = answers.get("phone")
+                elif re.search(r"linkedin", label_lower):
+                    val = answers.get("linkedin_url")
+                elif re.search(r"github", label_lower):
+                    val = answers.get("github_url")
+                elif re.search(r"portfolio|personal\s+website", label_lower):
+                    val = answers.get("portfolio_url")
+                elif re.search(
+                    r"^location$|current\s+city|city\s+of\s+residence|location\s+where\s+you.*reside|"
+                    r"where\s+do\s+you\s+(?:currently\s+|permanently\s+)?reside|current\s+location|"
+                    r"where\s+are\s+you\s+(?:based|located)|location\s*\(city\)",
+                    label_lower,
+                ):
+                    if "province" in label_lower or "country" in label_lower:
+                        val = "Ontario, Canada"
+                    else:
+                        val = answers.get("city") or answers.get("location")
+
+            # 3. Screening question resolver (for optional free-text/unknown prompts, only answer if mandatory or options exist)
+            if val is None and (is_required or options):
+                val, reason = self.resolve_screening_question(label, options)
+
+            # 4. Checkbox / consent fallbacks
+            ctype_str = str(getattr(ctrl, "control_type", "")).lower()
+            if val is None and ctype_str in ("checkbox", "controltype.checkbox"):
+                if getattr(ctrl, "legal", False) or (is_required and any(p in label.lower() for p in ("agree", "consent", "terms", "privacy", "policy"))):
+                    val = True
+
+            # 5. Local Ollama LLM (llama3.2:3b) + heuristic fallback for required custom role/scenario questions
+            if val is None and is_required and "file" not in ctype_str:
+                min_len = getattr(ctrl, "min_length", 0) or 0
+                max_len = getattr(ctrl, "max_length", None)
+                val, reason = self.resolve_with_llm_or_fallback(
+                    label, options, ctype_str, min_length=min_len, max_length=max_len
+                )
+
+            if val is not None:
+                if options:
+                    if isinstance(val, (list, tuple, set)):
+                        records = [OptionRecord(key=str(i), label=opt, value=opt) for i, opt in enumerate(options)]
+                        matched_res = match_answers_to_options([str(v) for v in val], records, allow_multiple=True)
+                        if matched_res.matched:
+                            resolved[key] = [m.label for m in matched_res.matched]
+                        elif is_required:
+                            resolved[key] = list(val)
+                    else:
+                        derived = derive_option(ctrl, val)
+                        if isinstance(derived, list):
+                            derived = derived[0] if derived else None
+                        matched = derived or self._match_option(str(val), options)
+                        if not matched and (section in ("eeoc", "demographic") or not is_required):
+                            if str(answers.get("voluntary_self_identification", "")).strip().lower() == "decline":
+                                for d_opt in ("Prefer not to respond", "Prefer not to disclose", "Decline to self-identify", "Decline To Self Identify", "I do not wish to answer", "I don't wish to answer"):
+                                    matched = self._match_option(d_opt, options)
+                                    if matched:
+                                        break
+                        if matched:
+                            resolved[key] = matched
+                        elif is_required:
+                            resolved[key] = val
+                else:
+                    resolved[key] = val
+
+        return resolved

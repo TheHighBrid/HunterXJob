@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head><title>Breezy HR - Application</title></head>
+<body>
+  <h2>Full Stack Developer</h2>
+  <form id="breezy_form" action="/apply" method="POST" enctype="multipart/form-data">
+    <div class="field">
+      <label for="name">Name</label>
+      <input type="text" id="name" name="name" required />
+    </div>
+    <div class="field">
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" required />
+    </div>
+    <div class="field">
+      <label for="phone">Phone</label>
+      <input type="tel" id="phone" name="phone" required />
+    </div>
+    <div class="field">
+      <label for="address">Location</label>
+      <input type="text" id="address" name="address" required />
+    </div>
+    <div class="field">
+      <label for="resume">Resume</label>
+      <input type="file" id="resume" name="resume" required />
+    </div>
+    <div class="field">
+      <label for="cover_letter">Cover Letter</label>
+      <textarea id="cover_letter" name="cover_letter"></textarea>
+    </div>
+    <div class="questionnaire">
+      <p>Are you eligible to work in Canada?</p>
+      <label><input type="radio" name="eligible_canada" value="Yes" /> Yes</label>
+      <label><input type="radio" name="eligible_canada" value="No" /> No</label>
+    </div>
+    <button type="submit" class="breezy-submit-btn">Submit Application</button>
+  </form>
+</body>
+</html>

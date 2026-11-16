@@ -374,25 +374,47 @@ def group_ids(db: Session, job: Job) -> set[str]:
 
 
 def duplicate_guard(db: Session, job: Job, action: str) -> str | None:
-    """Why ``job`` must not be prepared (``action="prepare"``) or dry-run (``"dry_run"``), if anything.
+    """Why ``job`` must not be prepared (``action="prepare"``), dry-run (``"dry_run"``), or submitted (``"submit"``), if anything.
 
-    A linked duplicate is never prepared or dry-run, and once any posting of
-    the group has materials (prepare) or a dry-run (dry_run), no other posting
-    of the same role may do it again.
+    A linked duplicate is never prepared, dry-run, or submitted, and once any posting of
+    the group has materials (prepare), a dry-run (dry_run), or a live submission (submit),
+    no other posting of the same role may do it again.
     """
     if job.duplicate_of_id is not None:
         primary = db.get(Job, job.duplicate_of_id)
         name = primary.canonical_id if primary else job.duplicate_of_id
-        return f"duplicate of {name}; only the primary posting is prepared or dry-run"
+        return f"duplicate of {name}; only the primary posting is prepared or submitted"
     others = group_ids(db, job) - {job.id}
+
+    # If this job or any linked role was already submitted, block submission
+    submitted = db.execute(
+        select(Application.job_id).join(SubmissionEvidence, SubmissionEvidence.application_id == Application.id)
+        .where(Application.job_id.in_(others | {job.id}), SubmissionEvidence.kind == "submission", SubmissionEvidence.sufficient == True)
+    ).first()
+    if submitted:
+        return f"already submitted to role {submitted[0]}; refusing to {action.replace('_', '-')} again"
+
+    # If a live submission outcome is unconfirmed (submission_uncertain), block automatic submit retry to prevent duplicates
+    if action == "submit":
+        uncertain = db.execute(
+            select(Job.id).where(Job.id.in_(others | {job.id}), Job.stage == PipelineStage.submission_uncertain.value)
+        ).first()
+        if uncertain:
+            return f"submission outcome for role {uncertain[0]} is unconfirmed (submission_uncertain); inspect evidence and clear hold before retrying"
+
     if not others:
         return None
     if action == "prepare":
         done = db.execute(select(ApplicationMaterial.job_id).where(ApplicationMaterial.job_id.in_(others))).first()
+    elif action == "submit":
+        done = db.execute(
+            select(Application.job_id).join(SubmissionEvidence, SubmissionEvidence.application_id == Application.id)
+            .where(Application.job_id.in_(others), SubmissionEvidence.kind == "submission")
+        ).first()
     else:
         done = db.execute(
             select(Application.job_id).join(SubmissionEvidence, SubmissionEvidence.application_id == Application.id)
-            .where(Application.job_id.in_(others), SubmissionEvidence.kind == "dry_run")
+            .where(Application.job_id.in_(others), SubmissionEvidence.kind.in_(("dry_run", "submission")))
         ).first()
     if done:
         return f"a linked posting of the same role ({done[0]}) already did this; refusing to {action.replace('_', '-')} twice"
