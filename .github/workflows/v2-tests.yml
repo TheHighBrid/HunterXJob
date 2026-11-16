@@ -23,7 +23,9 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Pinned like gate1: the default suite now includes Playwright browser tests (captcha handoff,
+    # browser filler, dry-run units), and Playwright 1.47's `install --with-deps` targets Ubuntu <= 24.04.
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: v2
@@ -40,7 +42,10 @@ jobs:
           cache-dependency-path: v2/pyproject.toml
 
       - name: Install v2 test dependencies
-        run: python -m pip install -e ".[test]"
+        run: python -m pip install -e ".[test,browser]"
+
+      - name: Install Playwright-owned Chromium
+        run: python -m playwright install --with-deps chromium
 
       - name: Compile v2 sources
         run: python -m compileall -q app tests

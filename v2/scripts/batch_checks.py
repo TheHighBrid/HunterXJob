@@ -233,6 +233,30 @@ def check_inspector_has_no_input_apis(data: dict[str, Any]) -> tuple[bool, dict[
     return not found, evidence
 
 
+def _salary_option_contains(option: Any, resolved: Any) -> bool:
+    """A bracket option (e.g. "60-70K") derived from the stored figure: the figure lies inside it."""
+    from app.option_derivation import _parse_salary_bounds, _parse_salary_number
+
+    target = _parse_salary_number(resolved)
+    if target is None or not isinstance(option, str) or not re.search(r"\d", option):
+        return False
+    bounds = _parse_salary_bounds(option)
+    return bounds is not None and bounds[0] <= target <= bounds[1]
+
+
+def _same_time_zone(option: Any, resolved: Any) -> bool:
+    """An option derived from the stored time zone: both name the same zone family, nothing excluded."""
+    from app.option_derivation import _TZ_EXCLUSIONS, _TZ_PATTERNS
+
+    if not isinstance(option, str):
+        return False
+    stored = next((name for name, pattern in _TZ_PATTERNS.items() if pattern.search(str(resolved or ""))), None)
+    if stored is None or not _TZ_PATTERNS[stored].search(option):
+        return False
+    exclusion = _TZ_EXCLUSIONS.get(stored)
+    return exclusion is None or not exclusion.search(option)
+
+
 def _value_matches_resolved(item: dict[str, Any]) -> bool:
     val = item.get("value")
     resolved = item.get("resolved_value")
@@ -246,6 +270,10 @@ def _value_matches_resolved(item: dict[str, Any]) -> bool:
     if norm_res in {"yes", "y", "true"} and norm_val.startswith("yes"):
         return True
     if norm_res in {"no", "n", "false"} and norm_val.startswith("no"):
+        return True
+    if item.get("resolved_key") == "salary_expectation" and _salary_option_contains(val_str, resolved):
+        return True
+    if item.get("resolved_key") == "time_zone" and _same_time_zone(val_str, resolved):
         return True
     if item.get("resolved_key") == "language_proficiency":
         from app.option_derivation import _CEFR_ORDER, parse_languages
@@ -308,7 +336,9 @@ def _policy_backed(topic: str, item: dict[str, Any], owner_norm: dict[str, set[s
     if key not in POLICY_TOPIC_KEYS.get(topic, frozenset()) or key not in owner_norm:
         return False
     resolved = normalize(item.get("resolved_value"))
-    return resolved in owner_norm[key] and normalize(item.get("value")) == resolved
+    # The planned value is the stored answer itself or an option derived from exactly that answer
+    # (e.g. the salary bracket containing the stored figure).
+    return resolved in owner_norm[key] and (normalize(item.get("value")) == resolved or _value_matches_resolved(item))
 
 
 def owner_answer_map(pairs: Any) -> dict[str, list[Any]]:
