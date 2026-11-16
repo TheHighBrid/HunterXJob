@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
@@ -146,6 +147,13 @@ def test_autofill_log_application(client_env):
     assert "application_id" in data
 
 
+_LOCAL_EXTENSION_PROFILE = Path(__file__).resolve().parent.parent.parent / "extension" / "data" / "default_profile.json"
+
+
+@pytest.mark.skipif(
+    os.environ.get("HUNTERX_LOCAL_EVIDENCE") != "1" and not _LOCAL_EXTENSION_PROFILE.is_file(),
+    reason="Mac-only: needs the owner's gitignored extension/data/default_profile.json (personal data, not in git)",
+)
 def test_bundled_extension_integrity():
     """Verify that extension manifest and data bundles exist and are well-formed."""
     ext_dir = Path(__file__).resolve().parent.parent.parent / "extension"

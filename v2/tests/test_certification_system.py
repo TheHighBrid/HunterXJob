@@ -1,5 +1,8 @@
 import json
+import os
 from pathlib import Path
+
+import pytest
 
 from app.certification_system import (
     DEFAULT_DB_PATH,
@@ -11,6 +14,25 @@ from app.certification_system import (
 )
 
 
+def _local_evidence_present() -> bool:
+    if not DEFAULT_DB_PATH.is_file():
+        return False
+    try:
+        return bool(EvidenceLedger(DEFAULT_DB_PATH).extract_submitted_evidence())
+    except Exception:  # noqa: BLE001 - an unreadable/foreign DB means the owner's ledger is not here
+        return False
+
+
+# These three tests certify the owner's real live submissions from the local, gitignored
+# v2/data/hunterxjob-v2.db on the Mac. CI and other machines do not have (and must never
+# receive) that personal evidence. Set HUNTERX_LOCAL_EVIDENCE=1 to force them to run.
+mac_only_evidence = pytest.mark.skipif(
+    os.environ.get("HUNTERX_LOCAL_EVIDENCE") != "1" and not _local_evidence_present(),
+    reason="Mac-only: needs the owner's local live-submission ledger (v2/data/hunterxjob-v2.db), not in git",
+)
+
+
+@mac_only_evidence
 def test_evidence_ledger_extracts_live_submissions():
     ledger = EvidenceLedger(DEFAULT_DB_PATH)
     records = ledger.extract_submitted_evidence()
@@ -31,6 +53,7 @@ def test_evidence_ledger_extracts_live_submissions():
         assert len(r.receipt_text) > 10
 
 
+@mac_only_evidence
 def test_milestone_evaluation_passes_all_gates():
     ledger = EvidenceLedger(DEFAULT_DB_PATH)
     records = ledger.extract_submitted_evidence()
@@ -54,6 +77,7 @@ def test_milestone_evaluation_passes_all_gates():
     assert len(milestones["gate3"].blockers) == 0
 
 
+@mac_only_evidence
 def test_build_certification_dossier_generates_valid_json(tmp_path):
     target = tmp_path / "hunterx-certification-dossier.json"
     dossier = build_certification_dossier(
