@@ -1,7 +1,8 @@
 """HunterXJob v2 Certification and Evidence Review System.
 
-Borrowed and adapted from JobTomatik's evidence ledger, submission evidence review,
-and multi-stage autonomy certification architecture.
+Offline reporting over HunterXJob's local SQLite records. This module reads
+historical submission receipts and generates a certification dossier; it does
+not execute submissions, transfer browser sessions or authorize retries.
 """
 from __future__ import annotations
 

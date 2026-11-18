@@ -11,5 +11,6 @@ HunterXJob is the sole, standalone end-to-end job application engine. The owner 
 - Dry-run is a mode, not the product architecture. Gate-specific dry-run restrictions remain in force for those gates.
 - Do not regress independently implemented answer-vault and question-matching capabilities or remove evidence records.
 - Changes proposing replacement of HunterXJob's native live pathway must be rejected unless the repository owner explicitly changes this decision.
+- Run `cd v2 && python -m pytest tests/test_submission_independence.py` on changes to the execution path. Never weaken the independence regression check to accommodate external submission services.
 
 Read [docs/LIVE_PATHWAY.md](docs/LIVE_PATHWAY.md) and [docs/RECOVERY_CONTRACT.md](docs/RECOVERY_CONTRACT.md) before touching live execution. Validate changes with offline tests; never submit real applications in CI.
