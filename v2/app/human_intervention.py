@@ -6,7 +6,7 @@ Provides a safe, controlled mechanism for human interactions during execution:
 - Employer account login / SSO
 - Ambiguous or unexpected platform challenges
 
-ARCHITECTURAL PRINCIPLES (Rebuilding natively, JobTomatik handoff rejected):
+ARCHITECTURAL PRINCIPLES (HunterXJob-owned, single-session intervention):
 1. Single-Session Browser Ownership: Maintains Playwright page ownership within
    the existing browser instance. No session handoff, process spawning, or IPC transfers.
 2. Context Preservation: Keeps all filled form values and DOM state intact.

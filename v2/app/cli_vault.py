@@ -131,7 +131,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     v_sub = vault_parser.add_subparsers(dest="vault_subcommand", required=True)
 
     # vault seed
-    p_seed = v_sub.add_parser("seed", help="preview or apply seed answers from JobTomatik vault docs")
+    p_seed = v_sub.add_parser("seed", help="preview or apply seed answers from HunterXJob vault docs")
     p_seed.add_argument("--apply", action="store_true", help="write seed answers into the active database")
     p_seed.add_argument("--force", action="store_true", help="overwrite existing answers with same key/scope")
     p_seed.add_argument("--json-only", action="store_true", help="seed only user JSON file, skip master YAML")
