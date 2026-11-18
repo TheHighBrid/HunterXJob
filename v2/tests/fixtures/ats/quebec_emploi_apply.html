@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Québec Emploi - Gouvernement du Québec</title>
+</head>
+<body>
+  <h2>Spécialiste en cybersécurité et infonuagique</h2>
+  <form id="quebec_emploi_form" method="POST">
+    <label for="first_name">Prénom</label>
+    <input type="text" id="first_name" name="first_name" required />
+
+    <label for="last_name">Nom</label>
+    <input type="text" id="last_name" name="last_name" required />
+
+    <label for="email">Adresse courriel</label>
+    <input type="email" id="email" name="email" required />
+
+    <label for="phone">Numéro de téléphone</label>
+    <input type="tel" id="phone" name="phone" required />
+
+    <label for="location">Région administrative / Ville</label>
+    <input type="text" id="location" name="location" required />
+
+    <label>Autorisation de travailler au Canada / Québec</label>
+    <label><input type="radio" name="canadian_citizenship" value="Canadian Citizen / Citoyen canadien" /> Oui - Citoyen canadien ou résident permanent</label>
+
+    <label for="language_proficiency">Connaissance du français</label>
+    <select id="language_proficiency" name="language_proficiency">
+      <option value="">Choisir...</option>
+      <option value="Bilingual / Bilingue (English & French / Anglais et Français)">Bilingue (Français et Anglais)</option>
+    </select>
+
+    <label>Résident du Québec?</label>
+    <label><input type="radio" name="quebec_resident" value="Yes / Oui" /> Oui</label>
+    <label><input type="radio" name="quebec_resident" value="No / Non" /> Non</label>
+
+    <label for="resume">Joindre votre curriculum vitae</label>
+    <input type="file" id="resume" name="resume" required />
+
+    <button type="submit" id="quebec_submit">Postuler</button>
+  </form>
+</body>
+</html>

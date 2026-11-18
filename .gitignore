@@ -9,6 +9,8 @@ __pycache__/
 # Secrets / local config
 .env
 *.env.local
+*my_profile.yaml
+*candidate_profile.yaml
 
 # Databases
 *.sqlite3
@@ -16,6 +18,7 @@ __pycache__/
 backend/data/*.db
 
 # v2 local runtime state (created by ./hunterx doctor/start)
+data/
 v2/data/
 v2/logs/
 v2/run/
@@ -35,6 +38,10 @@ mobile/android/app/build/
 mobile/android/build/
 mobile/android/local.properties
 *.hprof
+*.apk
+*.aab
+releases/*.apk
+releases/*.aab
 
 # OS
 .DS_Store

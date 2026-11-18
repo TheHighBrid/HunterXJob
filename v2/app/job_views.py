@@ -114,14 +114,20 @@ def _form_base(application: Application, validation: dict[str, Any] | None) -> d
     }
 
 
-def _form_outcome(validation: dict[str, Any], open_tasks: list[ReviewTask]) -> dict[str, Any]:
+def _form_outcome(validation: dict[str, Any], open_tasks: list[ReviewTask], application_stage: str | None = None) -> dict[str, Any]:
     """State and blockers for an application that has been dry-run at least once."""
     task_reasons = [task.reason_code for task in open_tasks]
+    blockers = list(validation.get("blockers") or [])
+    if application_stage == "submission_uncertain" or "submission_confirmation_uncertain" in blockers or "submission_confirmation_uncertain" in task_reasons:
+        return {
+            "state": "submission_uncertain",
+            "blockers": blockers or task_reasons or ["submission_confirmation_uncertain"],
+            "blocked_fields": list(validation.get("blocked_fields") or []),
+        }
     if validation.get("ok"):
         return {"state": "validated", "fields_filled": len(validation.get("fields") or [])}
     if any(reason in _FORM_TASK_REASONS for reason in task_reasons):
         return {"state": "unavailable", "blockers": task_reasons}
-    blockers = list(validation.get("blockers") or [])
     if not (blockers or open_tasks):
         return {"state": "in_progress"}
     return {
@@ -137,9 +143,24 @@ def form_status(application: Application | None, open_tasks: list[ReviewTask]) -
         return {"state": "no_application", "blockers": [], "blocked_fields": []}
     validation = _loads(application.validation_json)
     base = _form_base(application, validation)
+    if application.stage == "submission_uncertain":
+        return {
+            **base,
+            "state": "submission_uncertain",
+            "blockers": [t.reason_code for t in open_tasks] or ["submission_confirmation_uncertain"],
+        }
     if validation is None:
+        if application.stage in ("submitted", "confirmed"):
+            return {**base, "state": "validated"}
+        if open_tasks:
+            task_reasons = [t.reason_code for t in open_tasks]
+            return {
+                **base,
+                "state": "unavailable" if any(r in _FORM_TASK_REASONS for r in task_reasons) else "blocked",
+                "blockers": task_reasons,
+            }
         return {**base, "state": "not_checked"}
-    return {**base, **_form_outcome(validation, open_tasks)}
+    return {**base, **_form_outcome(validation, open_tasks, application.stage)}
 
 
 def liveness_view(db: Session, job: Job) -> dict[str, Any]:

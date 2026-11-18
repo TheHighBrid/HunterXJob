@@ -178,9 +178,9 @@ def settings_view(settings: Settings, overridden: list[str] | None = None) -> di
         "application_mode": settings.application_mode,
         "automation_enabled": settings.automation_enabled,
         "live_submission": {
-            "locked": True,
+            "locked": not settings.allow_live_submission,
             "env_allow_live_submission": settings.allow_live_submission,
-            "reason": LIVE_SUBMISSION_LOCK_REASON,
+            "reason": None if settings.allow_live_submission else LIVE_SUBMISSION_LOCK_REASON,
         },
         "continuous_run_enabled": settings.continuous_run_enabled,
         "cycle_interval_minutes": settings.cycle_interval_minutes,

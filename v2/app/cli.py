@@ -65,11 +65,91 @@ def _cmd_backups(args: argparse.Namespace) -> int:
 def _cmd_cycle(_: argparse.Namespace) -> int:
     from app.cycle import CycleRunner
     from app.db import SessionLocal, init_db
+    from app.runtime_settings import apply_stored_overrides
 
     init_db()
-    result = CycleRunner(get_settings(), SessionLocal, Path("run/cycle.lock")).run_once("cli")
+    settings = get_settings()
+    with SessionLocal() as db:
+        apply_stored_overrides(db, settings)
+    result = CycleRunner(settings, SessionLocal, Path("run/cycle.lock")).run_once("cli")
     print(json.dumps(result, indent=2, default=str))
     return 0 if result["status"] in {"completed", "skipped"} else 1
+
+
+def _cmd_autonomous_run(args: argparse.Namespace) -> int:
+    import logging
+    import sys
+    import yaml
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)],
+        force=True,
+    )
+
+    from app.autonomous_loop import AutonomousConfig, AutonomousRunner
+    from app.db import SessionLocal, init_db
+    from app.runtime_settings import apply_stored_overrides
+
+    init_db()
+    settings = get_settings()
+    with SessionLocal() as db:
+        apply_stored_overrides(db, settings)
+    profile_data = None
+    if getattr(args, "profile", None):
+        profile_path = Path(args.profile)
+        if profile_path.is_file():
+            profile_data = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
+
+    is_live = bool(getattr(args, "live", False)) or (
+        bool(settings.allow_live_submission) and settings.application_mode == "autonomous"
+    )
+    if is_live:
+        settings.allow_live_submission = True
+        with SessionLocal() as db:
+            from app.flags import set_flag
+            set_flag(db, "allow_live_submission", True, "enabled via CLI / environment")
+
+    config = AutonomousConfig(
+        allow_live_submission=is_live,
+        min_score_threshold=float(getattr(args, "min_score", 65.0) or 65.0),
+        max_applications=int(getattr(args, "limit", 10) or 10),
+        headless=not bool(getattr(args, "headed", False)),
+        headed_pause_ms=int(getattr(args, "pause", 5) or 5) * 1000,
+        max_errors=int(getattr(args, "max_errors", 3) or 3),
+        profile_data=profile_data,
+    )
+
+    with SessionLocal() as db:
+        runner = AutonomousRunner(db=db, settings=settings, config=config)
+        summary = runner.run()
+        print(json.dumps({
+            "started_at": summary.started_at,
+            "finished_at": summary.finished_at,
+            "aborted_by_kill_switch": summary.aborted_by_kill_switch,
+            "candidates_considered": summary.candidates_considered,
+            "shortlisted": summary.shortlisted,
+            "submitted_live": summary.submitted_live,
+            "verified_dry_runs": summary.verified_dry_runs,
+            "skipped_duplicates": summary.skipped_duplicates,
+            "errors": summary.errors,
+            "records": [
+                {
+                    "job_id": r.job_id,
+                    "company": r.company,
+                    "title": r.title,
+                    "platform": r.platform,
+                    "status": r.status,
+                    "submitted": r.submitted,
+                    "confirmation_receipt": r.confirmation_receipt,
+                    "evidence_sha256": r.evidence_sha256,
+                    "error": r.error,
+                }
+                for r in summary.records
+            ],
+        }, indent=2))
+        return 0 if summary.errors == 0 and not summary.aborted_by_kill_switch else 1
 
 
 def _cmd_dedup_scan(_: argparse.Namespace) -> int:
@@ -130,6 +210,58 @@ def _cmd_openapi(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_certify(args: argparse.Namespace) -> int:
+    from app.certification_system import DEFAULT_DB_PATH, DEFAULT_DOSSIER_PATH, build_certification_dossier
+
+    db_path = Path(args.db) if getattr(args, "db", None) else DEFAULT_DB_PATH
+    output_path = Path(args.output) if getattr(args, "output", None) else DEFAULT_DOSSIER_PATH
+    dossier = build_certification_dossier(db_path=db_path, output_path=output_path)
+
+    print("\n" + "=" * 68)
+    print("      HUNTERXJOB v2 - AUTONOMOUS SUBMISSION CERTIFICATION DOSSIER")
+    print("=" * 68)
+    print(f"Status:            {dossier['overall_certification_status']}")
+    print(f"Commit:            {dossier['source_commit']}")
+    print(f"Generated:         {dossier['generated_at']}")
+    print(f"Candidate:         {dossier['candidate']}")
+    print("-" * 68)
+
+    for _gid, m in dossier["milestones"].items():
+        mark = "✓ PASSED" if m["passed"] else "✗ BLOCKED"
+        print(f"[{mark}] {m['title']} ({m['score']:.0f}%)")
+        for check, passed in m["checks"].items():
+            c_mark = "  ✓" if passed else "  ✗"
+            print(f"   {c_mark} {check}")
+        if m["blockers"]:
+            print(f"   Blockers: {', '.join(m['blockers'])}")
+
+    print("-" * 68)
+    ledger = dossier["evidence_ledger"]
+    print(f"Verified Live Submissions ({ledger['total_verified_submissions']}):")
+    for r in ledger["records"]:
+        print(f"  • {r['company']} - {r['title']} ({r['platform']})")
+        print(f"    Receipt SHA-256: {r['receipt_sha256'][:16]}... | Timestamp: {r['submitted_at']}")
+        print(f"    Snippet: \"{r['receipt_snippet'][:80]}...\"")
+
+    print("-" * 68)
+    print(f"Dossier written to: {output_path}")
+    print("=" * 68 + "\n")
+    return 0 if dossier["overall_certification_status"] == "CERTIFIED" else 1
+
+
+def _cmd_dryrun_new_units(args: argparse.Namespace) -> int:
+    import subprocess
+    script = Path(__file__).resolve().parents[1] / "scripts" / "run_dryrun_units.py"
+    cmd = [sys.executable, str(script)]
+    if getattr(args, "headed", False):
+        cmd.append("--headed")
+    if getattr(args, "pause", None):
+        cmd.extend(["--pause", str(args.pause)])
+    if getattr(args, "out", None):
+        cmd.extend(["--out", str(args.out)])
+    return subprocess.run(cmd).returncode  # noqa: S603
+
+
 COMMANDS = {
     "version": (_cmd_version, "print the version"),
     "migrate": (_cmd_migrate, "apply pending database migrations (backs up first)"),
@@ -142,6 +274,9 @@ COMMANDS = {
     "api-key": (_cmd_api_key, "print a new random API key"),
     "check-auth": (_cmd_check_auth, "report the API authentication posture"),
     "openapi": (_cmd_openapi, "write (or --check) the OpenAPI snapshot used for the mobile types"),
+    "autonomous-run": (_cmd_autonomous_run, "run the fully autonomous discovery-to-submission engine"),
+    "certify": (_cmd_certify, "generate and verify the official autonomy certification dossier and evidence ledger"),
+    "dryrun-new-units": (_cmd_dryrun_new_units, "perform automated dry-runs across newly added commercial ATS & Canadian gov units"),
 }
 
 
@@ -157,9 +292,30 @@ def main(argv: list[str] | None = None) -> int:
             command.add_argument("--check", action="store_true", help="exit 1 if the snapshot is out of date")
         if name == "backup":
             command.add_argument("--keep", type=int, help="number of backups to keep (default: BACKUP_RETENTION)")
+        if name == "certify":
+            command.add_argument("--db", help="path to database (default: v2/data/hunterxjob-v2.db)")
+            command.add_argument("--output", help="path to output certification dossier JSON (default: evidence/hunterx-certification-dossier.json)")
+        if name == "dryrun-new-units":
+            command.add_argument("--headed", action="store_true", help="run browser visibly to inspect form filling")
+            command.add_argument("--pause", type=int, default=2, help="pause in seconds between actions in headed mode")
+            command.add_argument("--out", type=Path, help="output directory for screenshots and reports")
+        if name == "autonomous-run":
+            command.add_argument("--live", action="store_true", help="enable live submission (requires ALLOW_LIVE_SUBMISSION=true)")
+            command.add_argument("--limit", type=int, default=10, help="maximum applications to process in this run (default: 10)")
+            command.add_argument("--min-score", type=float, default=65.0, help="minimum candidate match score threshold (default: 65.0)")
+            command.add_argument("--profile", help="path to custom candidate profile YAML")
+            command.add_argument("--headed", action="store_true", help="run browser in visible (headed) mode for inspection")
+            command.add_argument("--pause", type=int, default=5, help="seconds to pause and inspect the filled form in headed mode (default: 5)")
+            command.add_argument("--max-errors", type=int, default=3, help="maximum errors before stopping the cycle (default: 3)")
+    from app.cli_extension import register as register_extension
+    from app.cli_improve import register as register_improve
     from app.cli_profile import register
+    from app.cli_vault import register as register_vault
 
     register(sub)
+    register_vault(sub)
+    register_improve(sub)
+    register_extension(sub)
     args = parser.parse_args(argv)
     handler = getattr(args, "handler", None) or COMMANDS[args.command][0]
     return handler(args)

@@ -19,9 +19,25 @@ export function formatRelativeToNow(iso: string | null | undefined, now: number 
   return diffMin > 0 ? `in ${days}d` : `${days}d ago`;
 }
 
+const STAGE_LABELS: Record<string, string> = {
+  ready_to_apply: "Ready to Apply",
+  needs_review: "Review Required",
+  review: "Review Required",
+  submission_uncertain: "Unconfirmed Submit",
+  submitted: "Submitted ✓",
+  confirmed: "Confirmed ✓",
+  materials_generated: "Materials Drafted",
+  materials_reviewed: "Materials Approved",
+  shortlisted: "Shortlisted",
+  approved: "Approved",
+  validated: "Form Verified",
+  form_filled: "Form Filled",
+};
+
 /** "materials_generated" -> "Materials generated" */
 export function humanize(input: string | null | undefined): string {
   if (!input) return "—";
+  if (STAGE_LABELS[input]) return STAGE_LABELS[input];
   const text = input.replace(/[._]/g, " ").trim();
   return text.charAt(0).toUpperCase() + text.slice(1);
 }

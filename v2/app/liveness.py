@@ -19,11 +19,31 @@ class LivenessResult:
 
 _EXPIRED_MARKERS = (
     "job is no longer available",
+    "job no longer available",
     "position has been filled",
     "position is closed",
     "job posting has expired",
+    "posting has expired",
     "this role is no longer accepting applications",
+    "no longer accepting applications",
+    "not accepting applications",
+    "applications are closed",
+    "application period has ended",
+    "application period has closed",
     "page not found",
+    # French & Canadian Government / Public Sector expired markers
+    "n'accepte plus les candidatures",
+    "n'accepte plus de candidatures",
+    "ne reçoit plus de candidatures",
+    "ne reçoit plus les candidatures",
+    "cette offre d'emploi n'est plus disponible",
+    "offre d'emploi n'est plus disponible",
+    "ce poste n'est plus disponible",
+    "la période de candidature est terminée",
+    "la période de mise en candidature est terminée",
+    "le concours est fermé",
+    "le concours a pris fin",
+    "candidatures closes",
 )
 _BLOCKED_MARKERS = (
     "captcha",
@@ -36,6 +56,14 @@ _LIVE_MARKERS = (
     "apply for this job",
     "submit application",
     "apply now",
+    "start application",
+    "begin application",
+    # French & Canadian Government live markers
+    "postuler",
+    "soumettre ma candidature",
+    "postulez maintenant",
+    "déposer votre candidature",
+    "soumettre une demande",
 )
 
 

@@ -7,7 +7,7 @@ interface PrimaryButtonProps {
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
-  variant?: "primary" | "secondary" | "danger";
+  variant?: "primary" | "secondary" | "danger" | "success" | "warning";
 }
 
 export function PrimaryButton({
@@ -25,8 +25,13 @@ export function PrimaryButton({
       ? theme.primary
       : variant === "danger"
         ? theme.danger
-        : theme.surfaceAlt;
-  const textColor = variant === "secondary" ? theme.text : theme.primaryText;
+        : variant === "success"
+          ? theme.success
+          : variant === "warning"
+            ? theme.warning
+            : theme.surfaceAlt;
+  const borderColor = variant === "secondary" ? theme.border : backgroundColor;
+  const textColor = variant === "secondary" ? theme.text : "#FFFFFF";
 
   return (
     <Pressable
@@ -34,7 +39,12 @@ export function PrimaryButton({
       disabled={isDisabled}
       style={({ pressed }) => [
         styles.button,
-        { backgroundColor, opacity: isDisabled ? 0.6 : pressed ? 0.85 : 1 },
+        {
+          backgroundColor,
+          borderColor,
+          borderWidth: 1,
+          opacity: isDisabled ? 0.55 : pressed ? 0.85 : 1,
+        },
       ]}
     >
       {loading ? (
@@ -48,14 +58,15 @@ export function PrimaryButton({
 
 const styles = StyleSheet.create({
   button: {
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
+    borderRadius: 12,
+    paddingVertical: 13,
+    paddingHorizontal: 18,
     alignItems: "center",
     justifyContent: "center",
   },
   text: {
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: 0.2,
   },
 });

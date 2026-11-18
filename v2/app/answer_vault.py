@@ -23,38 +23,161 @@ class ResolutionStatus(str, Enum):
 SENSITIVE_KEYS = frozenset({
     "work_authorization",
     "sponsorship",
+    "sponsorship_required",
+    "sponsorship_future_required",
     "citizenship",
+    "citizenship_residency",
     "security_clearance",
     "salary_expectation",
+    "hourly_rate_expectation",
     "criminal_record",
+    "criminal_history",
+    "drug_screening_consent",
+    "credit_check_consent",
+    "driving_record_check_consent",
+    "termination_history",
+    "rehire_eligibility",
     "disability",
+    "disability_status",
     "veteran_status",
     "gender",
+    "gender_identity",
     "race_ethnicity",
     "hispanic_ethnicity",
+    "hispanic_latino",
     "pronouns",
+    "sexual_orientation",
     "voluntary_self_identification",
 })
 
 _KEY_ALIASES = {
+    # Work authorization
     "workauthorization": "work_authorization",
     "work-authorization": "work_authorization",
+    "work_auth": "work_authorization",
+    "authorized_to_work": "work_authorization",
+    "eligible_to_work": "work_authorization",
+    "right_to_work": "work_authorization",
+    "canada_work_eligibility": "work_authorization",
+
+    # Sponsorship
     "sponsorshiprequired": "sponsorship",
     "sponsorship-required": "sponsorship",
+    "sponsorship_required": "sponsorship",
+    "sponsorship_future_required": "sponsorship",
+    "visa_sponsorship": "sponsorship",
+    "require_sponsorship": "sponsorship",
+    "need_sponsorship": "sponsorship",
+
+    # Citizenship & Residency
     "citizenshipstatus": "citizenship",
+    "citizenship_residency": "citizenship",
+    "country_of_citizenship": "citizenship",
+
+    # Security Clearance
     "securityclearance": "security_clearance",
+    "clearance_level": "security_clearance",
+
+    # Salary & Compensation
     "desired_salary": "salary_expectation",
     "desired-salary": "salary_expectation",
     "desiredsalary": "salary_expectation",
+    "expected_salary": "salary_expectation",
+    "salary_range": "salary_expectation",
     "salary": "salary_expectation",
+    "compensation_expectation": "salary_expectation",
+    "desired_compensation": "salary_expectation",
+    "base_salary_expectation": "salary_expectation",
+    "hourly_rate": "hourly_rate_expectation",
+    "hourly_rate_expectation": "hourly_rate_expectation",
+
+    # Relocation & Commute
+    "relocation": "willing_to_relocate",
+    "relocate": "willing_to_relocate",
+    "open_to_relocation": "willing_to_relocate",
+    "commute_ability": "commute_ability",
+    "commute": "commute_ability",
+    "ottawa_commute": "commute_ability",
+
+    # Availability & Notice period
+    "availability_date": "start_date",
+    "available_start_date": "start_date",
+    "earliest_start": "start_date",
+    "earliest_start_date": "start_date",
+    "notice_period": "start_date",
+    "when_can_you_start": "start_date",
+
+    # Background checks & Consents
     "criminalrecord": "criminal_record",
+    "criminal_history": "criminal_record",
+    "background_check": "background_check_consent",
+    "criminal_check_consent": "background_check_consent",
+    "screening_consent": "background_check_consent",
+    "recording_consent": "interview_recording_consent",
+    "_systemfield_recording_consent": "interview_recording_consent",
+    "identity_verification": "identity_verification_consent",
+    "identity_verification_consent": "identity_verification_consent",
+
+    # Materials / Resume
+    "_systemfield_resume": "resume",
+    "resume/cv": "resume",
+    "cv": "resume",
+
+    # Standard / Identity
+    "_systemfield_name": "full_name",
+    "_systemfield_email": "email",
+    "_systemfield_phone": "phone",
+    "_systemfield_location": "location",
+    "pronoun": "pronouns",
+
+    # Remote Work
+    "home_office": "remote_workspace",
+    "dedicated_workspace": "remote_workspace",
+    "remote_work_environment": "remote_workspace",
+
+    # Languages
+    "bilingual": "language_french",
+    "french_proficiency": "language_french",
+    "bilingual_french": "language_french",
+    "french_level": "language_french",
+    "french": "language_french",
+    "languages": "language_proficiency",
+    "spoken_languages": "language_proficiency",
+
+    # Legal declarations
+    "disclaimer_and_consent": "terms_consent",
+    "terms_agreement": "terms_consent",
+
+    # Social & Web Links
+    "linkedin": "linkedin_url",
+    "social_linkedin": "linkedin_url",
+    "linkedin_profile": "linkedin_url",
+    "linkedin_url": "linkedin_url",
+    "github": "github_url",
+    "social_github": "github_url",
+    "github_profile": "github_url",
+    "github_url": "github_url",
+    "portfolio": "website_url",
+    "website": "website_url",
+    "portfolio_url": "website_url",
+    "personal_website": "website_url",
+
+    # Demographics
     "veteranstatus": "veteran_status",
     "veteran-status": "veteran_status",
+    "veteran": "veteran_status",
     "raceethnicity": "race_ethnicity",
     "race-ethnicity": "race_ethnicity",
     "race": "race_ethnicity",
+    "ethnicity": "race_ethnicity",
     "disability_status": "disability",
     "disabilitystatus": "disability",
+    "gender_identity": "gender",
+    "hispanic_latino": "hispanic_ethnicity",
+    "hispanic_ethnicity": "hispanic_ethnicity",
+
+    # Time zone
+    "timezone": "time_zone",
 }
 
 
@@ -77,6 +200,8 @@ class FieldRequest:
     key: str
     required: bool = True
     sensitive: bool | None = None
+    min_length: int = 0
+    max_length: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,6 +233,10 @@ class AnswerVault:
 
     def has(self, key: str) -> bool:
         return _canonical_key(key) in self._records
+
+    def get(self, key: str) -> AnswerRecord | None:
+        """Return the raw AnswerRecord for a canonical key, or None."""
+        return self._records.get(_canonical_key(key))
 
     def resolve(self, request: FieldRequest) -> ResolvedAnswer:
         key = _canonical_key(request.key)
@@ -151,6 +280,22 @@ class AnswerVault:
                 status=ResolutionStatus.REVIEW,
                 source=record.source,
                 reason="required fields cannot rely on generated facts",
+            )
+
+        if request.min_length > 0 and isinstance(record.value, str) and len(record.value.strip()) < request.min_length:
+            return ResolvedAnswer(
+                key=key,
+                status=ResolutionStatus.REVIEW,
+                source=record.source,
+                reason=f"answer length {len(record.value.strip())} is below minimum requirement {request.min_length}",
+            )
+
+        if request.max_length is not None and isinstance(record.value, str) and len(record.value.strip()) > request.max_length:
+            return ResolvedAnswer(
+                key=key,
+                status=ResolutionStatus.REVIEW,
+                source=record.source,
+                reason=f"answer length {len(record.value.strip())} exceeds maximum limit {request.max_length}",
             )
 
         return ResolvedAnswer(

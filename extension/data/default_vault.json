@@ -1,0 +1,891 @@
+{
+  "salary_expectation": {
+    "value": "60000",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "CAD annual baseline; company/job-specific salary evaluated against range."
+  },
+  "willing_to_relocate": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Not willing to relocate."
+  },
+  "notice_period": {
+    "value": "Immediately",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "No notice period; can start immediately."
+  },
+  "availability_date": {
+    "value": "Immediately",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Can start immediately."
+  },
+  "current_company": {
+    "value": "MELATO",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Self-employed founder/operator; not another employer."
+  },
+  "current_title": {
+    "value": "Founder & Operator",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "User-owned apparel brand."
+  },
+  "work_authorization_CA": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Legally entitled to work in Canada. Canadian citizen."
+  },
+  "sponsorship_CA": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Canadian citizen, no sponsorship required."
+  },
+  "work_authorization_US": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Authorized to work in US; no sponsorship needed."
+  },
+  "background_check_consent": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Consents to lawful employment-related background checks."
+  },
+  "language_proficiency": {
+    "value": "French (Native)|English (Fluent)|Arabic (Fluent)|Spanish (Conversational)",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Fully bilingual French/English; also speaks Arabic and conversational Spanish."
+  },
+  "city": {
+    "value": "Ottawa",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Ottawa, ON."
+  },
+  "state": {
+    "value": "Ontario",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Ontario, Canada."
+  },
+  "country": {
+    "value": "Canada",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Canada."
+  },
+  "linkedin_url": {
+    "value": "https://www.linkedin.com/in/mohamedalem",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "LinkedIn profile."
+  },
+  "website_url": {
+    "value": "https://melato.ca",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Business website."
+  },
+  "minimum_acceptable_salary": {
+    "value": "60000",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Hard targeting minimum. Do not use this number for hourly or USD field without validated currency/units conversion."
+  },
+  "start_availability": {
+    "value": "Immediately",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Immediately is preferred. Two weeks only if immediately is not offered, or the actual employer start requirements justify it. Dates must be calculated when a date picker requires YYYY-MM-DD; never enter words in a date input."
+  },
+  "self_employed": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "master policy v3.0: employment"
+  },
+  "currently_employed_any": {
+    "value": "Self-employed",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Do not answer No solely because the candidate is not employed by a separate company. If options are Employed/Unemployed, select Employed only if employer definitions include self-employment; otherwise review."
+  },
+  "currently_employed_elsewhere": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Distinguish from being self-employed."
+  },
+  "current_role": {
+    "value": "Founder & Operator",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Designer and Creative Director is also a current business role; select based on question context."
+  },
+  "relocation": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "master policy v3.0: geography"
+  },
+  "onsite_or_hybrid_local": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "master policy v3.0: geography"
+  },
+  "onsite_or_hybrid_nonlocal": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Filter job out before answering when on-site/hybrid outside the Ottawa-Gatineau area. A Canadian remote role may still have province-specific employment restrictions."
+  },
+  "work_arrangement_local": {
+    "value": "No preference",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "master policy v3.0: geography"
+  },
+  "work_arrangement_nonlocal": {
+    "value": "Remote",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "master policy v3.0: geography"
+  },
+  "canadian_work_authorization": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "User provided Canadian citizenship/work history; use only for Canada."
+  },
+  "us_work_authorization": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "User explicitly states US work authorization; does NOT establish US citizenship, visa type, remote payroll eligibility or sponsorship status. US search currently disabled."
+  },
+  "hear_about_us": {
+    "value": "Indeed, LinkedIn, Social Media",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Job boards (Indeed, LinkedIn) or company social channels."
+  },
+  "bilingual_status": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "master policy v3.0: language"
+  },
+  "native_language": {
+    "value": "French",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "French native."
+  },
+  "english_proficiency": {
+    "value": "Fluent",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Fluent English."
+  },
+  "french_proficiency": {
+    "value": "Native",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Native French."
+  },
+  "preferred_work_language": {
+    "value": "English",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Only choose English when a single language is required. Both are acceptable otherwise."
+  },
+  "province": {
+    "value": "Ontario",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "master policy v3.0: contact"
+  },
+  "postal_code": {
+    "value": "K1K 4G8",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "User instructed: provide postal code only when mandatory. Do NOT expand to street address; never treat postal code as exact mailing address."
+  },
+  "government_employee_current": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Not currently a public servant."
+  },
+  "canadian_citizen": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Canadian citizen."
+  },
+  "sponsorship_required_CA": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "No sponsorship required in Canada."
+  },
+  "legal_age": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Age 31 in October 2026 user-provided; legal age minimum only. Do not assume DOB."
+  },
+  "commute_local": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Does not prove ownership of car or licence."
+  },
+  "commute_outside_local": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "master policy v3.0: logistics"
+  },
+  "education_field": {
+    "value": "Computer Systems (Technique en Systèmes Informatiques)",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Computer Systems / Technique en Systèmes Informatiques."
+  },
+  "personal_website": {
+    "value": "https://melato.ca",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "This is a business website, not automatically a software-development portfolio."
+  },
+  "personal_computer": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "M1 MacBook Air user-provided. Does not prove company device-policy or minimum RAM/performance."
+  },
+  "mobile_phone": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "No claim about specific business phone number unless using verified contact."
+  },
+  "management_experience": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Do not invent number of direct reports or years of people-management tenure."
+  },
+  "banking_experience_years": {
+    "value": "7",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Prior user-provided approximate 7 years Canadian banking/payments. No inflation to 8+."
+  },
+  "portfolio_management_experience": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "master policy v3.0: experience"
+  },
+  "portfolio_management_years": {
+    "value": "3+",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Only for large-balance account portfolio scope; does not imply commercial loan portfolio ownership."
+  },
+  "fraud_experience": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "master policy v3.0: experience"
+  },
+  "collections_experience": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "master policy v3.0: experience"
+  },
+  "customer_facing_experience": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "master policy v3.0: experience"
+  },
+  "excel_skill": {
+    "value": "Good",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "User rating: Good. Do not auto-claim expert VBA, Power Query, Excel macros, Power Pivot or financial modeling."
+  },
+  "netsuite_skill": {
+    "value": "Very good",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "master policy v3.0: skills"
+  },
+  "salesforce_skill": {
+    "value": "Intermediate",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "master policy v3.0: skills"
+  },
+  "google_ad_manager_skill": {
+    "value": "Very good",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Google Ad Manager is not Google Analytics or Google Ads certifications."
+  },
+  "compliance_experience": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Do not invent CAMS, FINTRAC investigator duties, securities registration or specialized certifications."
+  },
+  "salary_currency": {
+    "value": "CAD",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "master policy v3.0: compensation"
+  },
+  "remote_location_eligibility": {
+    "value": "Ottawa, Ontario, Canada",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Only choose an option if it correctly corresponds to the precise question. Never choose California from an Ontario-like selector."
+  },
+  "time_zone": {
+    "value": "America/Toronto",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "America/Toronto handles DST correctly."
+  },
+  "language_assessment": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Do not claim specific language-test scores, certifications or government clearance results without verified test record."
+  },
+  "us_citizen": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Not a US citizen (Canadian citizen)."
+  },
+  "sponsorship_required_US": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "No US sponsorship needed."
+  },
+  "highest_education": {
+    "value": "College Diploma",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Graduated with College Diploma in Computer Systems (Technique en Systèmes Informatiques) in 2016."
+  },
+  "education_graduation_year": {
+    "value": "2016",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Graduated in 2016."
+  },
+  "currently_student": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Not currently a student and not planning to return to school soon."
+  },
+  "plans_return_to_school": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "No plans to go back to school in future."
+  },
+  "professional_certifications": {
+    "value": "Google AI Fundamentals",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Holds Google AI Fundamentals certificate."
+  },
+  "quiet_workspace": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Dedicated private, quiet home office suitable for confidential remote work."
+  },
+  "high_speed_internet": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Has reliable high-speed broadband internet."
+  },
+  "security_equipment": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Secure home workspace equipment in place."
+  },
+  "remote_workspace": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Fully equipped for remote work."
+  },
+  "willing_overtime": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Open to overtime; weekdays preferred."
+  },
+  "weekend_shifts": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Able to work weekends if needed (weekdays preferred)."
+  },
+  "evening_night_shift": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Able to work evenings, overnight, call center, and fast-paced environments."
+  },
+  "holiday_work": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Able to work on holidays."
+  },
+  "work_travel": {
+    "value": "Yes (up to 10%)",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Able to travel up to 10% for work."
+  },
+  "criminal_convictions": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "No criminal record."
+  },
+  "criminal_record": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "No criminal record."
+  },
+  "police_clearance": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Can provide police certificate / clearance documentation upon request."
+  },
+  "government_clearance": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Does not currently hold a government security clearance."
+  },
+  "drivers_license": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Holds valid Ontario G driver's licence."
+  },
+  "car_ownership": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Owns and has access to a vehicle."
+  },
+  "direct_underwriting": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Has credit underwriting experience / lending authority."
+  },
+  "smb_lending": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Has SMB lending experience."
+  },
+  "sql_skill": {
+    "value": "Basic",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Basic SQL proficiency."
+  },
+  "python_skill": {
+    "value": "Basic",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Basic Python proficiency."
+  },
+  "computer_skill_level": {
+    "value": "Advanced",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Advanced computer proficiency."
+  },
+  "customer_service_years": {
+    "value": "7+",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Over 7 years of customer-facing experience in financial services and retail."
+  },
+  "customer_deescalation": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Experienced and skilled in de-escalating customer conflicts."
+  },
+  "teamwork": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Thrives in team environments."
+  },
+  "work_independently": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Able to work independently and self-manage."
+  },
+  "references_available": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Professional supervisory references available upon request."
+  },
+  "school_or_work_references": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Consents to employer contacting professional references."
+  },
+  "reference_check_consent": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Consents to reference checks."
+  },
+  "noncompete": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Not subject to any non-compete agreements."
+  },
+  "fired_from_job": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Has never been terminated or dismissed from employment."
+  },
+  "referral_source": {
+    "value": "Indeed, LinkedIn, Social Media",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Job boards (Indeed, LinkedIn) or company social channels."
+  },
+  "current_employee_referral": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "No employee referral."
+  },
+  "previously_worked_at_target": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Has not previously worked for company."
+  },
+  "currently_work_at_target": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Not a current employee of target company."
+  },
+  "friends_or_family_at_target": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "No family or household members have worked at target company."
+  },
+  "relative_on_board": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "No relatives on board of directors."
+  },
+  "shares_in_target": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Does not own material shares in target company."
+  },
+  "conflict_of_interest": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "No conflicts of interest."
+  },
+  "politically_involved": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Not a politically exposed person (PEP)."
+  },
+  "government_employee_past": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Has not been a public servant."
+  },
+  "future_vacation": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "No upcoming planned vacations."
+  },
+  "vacation_90_day": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Able to avoid time off in the first 90 days."
+  },
+  "terms_consent": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Accepts terms, conditions, and employment agreements."
+  },
+  "agreement_consent": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Accepts standard agreements."
+  },
+  "salary_acceptance": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Accepts offered salary within expected range."
+  },
+  "working_conditions_acceptance": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Accepts standard working conditions."
+  },
+  "disability_status": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "No disability."
+  },
+  "disability": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "No disability."
+  },
+  "accommodation_required": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "No accessibility accommodations required."
+  },
+  "gender": {
+    "value": "Man",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Man (Cisgender)."
+  },
+  "gender_identity": {
+    "value": "Man",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Cisgender Man."
+  },
+  "sexual_orientation": {
+    "value": "Heterosexual",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Heterosexual / Straight."
+  },
+  "visible_minority": {
+    "value": "Yes",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Member of visible minority."
+  },
+  "race_ethnicity": {
+    "value": "Black",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Black."
+  },
+  "veteran_status": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Not a veteran / military forces member."
+  },
+  "indigenous_identity": {
+    "value": "No",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Not Indigenous / Native."
+  },
+  "allergies": {
+    "value": "Penicillin",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": true,
+    "note": "Allergic to Penicillin; no other allergies."
+  },
+  "why_company_motivation": {
+    "value": "I thrive in a collaborative, transparent, and high-trust work culture that values operational excellence, continuous learning, and mutual respect. What motivates me is solving meaningful problems, delivering measurable value to clients and team members, and applying my background in financial operations, risk analysis, and customer success to achieve shared goals.",
+    "scope": "global",
+    "confidence": 1.0,
+    "sensitive": false,
+    "note": "Candidate motivation and work culture answer."
+  }
+}

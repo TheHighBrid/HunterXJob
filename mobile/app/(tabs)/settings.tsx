@@ -11,7 +11,9 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { ErrorView, LoadingView } from "@/components/StatusViews";
 import { useApiResource } from "@/hooks/useApiResource";
+import { notify } from "@/lib/confirm";
 import { useConnection } from "@/store/connection";
+import { useSubscription, MAX_DAILY_FREE_APPLICATIONS } from "@/store/subscription";
 import { useTheme } from "@/theme";
 import { formatBytes, formatDateTime, parseList } from "@/utils/format";
 import { buildSettingsPatch, settingsToForm, type SettingsForm } from "@/settingsForm";
@@ -27,7 +29,7 @@ type NumberKey = "max_dry_runs_per_day" | "max_applications_per_day" | "min_matc
 
 const NUMBER_FIELDS: { key: NumberKey; label: string; hint: string }[] = [
   { key: "max_dry_runs_per_day", label: "Dry-runs per day", hint: "0-100" },
-  { key: "max_applications_per_day", label: "Applications per day", hint: "0-50 (submission is locked)" },
+  { key: "max_applications_per_day", label: "Applications per day", hint: "0-50 per day (autonomous live submission active)" },
   { key: "min_match_score", label: "Minimum match score", hint: "0-100" },
   { key: "cycle_interval_minutes", label: "Cycle interval (min)", hint: "5-1440" },
   { key: "cycle_max_dry_runs", label: "Dry-runs per cycle", hint: "0-20" },
@@ -81,6 +83,74 @@ function ConnectionCard() {
       <PrimaryButton title="Connection & test" variant="secondary" onPress={() => {
         router.push("/connection");
       }} />
+    </Card>
+  );
+}
+
+function SubscriptionCard() {
+  const theme = useTheme();
+  const inputStyle = useInputStyle();
+  const plan = useSubscription((s) => s.plan);
+  const remaining = useSubscription((s) => s.remainingToday());
+  const activatePro = useSubscription((s) => s.activatePro);
+  const setPlan = useSubscription((s) => s.setPlan);
+  const [keyInput, setKeyInput] = useState("");
+  const isPro = plan === "pro";
+
+  function handleActivate() {
+    if (!keyInput.trim()) {
+      notify("License required", "Please enter a valid HunterX Pro license key.");
+      return;
+    }
+    const ok = activatePro(keyInput);
+    if (ok) {
+      notify("Welcome to Pro!", "HunterX Pro is now active with unlimited applications and full autonomy.");
+      setKeyInput("");
+    } else {
+      notify("Invalid key", "License key not recognized. For testing use: HUNTERX-PRO-2026");
+    }
+  }
+
+  return (
+    <Card
+      title="Plan & Subscription"
+      right={
+        <View style={{ backgroundColor: isPro ? theme.primary : theme.warning, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
+          <Text style={{ color: "#fff", fontSize: 11, fontWeight: "800" }}>{isPro ? "PRO" : "FREE"}</Text>
+        </View>
+      }
+    >
+      <Muted>
+        {isPro
+          ? "You have full access to unlimited applications, autonomous scheduler loops, and all ATS integrations."
+          : `Free tier includes job search and manual fill up to ${MAX_DAILY_FREE_APPLICATIONS} applications per day (${remaining} remaining today). Full autonomy is locked.`}
+      </Muted>
+
+      <Row label="Current Tier" value={isPro ? "HunterX Pro (Unlimited)" : "Free Hunter (2 / day)"} valueColor={isPro ? theme.primary : theme.text} />
+      <Row label="Daily Applications" value={isPro ? "Unlimited" : `${remaining} left today`} />
+      <Row label="Full Autonomy & Looping" value={isPro ? "Unlocked" : "Locked (Pro only)"} valueColor={isPro ? theme.success : theme.textMuted} />
+      <Row label="Automated Submissions" value={isPro ? "Unlocked" : "Locked (Pro only)"} valueColor={isPro ? theme.success : theme.textMuted} />
+
+      {!isPro ? (
+        <View style={{ gap: 8, marginTop: 4 }}>
+          <Text style={[styles.label, { color: theme.text }]}>Activate Pro License</Text>
+          <TextInput
+            style={inputStyle}
+            value={keyInput}
+            onChangeText={setKeyInput}
+            placeholder="e.g. HUNTERX-PRO-2026"
+            placeholderTextColor={theme.textFaint}
+            autoCapitalize="characters"
+          />
+          <PrimaryButton title="Activate Pro Key" onPress={handleActivate} />
+        </View>
+      ) : (
+        <PrimaryButton
+          title="Switch to Free Tier (Test Mode)"
+          variant="secondary"
+          onPress={() => setPlan("free")}
+        />
+      )}
     </Card>
   );
 }
@@ -311,6 +381,7 @@ export default function SettingsScreen() {
       >
         {error ? <Banner tone="danger" message={error} /> : null}
         <ConnectionCard />
+        <SubscriptionCard />
         <ProfileCard />
         <SafetyCard settings={settings} />
         <AutomationCard form={form} set={set} timezone={settings.timezone} />

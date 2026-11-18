@@ -1,0 +1,1987 @@
+help me sort out the best plam out of these to achieve my goal
+help me sort out the best plam out of these to achieve my goal
+how to make a system machine learn from its own input and output and auto fixes it self and auto improve it self constantly by learning from its experience through its fault and errors, so every try or attempt to perform a task is learning curve the system learns reports analyze extract changes fixes adapts then tries again , have it right its own code costantlly improving on it.
+i wanr this to be applied to my projects HunterXJob an an autonomous application for hunting filling submiting tool and allo a virtual gf on a simulated live gemini 3.8 live model and eleven labsv voice and brain phone call app, and fidelis a upscaling enhancing image tool and pedit a pdf precision editor app, anf agent gang a set of autonomous bots agents and assistants.
+how to make a system machine learn from its own input and output and auto fixes it self and auto improve it self constantly by learning from its experience through its fault and errors, so every try or attempt to perform a task is learning curve the system learns reports analyze extract changes fixes adapts then tries again , have it right its own code costantlly improving on it.
+i wanr this to be applied to my projects HunterXJob an an autonomous application for hunting filling submiting tool and allo a virtual gf on a simulated live gemini 3.8 live model and eleven labsv voice and brain phone call app, and fidelis a upscaling enhancing image tool and pedit a pdf precision editor app, anf agent gang a set of autonomous bots agents and assistants.
+ the right way is not to let the system freely rewrite itself in production. The practical approach is to build a controlled improvement loop: observe each run, detect failures, score them with evals, propose changes, test those changes in a sandbox, promote only the versions that beat the baseline, and keep rollback/human approval for risky changes. [1][2]
+
+Core pattern
+
+What you want is usually called a closed-loop agent improvement system or self-evolving agent workflow, where traces, structured feedback, and repeatable evals drive better prompts, tool logic, routing, and sometimes code changes over time. [1][3]
+
+The key design rule is this: every attempt should generate a run record, that run should be graded, the failure should be turned into a concrete fix candidate, and the candidate should only ship if it wins against the current version on a stable test set. [1][2]
+
+Safe architecture
+
+Use this 8-stage loop for all your products.
+
+1. Run the task with full tracing, including inputs, outputs, tool calls, latency, errors, retries, and final result. [1]
+2. Classify failures, for example wrong answer, bad tool choice, timeout, hallucination, invalid form submission, unsafe action, UI breakage, or poor user experience. [4]
+3. Score each run with evals, using deterministic checks where possible and LLM-as-judge only where needed. [2][5]
+4. Extract a patch candidate, such as prompt update, selector threshold change, workflow branch fix, retrieval tweak, or code diff. [3]
+5. Test the patch in a sandbox against regression suites plus recent failed cases. [2][5]
+6. Promote only if metrics improve and guardrails still pass. [6]
+7. Version everything, including prompts, tool schemas, policies, datasets, and code. [1]
+8. Keep rollback and human escalation when confidence is low or the retry budget is exhausted. [3][7]
+
+Do not start with fully autonomous code rewriting across the whole stack. Multi-agent and self-modifying systems add nondeterminism and complexity, so they should be introduced only when evals show a simpler architecture is no longer enough. [7][2]
+
+Self-rewrite boundaries
+
+You should separate what the system may change automatically from what must require approval. [7]
+
+
+Auto-change allowed
+Approval required
+
+Prompts, tool descriptions, routing rules, retry strategy, ranking weights, non-critical UI text [3]
+Payment logic, auth, permissions, data deletion, browser automation on live accounts, code touching security or compliance paths [6][7]
+
+Test generation, failure clustering, draft code patches, config tuning [2]
+Production DB migrations, secret handling, external side effects, anything with legal or safety risk [6][4]
+
+
+
+A strong rule for your stack is: let the system author code, but require a gated pipeline to execute, test, compare, and approve it before merge or deployment. That preserves constant learning without turning production into a live experiment.
+
+Apply to your apps
+
+For your projects, I would not build one giant self-improving brain first. Based on your preference for pragmatic, robust, fail-closed systems and avoiding unnecessary rewrites, the better path is one shared improvement platform with per-product evals and guardrails. [8][9][10]
+
+HunterXJob
+
+Treat it as a browser automation and decision-quality system. Log every page visited, field extracted, form fill, rejection reason, anti-bot event, and successful submission; then grade runs on extraction accuracy, form validity, duplicate avoidance, and submit success rate. [1]
+
+Auto-improvements here should focus on selector repair, form-mapping rules, resume-answer consistency, and retry strategy, while live submission actions should stay gated because wrong actions can damage accounts or send bad applications. [6][4]
+
+Allo / virtual GF
+
+Treat it as a real-time conversation quality loop. Capture interruption timing, latency, turn-taking, speech naturalness feedback, reconnection quality, and persona consistency, then optimize prompts, buffering, barge-in logic, memory policy, and voice settings rather than letting it rewrite core telephony logic freely. [10]
+
+This matches your earlier Allo direction: improve realism through audio pipeline behavior, interruption handling, and session recovery before broader architecture changes. [10]
+
+Fidelis
+
+Fidelis is already well suited for this style because it emphasizes provenance, validation, and trustworthy outputs. Use failed cases to learn which restoration profile, model family, tile strategy, or artifact detector works best by content type, but keep fail-closed checks so the system never silently promotes hallucinated or over-sharpened output. [9][11]
+
+A good loop here is: image in, multi-profile candidates, score with regional metrics plus artifact detectors, compare against benchmark set, then promote the winning profile or model only if it beats the baseline across the held-out suite. [9][2]
+
+Pedit
+
+Treat it as a precision transformation system. Track whether edits preserved layout, text positions, fonts, tables, metadata, OCR alignment, and export correctness, and use those failures to improve operation planners and patch generators. [5]
+
+Auto-writing code is acceptable here mainly for parser adapters, layout heuristics, and test fixtures, but file corruption paths should require approval because users expect exactness. [6]
+
+Agent Gang
+
+Start with a single orchestrator plus a few specialist tools, not a swarm first. The guidance is clear that multi-agent designs increase handoff errors and should be justified by evals rather than assumed up front. [7][2]
+
+For Agent Gang, the learning loop should score tool choice, argument correctness, task completion, and unnecessary handoffs; only split into more agents after the eval data proves one agent can no longer manage the task surface well. [4]
+
+Minimal build plan
+
+Build this in phases. [2]
+
+Phase 1
+• Unified run logger.
+• Trace viewer.
+• Failure taxonomy.
+• Per-project eval datasets with 20 to 100 must-pass cases.
+• Version registry for prompts, configs, and code candidates. [1][5]
+
+Phase 2
+• Auto-grading pipeline, deterministic first, model-graded second.
+• Failure clustering and root-cause extraction.
+• Patch generator that proposes prompt edits, configs, or code diffs.
+• Sandbox runner that executes candidate versions on the regression suite. [3][2]
+
+Phase 3
+• Champion/challenger deployment.
+• Canary releases.
+• Automatic rollback on metric regression.
+• Human review queue for high-risk diffs. [6][7]
+
+Practical stack
+
+A clean implementation for your ecosystem would look like this.
+
+• Event bus: every app emits run events.
+• Observability store: traces, artifacts, screenshots, outputs, and errors.
+• Eval service: pass/fail graders, scorecards, and regression suites.
+• Improvement engine: failure clustering, patch proposals, prompt optimizer, code diff generator.
+• Sandbox CI: runs unit, integration, browser, and task-level evals.
+• Promotion service: compares candidate vs baseline and handles rollback.
+• Policy layer: defines what each project may auto-change. [1][6][2]
+
+A simple decision formula is useful:
+
+
+That formula should be enforced automatically, not left to the model’s own judgment. [2]
+
+Biggest mistake
+
+The biggest mistake is trying to build “an AI that improves itself” before building measurement. The sources consistently stress eval-driven development, continuous evaluation, logging, and human calibration; without that, self-improvement becomes self-randomization. [2][12]
+
+For my projects, the best first deliverable is a shared “Autonomous Improvement Kernel” used by HunterXJob, Allo, Fidelis, Pedit, and Agent Gang: run tracing, failure labeling, eval scoring, candidate patching, sandbox validation, and gated promotion. That gets you constant learning while staying aligned with your preference for cost-effective, robust, production-grade systems. [8][9][10]
+
+buil build a self improving agent, architectural blueprint traces LLM as a judge feedback loop automated. Error correction and c I c d aval harnesses that would continuously self improve itself based on its experience and past trials and reports. Some sort of a closed loop agent improvement system and self evolving agent workflow
+
+A closed-loop self-improving agent is a gated flywheel: traces show what happened, graders and an LLM-as-judge say what failed, a metaprompt or patch writer proposes a new harness, and CI only promotes the candidate if it beats the current baseline on a frozen eval suite. [1][2][3]
+
+Blueprint
+
+The production pattern used in current agent cookbooks is not “the model rewrites itself live.” It is traces plus human and model feedback, turned into reusable evals, then into harness changes (instructions, tools, routing, output contracts, validation checks) that a coding agent implements and a validation gate accepts or rejects. [1][2]
+
+text
+Task run
+  -> trace (spans: model, tools, handoffs, guardrails)
+  -> deterministic graders + LLM-as-judge
+  -> failure cluster + diagnosis
+  -> candidate harness (prompt / policy / tool schema / code diff)
+  -> sandbox eval CI
+  -> champion vs challenger
+  -> promote only if score rises AND guardrails pass
+  -> else rollback and escalate
+
+
+OpenAI’s improvement loop closes exactly this cycle: new traces, human and model feedback, generated evals, diagnosis, implementation, validation, and deployment all feed the next cycle. A heartbeat worker can pick up handoff artifacts and start the next implementation pass. [1]
+
+The self-evolving retraining loop is the same idea at prompt level: baseline agent, human or LLM-as-judge feedback, evals and an aggregated score, then replace the baseline only after the score clears a threshold (example targets around 0.8) or stop after a retry cap and alert a human. [2]
+
+Runtime contract
+
+Treat the harness as the versioned object that evolves, not the raw model weights. A harness includes instructions, tool policy, routing, required artifacts, and validation checks. [1]
+
+
+Object
+What it stores
+Why it matters
+
+Trace
+End-to-end model calls, tool calls, guardrails, handoffs
+Locates the failing step, not just the bad final answer [4][3]
+
+Grade
+Structured score or label on a trace
+Makes regressions comparable across changes [3]
+
+Eval dataset
+Frozen inputs plus expected behavior
+Benchmarks prompts and workflows over time [4]
+
+Candidate
+New prompt, policy, or code diff
+The thing CI actually tests [1][2]
+
+Promotion record
+Score, guardrail result, version
+Enables rollback when a later version regresses [2]
+
+
+
+A trace is the full run record. Trace grading assigns scores so you can see whether the agent chose the wrong tool, skipped a check, or only failed at the final answer. Once the failure mode is clear, move from one-off trace inspection to datasets and repeatable eval runs. [4][3]
+
+Judge design
+
+Do not use the LLM-as-judge as the only signal. The reliable pattern mixes cheap deterministic graders with one rubric judge. [2]
+
+• Deterministic graders catch exact failures: required files exist, schema is valid, chemical names are preserved, length is in band, citations point at real files. [2][1]
+• Similarity or coverage checks catch drift away from source material. [2]
+• The LLM-as-judge scores nuance the rules miss, using a fixed rubric and a numeric range such as 0 to 1 with an explicit pass threshold. [2]
+• Aggregate with a simple rule, for example average score and a pass ratio. One published loop treats a candidate as a lenient pass if at least 75% of graders pass or the average is at least 0.85, then keeps the version with the best cumulative score. [2]
+
+Calibrate the judge against a small human-labeled set before you trust it in CI. Online scoring (latency, cost, user thumbs, near-real-time judge) is for monitoring; offline datasets are for promotion decisions. [5][4]
+
+Error correction loop
+
+Each failed run should become a structured defect, not a free-text complaint.
+
+1. Capture the trace, final artifacts, and any user signal. [1][5]
+2. Run graders. Parse per-grader score, pass/fail, and reasoning. [2]
+3. Cluster repeated failures across traces (wrong tool, missing citation, policy miss, bad handoff). Macro-evals exist specifically to find recurring patterns in multi-agent runs. [6]
+4. Feed the original harness, the bad output, and the grader reasoning into a metaprompt agent whose only job is to write a stricter next harness. [2]
+5. Re-run the full eval set, not the single failed example. [4][2]
+6. Keep the best aggregate scorer. If retries hit the cap, stop and page a human. [2]
+
+The metaprompt itself should stay relatively static. Version the task harness; do not let the optimizer rewrite its own instructions every cycle. [2]
+
+CI/CD eval harness
+
+Promotion belongs in CI, not inside the live agent process. [1]
+
+text
+on candidate harness:
+  checkout candidate version
+  run unit + contract tests
+  run frozen regression dataset
+  run recent failure replay set
+  run trace graders + LLM judge
+  compare vs champion on the same items
+  block merge if score drops, guardrail fails, or variance is too high
+  canary 5-10% of traffic
+  auto-rollback on online score drop
+
+
+A practical starting point is a reviewed loop: the system writes a handoff (diagnosis, ranked changes, evidence, implementation notes) and a developer approves the diff. As the eval gate earns trust, the same artifact can open and merge pull requests automatically. [1]
+
+Minimum gates before any auto-merge:
+
+• Frozen golden set that never gets overwritten by the optimizer.
+• Replay set of the last N production failures.
+• Contract tests for tools, schemas, and side effects.
+• Score must beat champion, not merely pass a lenient bar. [2][1]
+• Risk policy: prompts and tool descriptions may auto-promote; auth, payments, live submissions, and destructive actions stay human-gated.
+
+Minimal services
+
+text
+improvement-kernel/
+  runtime/          # agent runner, span exporter
+  traces/           # JSONL or OTel store
+  graders/          # python checks + judge rubric
+  evals/            # datasets, run records, scores
+  optimizer/        # metaprompt + optional code agent
+  harness/          # versioned prompts, tool policy, contracts
+  ci/               # champion-challenger gate
+  policy/           # what may auto-change per product
+
+
+State you must persist:
+
+• harness_versions: prompt, model, tool policy, status (candidate | champion | rolled_back). [2][1]
+• runs: input, output, trace id, harness version, latency, cost.
+• grades: grader name, score, passed, reasoning. [2]
+• defects: clustered failure, evidence trace ids, proposed fix.
+• promotions: old version, new version, delta score, approver or auto-gate result.
+
+Promotion rule:
+
+
+Ties should keep the current champion. That prevents noisy judges from churning production. [2]
+
+What not to automate first
+
+Start with one agent, one harness, and trace grading. Multi-agent systems need extra evals for tool choice, delegation, and review pauses; add specialists only after the single-agent evals show a real routing problem. [6][4]
+
+Also keep the optimizer outside the request path. The live agent should execute the promoted harness. A separate worker should grade, propose, test, and promote. That is the difference between a self-evolving workflow and a system that mutates itself mid-task and cannot be rolled back. [1][2]
+
+, execute, test, compare, and approve it before merge or deployment. That preserves constant learning without turning production into a live experiment.
+
+Apply to your apps
+
+For your projects, I would not build one giant self-improving brain first. Based on your preference for pragmatic, robust, fail-closed systems and avoiding unnecessary rewrites, the better path is one shared improvement platform with per-product evals and guardrails. [8][9][10]
+
+HunterXJob
+
+Treat it as a browser automation and decision-quality system. Log every page visited, field extracted, form fill, rejection reason, anti-bot event, and successful submission; then grade runs on extraction accuracy, form validity, duplicate avoidance, and submit success rate. [1]
+
+Auto-improvements here should focus on selector repair, form-mapping rules, resume-answer consistency, and retry strategy, while live submission actions should stay gated because wrong actions can damage accounts or send bad applications. [6][4]
+
+Allo / virtual GF
+
+Treat it as a real-time conversation quality loop. Capture interruption timing, latency, turn-taking, speech naturalness feedback, reconnection quality, and persona consistency, then optimize prompts, buffering, barge-in logic, memory policy, and voice settings rather than letting it rewrite core telephony logic freely. [10]
+
+This matches your earlier Allo direction: improve realism through audio pipeline behavior, interruption handling, and session recovery before broader architecture changes. [10]
+
+Fidelis
+
+Fidelis is already well suited for this style because it emphasizes provenance, validation, and trustworthy outputs. Use failed cases to learn which restoration profile, model family, tile strategy, or artifact detector works best by content type, but keep fail-closed checks so the system never silently promotes hallucinated or over-sharpened output. [9][11]
+
+A good loop here is: image in, multi-profile candidates, score with regional metrics plus artifact detectors, compare against benchmark set, then promote the winning profile or model only if it beats the baseline across the held-out suite. [9][2]
+
+Pedit
+
+Treat it as a precision transformation system. Track whether edits preserved layout, text positions, fonts, tables, metadata, OCR alignment, and export correctness, and use those failures to improve operation planners and patch generators. [5]
+
+Auto-writing code is acceptable here mainly for parser adapters, layout heuristics, and test fixtures, but file corruption paths should require approval because users expect exactness. [6]
+
+Agent Gang
+
+Start with a single orchestrator plus a few specialist tools, not a swarm first. The guidance is clear that multi-agent designs increase handoff errors and should be justified by evals rather than assumed up front. [7][2]
+
+For Agent Gang, the learning loop should score tool choice, argument correctness, task completion, and unnecessary handoffs; only split into more agents after the eval data proves one agent can no longer manage the task surface well. [4]
+
+Minimal build plan
+
+Build this in phases. [2]
+
+Phase 1
+• Unified run logger.
+• Trace viewer.
+• Failure taxonomy.
+• Per-project eval datasets with 20 to 100 must-pass cases.
+• Version registry for prompts, configs, and code candidates. [1][5]
+
+Phase 2
+• Auto-grading pipeline, deterministic first, model-graded second.
+• Failure clustering and root-cause extraction.
+• Patch generator that proposes prompt edits, configs, or code diffs.
+• Sandbox runner that executes candidate versions on the regression suite. [3][2]
+
+Phase 3
+• Champion/challenger deployment.
+• Canary releases.
+• Automatic rollback on metric regression.
+• Human review queue for high-risk diffs. [6][7]
+
+Practical stack
+
+A clean implementation for your ecosystem would look like this.
+
+• Event bus: every app emits run events.
+• Observability store: traces, artifacts, screenshots, outputs, and errors.
+• Eval service: pass/fail graders, scorecards, and regression suites.
+• Improvement engine: failure clustering, patch proposals, prompt optimizer, code diff generator.
+• Sandbox CI: runs unit, integration, browser, and task-level evals.
+• Promotion service: compares candidate vs baseline and handles rollback.
+• Policy layer: defines what each project may auto-change. [1][6][2]
+
+A simple decision formula is useful:
+
+
+That formula should be enforced automatically, not left to the model’s own judgment. [2]
+
+Biggest mistake
+
+The biggest mistake is trying to build “an AI that improves itself” before building measurement. The sources consistently stress eval-driven development, continuous evaluation, logging, and human calibration; without that, self-improvement becomes self-randomization. [2][12]
+
+For my projects, the best first deliverable is a shared “Autonomous Improvement Kernel” used by HunterXJob, Allo, Fidelis, Pedit, and Agent Gang: run tracing, failure labeling, eval scoring, candidate patching, sandbox validation, and gated promotion. That gets you constant learning while staying aligned with your preference for cost-effective, robust, production-grade systems. [8][9][10]
+
+buil build a self improving agent, architectural blueprint traces LLM as a judge feedback loop automated. Error correction and c I c d aval harnesses that would continuously self improve itself based on its experience and past trials and reports. Some sort of a closed loop agent improvement system and self evolving agent workflow
+
+A closed-loop self-improving agent is a gated flywheel: traces show what happened, graders and an LLM-as-judge say what failed, a metaprompt or patch writer proposes a new harness, and CI only promotes the candidate if it beats the current baseline on a frozen eval suite. [1][2][3]
+
+Blueprint
+
+The production pattern used in current agent cookbooks is not “the model rewrites itself live.” It is traces plus human and model feedback, turned into reusable evals, then into harness changes (instructions, tools, routing, output contracts, validation checks) that a coding agent implements and a validation gate accepts or rejects. [1][2]
+
+text
+Task run
+  -> trace (spans: model, tools, handoffs, guardrails)
+  -> deterministic graders + LLM-as-judge
+  -> failure cluster + diagnosis
+  -> candidate harness (prompt / policy / tool schema / code diff)
+  -> sandbox eval CI
+  -> champion vs challenger
+  -> promote only if score rises AND guardrails pass
+  -> else rollback and escalate
+
+
+OpenAI’s improvement loop closes exactly this cycle: new traces, human and model feedback, generated evals, diagnosis, implementation, validation, and deployment all feed the next cycle. A heartbeat worker can pick up handoff artifacts and start the next implementation pass. [1]
+
+The self-evolving retraining loop is the same idea at prompt level: baseline agent, human or LLM-as-judge feedback, evals and an aggregated score, then replace the baseline only after the score clears a threshold (example targets around 0.8) or stop after a retry cap and alert a human. [2]
+
+Runtime contract
+
+Treat the harness as the versioned object that evolves, not the raw model weights. A harness includes instructions, tool policy, routing, required artifacts, and validation checks. [1]
+
+
+Object
+What it stores
+Why it matters
+
+Trace
+End-to-end model calls, tool calls, guardrails, handoffs
+Locates the failing step, not just the bad final answer [4][3]
+
+Grade
+Structured score or label on a trace
+Makes regressions comparable across changes [3]
+
+Eval dataset
+Frozen inputs plus expected behavior
+Benchmarks prompts and workflows over time [4]
+
+Candidate
+New prompt, policy, or code diff
+The thing CI actually tests [1][2]
+
+Promotion record
+Score, guardrail result, version
+Enables rollback when a later version regresses [2]
+
+
+
+A trace is the full run record. Trace grading assigns scores so you can see whether the agent chose the wrong tool, skipped a check, or only failed at the final answer. Once the failure mode is clear, move from one-off trace inspection to datasets and repeatable eval runs. [4][3]
+
+Judge design
+
+Do not use the LLM-as-judge as the only signal. The reliable pattern mixes cheap deterministic graders with one rubric judge. [2]
+
+• Deterministic graders catch exact failures: required files exist, schema is valid, chemical names are preserved, length is in band, citations point at real files. [2][1]
+• Similarity or coverage checks catch drift away from source material. [2]
+• The LLM-as-judge scores nuance the rules miss, using a fixed rubric and a numeric range such as 0 to 1 with an explicit pass threshold. [2]
+• Aggregate with a simple rule, for example average score and a pass ratio. One published loop treats a candidate as a lenient pass if at least 75% of graders pass or the average is at least 0.85, then keeps the version with the best cumulative score. [2]
+
+Calibrate the judge against a small human-labeled set before you trust it in CI. Online scoring (latency, cost, user thumbs, near-real-time judge) is for monitoring; offline datasets are for promotion decisions. [5][4]
+
+Error correction loop
+
+Each failed run should become a structured defect, not a free-text complaint.
+
+1. Capture the trace, final artifacts, and any user signal. [1][5]
+2. Run graders. Parse per-grader score, pass/fail, and reasoning. [2]
+3. Cluster repeated failures across traces (wrong tool, missing citation, policy miss, bad handoff). Macro-evals exist specifically to find recurring patterns in multi-agent runs. [6]
+4. Feed the original harness, the bad output, and the grader reasoning into a metaprompt agent whose only job is to write a stricter next harness. [2]
+5. Re-run the full eval set, not the single failed example. [4][2]
+6. Keep the best aggregate scorer. If retries hit the cap, stop and page a human. [2]
+
+The metaprompt itself should stay relatively static. Version the task harness; do not let the optimizer rewrite its own instructions every cycle. [2]
+
+CI/CD eval harness
+
+Promotion belongs in CI, not inside the live agent process. [1]
+
+text
+on candidate harness:
+  checkout candidate version
+  run unit + contract tests
+  run frozen regression dataset
+  run recent failure replay set
+  run trace graders + LLM judge
+  compare vs champion on the same items
+  block merge if score drops, guardrail fails, or variance is too high
+  canary 5-10% of traffic
+  auto-rollback on online score drop
+
+
+A practical starting point is a reviewed loop: the system writes a handoff (diagnosis, ranked changes, evidence, implementation notes) and a developer approves the diff. As the eval gate earns trust, the same artifact can open and merge pull requests automatically. [1]
+
+Minimum gates before any auto-merge:
+
+• Frozen golden set that never gets overwritten by the optimizer.
+• Replay set of the last N production failures.
+• Contract tests for tools, schemas, and side effects.
+• Score must beat champion, not merely pass a lenient bar. [2][1]
+• Risk policy: prompts and tool descriptions may auto-promote; auth, payments, live submissions, and destructive actions stay human-gated.
+
+Minimal services
+
+text
+improvement-kernel/
+  runtime/          # agent runner, span exporter
+  traces/           # JSONL or OTel store
+  graders/          # python checks + judge rubric
+  evals/            # datasets, run records, scores
+  optimizer/        # metaprompt + optional code agent
+  harness/          # versioned prompts, tool policy, contracts
+  ci/               # champion-challenger gate
+  policy/           # what may auto-change per product
+
+
+State you must persist:
+
+• harness_versions: prompt, model, tool policy, status (candidate | champion | rolled_back). [2][1]
+• runs: input, output, trace id, harness version, latency, cost.
+• grades: grader name, score, passed, reasoning. [2]
+• defects: clustered failure, evidence trace ids, proposed fix.
+• promotions: old version, new version, delta score, approver or auto-gate result.
+
+Promotion rule:
+
+
+Ties should keep the current champion. That prevents noisy judges from churning production. [2]
+
+What not to automate first
+
+Start with one agent, one harness, and trace grading. Multi-agent systems need extra evals for tool choice, delegation, and review pauses; add specialists only after the single-agent evals show a real routing problem. [6][4]
+
+Also keep the optimizer outside the request path. The live agent should execute the promoted harness. A separate worker should grade, propose, test, and promote. That is the difference between a self-evolving workflow and a system that mutates itself mid-task and cannot be rolled back. [1][2]
+
+You can build this, but the correct target is a self-improving software system, not unrestricted self-rewriting code. The system should continuously learn from attempts, but every change must pass traces, deterministic tests, LLM judging, regression evals, security gates, and rollback rules before deployment. Trace grading is specifically designed to score end-to-end agent traces—including model calls, tool calls, guardrails, and handoffs—and identify workflow-level failures. [1][2]
+
+What you are building
+
+Your shared platform should be an Autonomous Improvement Kernel used by HunterXJob, Allo, Fidelis, Pedit, and Agent Gang.
+
+text
+Live application
+
+      |
+      v
+Trace collector
+
+      |
+      v
+Run database + artifacts
+
+      |
+      v
+Deterministic validators + LLM judge
+
+      |
+      v
+Failure analyzer / clustering
+
+      |
+      v
+Improvement planner
+
+      |
+      v
+Prompt/config/code candidate
+
+      |
+      v
+Sandbox + CI/CD evaluation
+
+      |
+      v
+Champion-versus-challenger comparison
+
+      |
+      +--> reject and record failure
+
+      |
+      v
+Canary deployment + monitoring
+
+      |
+      v
+Promote or automatically rollback
+
+
+The important distinction is that the live application executes the current champion version while a separate improvement worker studies past runs and creates challengers. This prevents the agent from changing its own behavior halfway through a user task.
+
+Core components
+
+1. Runtime agent
+
+Every application should execute tasks through a common runtime wrapper:
+
+python
+result = await improvement_runtime.run(
+    project="hunterxjob",
+    task_type="job_application",
+    input_payload=payload,
+    agent_version="champion",
+)
+
+
+The runtime should automatically create:
+
+• run_id
+• trace_id
+• project
+• task_type
+• agent_version
+• input and output hashes
+• model calls
+• tool calls
+• tool arguments
+• tool results
+• errors and retries
+• latency and cost
+• generated artifacts
+• user feedback
+• final success or failure state
+
+Use a standardized trace format such as OpenTelemetry-style spans. Current GenAI conventions model agents, tasks, actions, artifacts, teams, and memory as related observability objects, which fits your multi-project architecture well. [3][4]
+
+A trace should look conceptually like this:
+
+json
+{
+  "run_id": "run_01",
+  "project": "hunterxjob",
+  "task_type": "submit_application",
+  "agent_version": "hunterxjob-v14",
+  "status": "failed",
+  "input": {
+    "job_url": "https://example.com/job/123"
+  },
+  "spans": [
+    {
+      "type": "llm",
+      "purpose": "extract_job_fields",
+      "input_hash": "sha256:...",
+      "output": {
+        "company": "Example Corp",
+        "required_skills": ["Python", "PostgreSQL"]
+      }
+    },
+    {
+      "type": "tool",
+      "name": "fill_form",
+      "arguments": {
+        "field": "years_experience",
+        "value": "5"
+      },
+      "result": {
+        "status": "validation_error",
+        "message": "Expected numeric value"
+      }
+    }
+  ],
+  "final_output": null,
+  "failure_code": "FORM_VALIDATION_ERROR"
+}
+
+
+Never store passwords, private API keys, complete phone recordings, or unnecessary personal information in traces. Redact sensitive values before persistence.
+
+2. Run and artifact store
+
+For your cost-conscious deployment style, begin with PostgreSQL plus object storage rather than introducing a large distributed platform.
+
+PostgreSQL tables
+
+sql
+CREATE TABLE agent_versions (
+    id UUID PRIMARY KEY,
+    project TEXT NOT NULL,
+    version TEXT NOT NULL,
+    git_commit TEXT,
+    prompt_hash TEXT,
+    config_hash TEXT,
+    status TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(project, version)
+);
+
+CREATE TABLE runs (
+    id UUID PRIMARY KEY,
+    project TEXT NOT NULL,
+    task_type TEXT NOT NULL,
+    agent_version TEXT NOT NULL,
+    status TEXT NOT NULL,
+    input_hash TEXT,
+    output_hash TEXT,
+    cost_cents NUMERIC,
+    latency_ms INTEGER,
+    failure_code TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE traces (
+    id UUID PRIMARY KEY,
+    run_id UUID REFERENCES runs(id),
+    parent_id UUID,
+    span_type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    input_json JSONB,
+    output_json JSONB,
+    error_json JSONB,
+    started_at TIMESTAMPTZ,
+    ended_at TIMESTAMPTZ
+);
+
+CREATE TABLE grades (
+    id UUID PRIMARY KEY,
+    run_id UUID REFERENCES runs(id),
+    grader_name TEXT NOT NULL,
+    score NUMERIC NOT NULL,
+    passed BOOLEAN NOT NULL,
+    reasoning TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE defects (
+    id UUID PRIMARY KEY,
+    project TEXT NOT NULL,
+    failure_cluster TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    evidence_run_ids UUID[],
+    root_cause TEXT,
+    proposed_fix JSONB,
+    status TEXT NOT NULL DEFAULT 'open'
+);
+
+CREATE TABLE evaluations (
+    id UUID PRIMARY KEY,
+    project TEXT NOT NULL,
+    dataset_version TEXT NOT NULL,
+    candidate_version TEXT NOT NULL,
+    champion_version TEXT NOT NULL,
+    score NUMERIC NOT NULL,
+    regression_count INTEGER NOT NULL,
+    guardrails_passed BOOLEAN NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE promotions (
+    id UUID PRIMARY KEY,
+    project TEXT NOT NULL,
+    previous_version TEXT,
+    promoted_version TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    score_delta NUMERIC,
+    reviewer TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+
+Store large artifacts—screenshots, audio, PDFs, images, videos, browser snapshots, and generated patches—in object storage. Keep only their hashes and locations in PostgreSQL.
+
+3. Failure taxonomy
+
+The system cannot improve reliably if every error is just “something went wrong.” Define a controlled taxonomy.
+
+text
+MODEL:
+  hallucination
+  unsupported_claim
+  bad_format
+  incomplete_answer
+  inconsist
+
+
+the right way is not to let the system freely rewrite itself in production. The practical approach is to build a controlled improvement loop: observe each run, detect failures, score them with evals, propose changes, test those changes in a sandbox, promote only the versions that beat the baseline, and keep rollback/human approval for risky changes. [1][2]
+
+Core pattern
+
+What you want is usually called a closed-loop agent improvement system or self-evolving agent workflow, where traces, structured feedback, and repeatable evals drive better prompts, tool logic, routing, and sometimes code changes over time. [1][3]
+
+The key design rule is this: every attempt should generate a run record, that run should be graded, the failure should be turned into a concrete fix candidate, and the candidate should only ship if it wins against the current version on a stable test set. [1][2]
+
+Safe architecture
+
+Use this 8-stage loop for all your products.
+
+1. Run the task with full tracing, including inputs, outputs, tool calls, latency, errors, retries, and final result. [1]
+2. Classify failures, for example wrong answer, bad tool choice, timeout, hallucination, invalid form submission, unsafe action, UI breakage, or poor user experience. [4]
+3. Score each run with evals, using deterministic checks where possible and LLM-as-judge only where needed. [2][5]
+4. Extract a patch candidate, such as prompt update, selector threshold change, workflow branch fix, retrieval tweak, or code diff. [3]
+5. Test the patch in a sandbox against regression suites plus recent failed cases. [2][5]
+6. Promote only if metrics improve and guardrails still pass. [6]
+7. Version everything, including prompts, tool schemas, policies, datasets, and code. [1]
+8. Keep rollback and human escalation when confidence is low or the retry budget is exhausted. [3][7]
+
+Do not start with fully autonomous code rewriting across the whole stack. Multi-agent and self-modifying systems add nondeterminism and complexity, so they should be introduced only when evals show a simpler architecture is no longer enough. [7][2]
+
+Self-rewrite boundaries
+
+You should separate what the system may change automatically from what must require approval. [7]
+
+
+Auto-change allowed
+Approval required
+
+Prompts, tool descriptions, routing rules, retry strategy, ranking weights, non-critical UI text [3]
+Payment logic, auth, permissions, data deletion, browser automation on live accounts, code touching security or compliance paths [6][7]
+
+Test generation, failure clustering, draft code patches, config tuning [2]
+Production DB migrations, secret handling, external side effects, anything with legal or safety risk [6][4]
+
+
+
+A strong rule for your stack is: let the system author code, but require a gated pipeline to execute, test, compare, and approve it before merge or deployment. That preserves constant learning without turning production into a live experiment.
+
+Apply to your apps
+
+For your projects, I would not build one giant self-improving brain first. Based on your preference for pragmatic, robust, fail-closed systems and avoiding unnecessary rewrites, the better path is one shared improvement platform with per-product evals and guardrails. [8][9][10]
+
+HunterXJob
+
+Treat it as a browser automation and decision-quality system. Log every page visited, field extracted, form fill, rejection reason, anti-bot event, and successful submission; then grade runs on extraction accuracy, form validity, duplicate avoidance, and submit success rate. [1]
+
+Auto-improvements here should focus on selector repair, form-mapping rules, resume-answer consistency, and retry strategy, while live submission actions should stay gated because wrong actions can damage accounts or send bad applications. [6][4]
+
+Allo / virtual GF
+
+Treat it as a real-time conversation quality loop. Capture interruption timing, latency, turn-taking, speech naturalness feedback, reconnection quality, and persona consistency, then optimize prompts, buffering, barge-in logic, memory policy, and voice settings rather than letting it rewrite core telephony logic freely. [10]
+
+This matches your earlier Allo direction: improve realism through audio pipeline behavior, interruption handling, and session recovery before broader architecture changes. [10]
+
+Fidelis
+
+Fidelis is already well suited for this style because it emphasizes provenance, validation, and trustworthy outputs. Use failed cases to learn which restoration profile, model family, tile strategy, or artifact detector works best by content type, but keep fail-closed checks so the system never silently promotes hallucinated or over-sharpened output. [9][11]
+
+A good loop here is: image in, multi-profile candidates, score with regional metrics plus artifact detectors, compare against benchmark set, then promote the winning profile or model only if it beats the baseline across the held-out suite. [9][2]
+
+Pedit
+
+Treat it as a precision transformation system. Track whether edits preserved layout, text positions, fonts, tables, metadata, OCR alignment, and export correctness, and use those failures to improve operation planners and patch generators. [5]
+
+Auto-writing code is acceptable here mainly for parser adapters, layout heuristics, and test fixtures, but file corruption paths should require approval because users expect exactness. [6]
+
+Agent Gang
+
+Start with a single orchestrator plus a few specialist tools, not a swarm first. The guidance is clear that multi-agent designs increase handoff errors and should be justified by evals rather than assumed up front. [7][2]
+
+For Agent Gang, the learning loop should score tool choice, argument correctness, task completion, and unnecessary handoffs; only split into more agents after the eval data proves one agent can no longer manage the task surface well. [4]
+
+Minimal build plan
+
+Build this in phases. [2]
+
+Phase 1
+• Unified run logger.
+• Trace viewer.
+• Failure taxonomy.
+• Per-project eval datasets with 20 to 100 must-pass cases.
+• Version registry for prompts, configs, and code candidates. [1][5]
+
+Phase 2
+• Auto-grading pipeline, deterministic first, model-graded second.
+• Failure clustering and root-cause extraction.
+• Patch generator that proposes prompt edits, configs, or code diffs.
+• Sandbox runner that executes candidate versions on the regression suite. [3][2]
+
+Phase 3
+• Champion/challenger deployment.
+• Canary releases.
+• Automatic rollback on metric regression.
+• Human review queue for high-risk diffs. [6][7]
+
+Practical stack
+
+A clean implementation for your ecosystem would look like this.
+
+• Event bus: every app emits run events.
+• Observability store: traces, artifacts, screenshots, outputs, and errors.
+• Eval service: pass/fail graders, scorecards, and regression suites.
+• Improvement engine: failure clustering, patch proposals, prompt optimizer, code diff generator.
+• Sandbox CI: runs unit, integration, browser, and task-level evals.
+• Promotion service: compares candidate vs baseline and handles rollback.
+• Policy layer: defines what each project may auto-change. [1][6][2]
+
+A simple decision formula is useful:
+
+
+That formula should be enforced automatically, not left to the model’s own judgment. [2]
+
+Biggest mistake
+
+The biggest mistake is trying to build “an AI that improves itself” before building measurement. The sources consistently stress eval-driven development, continuous evaluation, logging, and human calibration; without that, self-improvement becomes self-randomization. [2][12]
+
+For my projects, the best first deliverable is a shared “Autonomous Improvement Kernel” used by HunterXJob, Allo, Fidelis, Pedit, and Agent Gang: run tracing, failure labeling, eval scoring, candidate patching, sandbox validation, and gated promotion. That gets you constant learning while staying aligned with your preference for cost-effective, robust, production-grade systems. [8][9][10]
+
+buil build a self improving agent, architectural blueprint traces LLM as a judge feedback loop automated. Error correction and c I c d aval harnesses that would continuously self improve itself based on its experience and past trials and reports. Some sort of a closed loop agent improvement system and self evolving agent workflow
+
+A closed-loop self-improving agent is a gated flywheel: traces show what happened, graders and an LLM-as-judge say what failed, a metaprompt or patch writer proposes a new harness, and CI only promotes the candidate if it beats the current baseline on a frozen eval suite. [1][2][3]
+
+Blueprint
+
+The production pattern used in current agent cookbooks is not “the model rewrites itself live.” It is traces plus human and model feedback, turned into reusable evals, then into harness changes (instructions, tools, routing, output contracts, validation checks) that a coding agent implements and a validation gate accepts or rejects. [1][2]
+
+text
+Task run
+  -> trace (spans: model, tools, handoffs, guardrails)
+  -> deterministic graders + LLM-as-judge
+  -> failure cluster + diagnosis
+  -> candidate harness (prompt / policy / tool schema / code diff)
+  -> sandbox eval CI
+  -> champion vs challenger
+  -> promote only if score rises AND guardrails pass
+  -> else rollback and escalate
+
+
+OpenAI’s improvement loop closes exactly this cycle: new traces, human and model feedback, generated evals, diagnosis, implementation, validation, and deployment all feed the next cycle. A heartbeat worker can pick up handoff artifacts and start the next implementation pass. [1]
+
+The self-evolving retraining loop is the same idea at prompt level: baseline agent, human or LLM-as-judge feedback, evals and an aggregated score, then replace the baseline only after the score clears a threshold (example targets around 0.8) or stop after a retry cap and alert a human. [2]
+
+Runtime contract
+
+Treat the harness as the versioned object that evolves, not the raw model weights. A harness includes instructions, tool policy, routing, required artifacts, and validation checks. [1]
+
+
+Object
+What it stores
+Why it matters
+
+Trace
+End-to-end model calls, tool calls, guardrails, handoffs
+Locates the failing step, not just the bad final answer [4][3]
+
+Grade
+Structured score or label on a trace
+Makes regressions comparable across changes [3]
+
+Eval dataset
+Frozen inputs plus expected behavior
+Benchmarks prompts and workflows over time [4]
+
+Candidate
+New prompt, policy, or code diff
+The thing CI actually tests [1][2]
+
+Promotion record
+Score, guardrail result, version
+Enables rollback when a later version regresses [2]
+
+
+
+A trace is the full run record. Trace grading assigns scores so you can see whether the agent chose the wrong tool, skipped a check, or only failed at the final answer. Once the failure mode is clear, move from one-off trace inspection to datasets and repeatable eval runs. [4][3]
+
+Judge design
+
+Do not use the LLM-as-judge as the only signal. The reliable pattern mixes cheap deterministic graders with one rubric judge. [2]
+
+• Deterministic graders catch exact failures: required files exist, schema is valid, chemical names are preserved, length is in band, citations point at real files. [2][1]
+• Similarity or coverage checks catch drift away from source material. [2]
+• The LLM-as-judge scores nuance the rules miss, using a fixed rubric and a numeric range such as 0 to 1 with an explicit pass threshold. [2]
+• Aggregate with a simple rule, for example average score and a pass ratio. One published loop treats a candidate as a lenient pass if at least 75% of graders pass or the average is at least 0.85, then keeps the version with the best cumulative score. [2]
+
+Calibrate the judge against a small human-labeled set before you trust it in CI. Online scoring (latency, cost, user thumbs, near-real-time judge) is for monitoring; offline datasets are for promotion decisions. [5][4]
+
+Error correction loop
+
+Each failed run should become a structured defect, not a free-text complaint.
+
+1. Capture the trace, final artifacts, and any user signal. [1][5]
+2. Run graders. Parse per-grader score, pass/fail, and reasoning. [2]
+3. Cluster repeated failures across traces (wrong tool, missing citation, policy miss, bad handoff). Macro-evals exist specifically to find recurring patterns in multi-agent runs. [6]
+4. Feed the original harness, the bad output, and the grader reasoning into a metaprompt agent whose only job is to write a stricter next harness. [2]
+5. Re-run the full eval set, not the single failed example. [4][2]
+6. Keep the best aggregate scorer. If retries hit the cap, stop and page a human. [2]
+
+The metaprompt itself should stay relatively static. Version the task harness; do not let the optimizer rewrite its own instructions every cycle. [2]
+
+CI/CD eval harness
+
+Promotion belongs in CI, not inside the live agent process. [1]
+
+text
+on candidate harness:
+  checkout candidate version
+  run unit + contract tests
+  run frozen regression dataset
+  run recent failure replay set
+  run trace graders + LLM judge
+  compare vs champion on the same items
+  block merge if score drops, guardrail fails, or variance is too high
+  canary 5-10% of traffic
+  auto-rollback on online score drop
+
+
+A practical starting point is a reviewed loop: the system writes a handoff (diagnosis, ranked changes, evidence, implementation notes) and a developer approves the diff. As the eval gate earns trust, the same artifact can open and merge pull requests automatically. [1]
+
+Minimum gates before any auto-merge:
+
+• Frozen golden set that never gets overwritten by the optimizer.
+• Replay set of the last N production failures.
+• Contract tests for tools, schemas, and side effects.
+• Score must beat champion, not merely pass a lenient bar. [2][1]
+• Risk policy: prompts and tool descriptions may auto-promote; auth, payments, live submissions, and destructive actions stay human-gated.
+
+Minimal services
+
+text
+improvement-kernel/
+  runtime/          # agent runner, span exporter
+  traces/           # JSONL or OTel store
+  graders/          # python checks + judge rubric
+  evals/            # datasets, run records, scores
+  optimizer/        # metaprompt + optional code agent
+  harness/          # versioned prompts, tool policy, contracts
+  ci/               # champion-challenger gate
+  policy/           # what may auto-change per product
+
+
+State you must persist:
+
+• harness_versions: prompt, model, tool policy, status (candidate | champion | rolled_back). [2][1]
+• runs: input, output, trace id, harness version, latency, cost.
+• grades: grader name, score, passed, reasoning. [2]
+• defects: clustered failure, evidence trace ids, proposed fix.
+• promotions: old version, new version, delta score, approver or auto-gate result.
+
+Promotion rule:
+
+
+Ties should keep the current champion. That prevents noisy judges from churning production. [2]
+
+What not to automate first
+
+Start with one agent, one harness, and trace grading. Multi-agent systems need extra evals for tool choice, delegation, and review pauses; add specialists only after the single-agent evals show a real routing problem. [6][4]
+
+Also keep the optimizer outside the request path. The live agent should execute the promoted harness. A separate worker should grade, propose, test, and promote. That is the difference between a self-evolving workflow and a system that mutates itself mid-task and cannot be rolled back. [1][2]
+
+Core pattern
+
+What you want is usually called a closed-loop agent improvement system or self-evolving agent workflow, where traces, structured feedback, and repeatable evals drive better prompts, tool logic, routing, and sometimes code changes over time. [1][3]
+
+The key design rule is this: every attempt should generate a run record, that run should be graded, the failure should be turned into a concrete fix candidate, and the candidate should only ship if it wins against the current version on a stable test set. [1][2]
+
+Safe architecture
+
+Use this 8-stage loop for all your products.
+
+1. Run the task with full tracing, including inputs, outputs, tool calls, latency, errors, retries, and final result. [1]
+2. Classify failures, for example wrong answer, bad tool choice, timeout, hallucination, invalid form submission, unsafe action, UI breakage, or poor user experience. [4]
+3. Score each run with evals, using deterministic checks where possible and LLM-as-judge only where needed. [2][5]
+4. Extract a patch candidate, such as prompt update, selector threshold change, workflow branch fix, retrieval tweak, or code diff. [3]
+5. Test the patch in a sandbox against regression suites plus recent failed cases. [2][5]
+6. Promote only if metrics improve and guardrails still pass. [6]
+7. Version everything, including prompts, tool schemas, policies, datasets, and code. [1]
+8. Keep rollback and human escalation when confidence is low or the retry budget is exhausted. [3][7]
+
+Do not start with fully autonomous code rewriting across the whole stack. Multi-agent and self-modifying systems add nondeterminism and complexity, so they should be introduced only when evals show a simpler architecture is no longer enough. [7][2]
+
+Self-rewrite boundaries
+
+You should separate what the system may change automatically from what must require approval. [7]
+
+
+Auto-change allowed
+Approval required
+
+Prompts, tool descriptions, routing rules, retry strategy, ranking weights, non-critical UI text [3]
+Payment logic, auth, permissions, data deletion, browser automation on live accounts, code touching security or compliance paths [6][7]
+
+Test generation, failure clustering, draft code patches, config tuning [2]
+Production DB migrations, secret handling, external side effects, anything with legal or safety risk [6][4]
+
+
+
+A strong rule for your stack is: let the system author code, but require a gated pipeline to execute, test, compare, and approve it before merge or deployment. That preserves constant learning without turning production into a live experiment.
+
+Apply to your apps
+
+For your projects, I would not build one giant self-improving brain first. Based on your preference for pragmatic, robust, fail-closed systems and avoiding unnecessary rewrites, the better path is one shared improvement platform with per-product evals and guardrails. [8][9][10]
+
+HunterXJob
+
+Treat it as a browser automation and decision-quality system. Log every page visited, field extracted, form fill, rejection reason, anti-bot event, and successful submission; then grade runs on extraction accuracy, form validity, duplicate avoidance, and submit success rate. [1]
+
+Auto-improvements here should focus on selector repair, form-mapping rules, resume-answer consistency, and retry strategy, while live submission actions should stay gated because wrong actions can damage accounts or send bad applications. [6][4]
+
+Allo / virtual GF
+
+Treat it as a real-time conversation quality loop. Capture interruption timing, latency, turn-taking, speech naturalness feedback, reconnection quality, and persona consistency, then optimize prompts, buffering, barge-in logic, memory policy, and voice settings rather than letting it rewrite core telephony logic freely. [10]
+
+This matches your earlier Allo direction: improve realism through audio pipeline behavior, interruption handling, and session recovery before broader architecture changes. [10]
+
+Fidelis
+
+Fidelis is already well suited for this style because it emphasizes provenance, validation, and trustworthy outputs. Use failed cases to learn which restoration profile, model family, tile strategy, or artifact detector works best by content type, but keep fail-closed checks so the system never silently promotes hallucinated or over-sharpened output. [9][11]
+
+A good loop here is: image in, multi-profile candidates, score with regional metrics plus artifact detectors, compare against benchmark set, then promote the winning profile or model only if it beats the baseline across the held-out suite. [9][2]
+
+Pedit
+
+Treat it as a precision transformation system. Track whether edits preserved layout, text positions, fonts, tables, metadata, OCR alignment, and export correctness, and use those failures to improve operation planners and patch generators. [5]
+
+Auto-writing code is acceptable here mainly for parser adapters, layout heuristics, and test fixtures, but file corruption paths should require approval because users expect exactness. [6]
+
+Agent Gang
+
+Start with a single orchestrator plus a few specialist tools, not a swarm first. The guidance is clear that multi-agent designs increase handoff errors and should be justified by evals rather than assumed up front. [7][2]
+
+For Agent Gang, the learning loop should score tool choice, argument correctness, task completion, and unnecessary handoffs; only split into more agents after the eval data proves one agent can no longer manage the task surface well. [4]
+
+Minimal build plan
+
+Build this in phases. [2]
+
+Phase 1
+• Unified run logger.
+• Trace viewer.
+• Failure taxonomy.
+• Per-project eval datasets with 20 to 100 must-pass cases.
+• Version registry for prompts, configs, and code candidates. [1][5]
+
+Phase 2
+• Auto-grading pipeline, deterministic first, model-graded second.
+• Failure clustering and root-cause extraction.
+• Patch generator that proposes prompt edits, configs, or code diffs.
+• Sandbox runner that executes candidate versions on the regression suite. [3][2]
+
+Phase 3
+• Champion/challenger deployment.
+• Canary releases.
+• Automatic rollback on metric regression.
+• Human review queue for high-risk diffs. [6][7]
+
+Practical stack
+
+A clean implementation for your ecosystem would look like this.
+
+• Event bus: every app emits run events.
+• Observability store: traces, artifacts, screenshots, outputs, and errors.
+• Eval service: pass/fail graders, scorecards, and regression suites.
+• Improvement engine: failure clustering, patch proposals, prompt optimizer, code diff generator.
+• Sandbox CI: runs unit, integration, browser, and task-level evals.
+• Promotion service: compares candidate vs baseline and handles rollback.
+• Policy layer: defines what each project may auto-change. [1][6][2]
+
+A simple decision formula is useful:
+
+
+That formula should be enforced automatically, not left to the model’s own judgment. [2]
+
+Biggest mistake
+
+The biggest mistake is trying to build “an AI that improves itself” before building measurement. The sources consistently stress eval-driven development, continuous evaluation, logging, and human calibration; without that, self-improvement becomes self-randomization. [2][12]
+
+For my projects, the best first deliverable is a shared “Autonomous Improvement Kernel” used by HunterXJob, Allo, Fidelis, Pedit, and Agent Gang: run tracing, failure labeling, eval scoring, candidate patching, sandbox validation, and gated promotion. That gets you constant learning while staying aligned with your preference for cost-effective, robust, production-grade systems. [8][9][10]
+
+buil build a self improving agent, architectural blueprint traces LLM as a judge feedback loop automated. Error correction and c I c d aval harnesses that would continuously self improve itself based on its experience and past trials and reports. Some sort of a closed loop agent improvement system and self evolving agent workflow
+
+A closed-loop self-improving agent is a gated flywheel: traces show what happened, graders and an LLM-as-judge say what failed, a metaprompt or patch writer proposes a new harness, and CI only promotes the candidate if it beats the current baseline on a frozen eval suite. [1][2][3]
+
+Blueprint
+
+The production pattern used in current agent cookbooks is not “the model rewrites itself live.” It is traces plus human and model feedback, turned into reusable evals, then into harness changes (instructions, tools, routing, output contracts, validation checks) that a coding agent implements and a validation gate accepts or rejects. [1][2]
+
+text
+Task run
+  -> trace (spans: model, tools, handoffs, guardrails)
+  -> deterministic graders + LLM-as-judge
+  -> failure cluster + diagnosis
+  -> candidate harness (prompt / policy / tool schema / code diff)
+  -> sandbox eval CI
+  -> champion vs challenger
+  -> promote only if score rises AND guardrails pass
+  -> else rollback and escalate
+
+
+OpenAI’s improvement loop closes exactly this cycle: new traces, human and model feedback, generated evals, diagnosis, implementation, validation, and deployment all feed the next cycle. A heartbeat worker can pick up handoff artifacts and start the next implementation pass. [1]
+
+The self-evolving retraining loop is the same idea at prompt level: baseline agent, human or LLM-as-judge feedback, evals and an aggregated score, then replace the baseline only after the score clears a threshold (example targets around 0.8) or stop after a retry cap and alert a human. [2]
+
+Runtime contract
+
+Treat the harness as the versioned object that evolves, not the raw model weights. A harness includes instructions, tool policy, routing, required artifacts, and validation checks. [1]
+
+
+Object
+What it stores
+Why it matters
+
+Trace
+End-to-end model calls, tool calls, guardrails, handoffs
+Locates the failing step, not just the bad final answer [4][3]
+
+Grade
+Structured score or label on a trace
+Makes regressions comparable across changes [3]
+
+Eval dataset
+Frozen inputs plus expected behavior
+Benchmarks prompts and workflows over time [4]
+
+Candidate
+New prompt, policy, or code diff
+The thing CI actually tests [1][2]
+
+Promotion record
+Score, guardrail result, version
+Enables rollback when a later version regresses [2]
+
+
+
+A trace is the full run record. Trace grading assigns scores so you can see whether the agent chose the wrong tool, skipped a check, or only failed at the final answer. Once the failure mode is clear, move from one-off trace inspection to datasets and repeatable eval runs. [4][3]
+
+Judge design
+
+Do not use the LLM-as-judge as the only signal. The reliable pattern mixes cheap deterministic graders with one rubric judge. [2]
+
+• Deterministic graders catch exact failures: required files exist, schema is valid, chemical names are preserved, length is in band, citations point at real files. [2][1]
+• Similarity or coverage checks catch drift away from source material. [2]
+• The LLM-as-judge scores nuance the rules miss, using a fixed rubric and a numeric range such as 0 to 1 with an explicit pass threshold. [2]
+• Aggregate with a simple rule, for example average score and a pass ratio. One published loop treats a candidate as a lenient pass if at least 75% of graders pass or the average is at least 0.85, then keeps the version with the best cumulative score. [2]
+
+Calibrate the judge against a small human-labeled set before you trust it in CI. Online scoring (latency, cost, user thumbs, near-real-time judge) is for monitoring; offline datasets are for promotion decisions. [5][4]
+
+Error correction loop
+
+Each failed run should become a structured defect, not a free-text complaint.
+
+1. Capture the trace, final artifacts, and any user signal. [1][5]
+2. Run graders. Parse per-grader score, pass/fail, and reasoning. [2]
+3. Cluster repeated failures across traces (wrong tool, missing citation, policy miss, bad handoff). Macro-evals exist specifically to find recurring patterns in multi-agent runs. [6]
+4. Feed the original harness, the bad output, and the grader reasoning into a metaprompt agent whose only job is to write a stricter next harness. [2]
+5. Re-run the full eval set, not the single failed example. [4][2]
+6. Keep the best aggregate scorer. If retries hit the cap, stop and page a human. [2]
+
+The metaprompt itself should stay relatively static. Version the task harness; do not let the optimizer rewrite its own instructions every cycle. [2]
+
+CI/CD eval harness
+
+Promotion belongs in CI, not inside the live agent process. [1]
+
+text
+on candidate harness:
+  checkout candidate version
+  run unit + contract tests
+  run frozen regression dataset
+  run recent failure replay set
+  run trace graders + LLM judge
+  compare vs champion on the same items
+  block merge if score drops, guardrail fails, or variance is too high
+  canary 5-10% of traffic
+  auto-rollback on online score drop
+
+
+A practical starting point is a reviewed loop: the system writes a handoff (diagnosis, ranked changes, evidence, implementation notes) and a developer approves the diff. As the eval gate earns trust, the same artifact can open and merge pull requests automatically. [1]
+
+Minimum gates before any auto-merge:
+
+• Frozen golden set that never gets overwritten by the optimizer.
+• Replay set of the last N production failures.
+• Contract tests for tools, schemas, and side effects.
+• Score must beat champion, not merely pass a lenient bar. [2][1]
+• Risk policy: prompts and tool descriptions may auto-promote; auth, payments, live submissions, and destructive actions stay human-gated.
+
+Minimal services
+
+text
+improvement-kernel/
+  runtime/          # agent runner, span exporter
+  traces/           # JSONL or OTel store
+  graders/          # python checks + judge rubric
+  evals/            # datasets, run records, scores
+  optimizer/        # metaprompt + optional code agent
+  harness/          # versioned prompts, tool policy, contracts
+  ci/               # champion-challenger gate
+  policy/           # what may auto-change per product
+
+
+State you must persist:
+
+• harness_versions: prompt, model, tool policy, status (candidate | champion | rolled_back). [2][1]
+• runs: input, output, trace id, harness version, latency, cost.
+• grades: grader name, score, passed, reasoning. [2]
+• defects: clustered failure, evidence trace ids, proposed fix.
+• promotions: old version, new version, delta score, approver or auto-gate result.
+
+Promotion rule:
+
+
+Ties should keep the current champion. That prevents noisy judges from churning production. [2]
+
+What not to automate first
+
+Start with one agent, one harness, and trace grading. Multi-agent systems need extra evals for tool choice, delegation, and review pauses; add specialists only after the single-agent evals show a real routing problem. [6][4]
+
+Also keep the optimizer outside the request path. The live agent should execute the promoted harness. A separate worker should grade, propose, test, and promote. That is the difference between a self-evolving workflow and a system that mutates itself mid-task and cannot be rolled back. [1][2]
+
+You can build this, but the correct target is a self-improving software system, not unrestricted self-rewriting code. The system should continuously learn from attempts, but every change must pass traces, deterministic tests, LLM judging, regression evals, security gates, and rollback rules before deployment. Trace grading is specifically designed to score end-to-end agent traces—including model calls, tool calls, guardrails, and handoffs—and identify workflow-level failures. [1][2]
+
+What you are building
+
+Your shared platform should be an Autonomous Improvement Kernel used by HunterXJob, Allo, Fidelis, Pedit, and Agent Gang.
+
+text
+Live application
+
+      |
+      v
+Trace collector
+
+      |
+      v
+Run database + artifacts
+
+      |
+      v
+Deterministic validators + LLM judge
+
+      |
+      v
+Failure analyzer / clustering
+
+      |
+      v
+Improvement planner
+
+      |
+      v
+Prompt/config/code candidate
+
+      |
+      v
+Sandbox + CI/CD evaluation
+
+      |
+      v
+Champion-versus-challenger comparison
+
+      |
+      +--> reject and record failure
+
+      |
+      v
+Canary deployment + monitoring
+
+      |
+      v
+Promote or automatically rollback
+
+
+The important distinction is that the live application executes the current champion version while a separate improvement worker studies past runs and creates challengers. This prevents the agent from changing its own behavior halfway through a user task.
+
+Core components
+
+1. Runtime agent
+
+Every application should execute tasks through a common runtime wrapper:
+
+python
+result = await improvement_runtime.run(
+    project="hunterxjob",
+    task_type="job_application",
+    input_payload=payload,
+    agent_version="champion",
+)
+
+
+The runtime should automatically create:
+
+• run_id
+• trace_id
+• project
+• task_type
+• agent_version
+• input and output hashes
+• model calls
+• tool calls
+• tool arguments
+• tool results
+• errors and retries
+• latency and cost
+• generated artifacts
+• user feedback
+• final success or failure state
+
+Use a standardized trace format such as OpenTelemetry-style spans. Current GenAI conventions model agents, tasks, actions, artifacts, teams, and memory as related observability objects, which fits your multi-project architecture well. [3][4]
+
+A trace should look conceptually like this:
+
+json
+{
+  "run_id": "run_01",
+  "project": "hunterxjob",
+  "task_type": "submit_application",
+  "agent_version": "hunterxjob-v14",
+  "status": "failed",
+  "input": {
+    "job_url": "https://example.com/job/123"
+  },
+  "spans": [
+    {
+      "type": "llm",
+      "purpose": "extract_job_fields",
+      "input_hash": "sha256:...",
+      "output": {
+        "company": "Example Corp",
+        "required_skills": ["Python", "PostgreSQL"]
+      }
+    },
+    {
+      "type": "tool",
+      "name": "fill_form",
+      "arguments": {
+        "field": "years_experience",
+        "value": "5"
+      },
+      "result": {
+        "status": "validation_error",
+        "message": "Expected numeric value"
+      }
+    }
+  ],
+  "final_output": null,
+  "failure_code": "FORM_VALIDATION_ERROR"
+}
+
+
+Never store passwords, private API keys, complete phone recordings, or unnecessary personal information in traces. Redact sensitive values before persistence.
+
+2. Run and artifact store
+
+For your cost-conscious deployment style, begin with PostgreSQL plus object storage rather than introducing a large distributed platform.
+
+PostgreSQL tables
+
+sql
+CREATE TABLE agent_versions (
+    id UUID PRIMARY KEY,
+    project TEXT NOT NULL,
+    version TEXT NOT NULL,
+    git_commit TEXT,
+    prompt_hash TEXT,
+    config_hash TEXT,
+    status TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(project, version)
+);
+
+CREATE TABLE runs (
+    id UUID PRIMARY KEY,
+    project TEXT NOT NULL,
+    task_type TEXT NOT NULL,
+    agent_version TEXT NOT NULL,
+    status TEXT NOT NULL,
+    input_hash TEXT,
+    output_hash TEXT,
+    cost_cents NUMERIC,
+    latency_ms INTEGER,
+    failure_code TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE traces (
+    id UUID PRIMARY KEY,
+    run_id UUID REFERENCES runs(id),
+    parent_id UUID,
+    span_type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    input_json JSONB,
+    output_json JSONB,
+    error_json JSONB,
+    started_at TIMESTAMPTZ,
+    ended_at TIMESTAMPTZ
+);
+
+CREATE TABLE grades (
+    id UUID PRIMARY KEY,
+    run_id UUID REFERENCES runs(id),
+    grader_name TEXT NOT NULL,
+    score NUMERIC NOT NULL,
+    passed BOOLEAN NOT NULL,
+    reasoning TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE defects (
+    id UUID PRIMARY KEY,
+    project TEXT NOT NULL,
+    failure_cluster TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    evidence_run_ids UUID[],
+    root_cause TEXT,
+    proposed_fix JSONB,
+    status TEXT NOT NULL DEFAULT 'open'
+);
+
+CREATE TABLE evaluations (
+    id UUID PRIMARY KEY,
+    project TEXT NOT NULL,
+    dataset_version TEXT NOT NULL,
+    candidate_version TEXT NOT NULL,
+    champion_version TEXT NOT NULL,
+    score NUMERIC NOT NULL,
+    regression_count INTEGER NOT NULL,
+    guardrails_passed BOOLEAN NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE promotions (
+    id UUID PRIMARY KEY,
+    project TEXT NOT NULL,
+    previous_version TEXT,
+    promoted_version TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    score_delta NUMERIC,
+    reviewer TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+
+Store large artifacts—screenshots, audio, PDFs, images, videos, browser snapshots, and generated patches—in object storage. Keep only their hashes and locations in PostgreSQL.
+
+3. Failure taxonomy
+
+The system cannot improve reliably if every error is just “something went wrong.” Define a controlled taxonomy.
+
+text
+MODEL:
+  hallucination
+  unsupported_claim
+  bad_format
+  incomplete_answer
+  inconsiste
+
+## Best plan
+
+The best plan for your goal is:
+
+> **Build one shared Autonomous Improvement Kernel, begin with Fidelis, prove the learning loop offline, then connect Pedit, Allo, HunterXJob, and Agent Gang through project adapters.**
+
+Do not begin by letting one large agent rewrite all five projects. Begin with a controlled **champion–challenger system**: the current version is the champion; the improvement system creates challengers, evaluates them, and promotes only candidates that measurably outperform the champion without violating safety rules. This follows the trace-and-evaluation pattern used for agent improvement: capture behavior, grade traces, convert failures into evals, propose harness changes, and validate them before deployment. [1][2][3]
+
+## Why this order is best
+
+| Order | Project | Why |
+|---|---|---|
+| 1 | Fidelis | Offline evaluation, reproducible inputs, strong quality metrics, no external side effects |
+| 2 | Pedit | Offline evaluation with strict file-integrity and layout checks |
+| 3 | Allo | Real-time metrics, but privacy, voice, consent, and phone behavior need stronger controls |
+| 4 | Agent Gang | More complex because delegation and multi-agent handoffs create additional failure modes |
+| 5 | HunterXJob | Highest external-action risk because it can submit applications and interact with accounts |
+
+Fidelis should be your first proof of concept because you can run thousands of controlled experiments without sending applications, placing calls, or modifying user accounts. HunterXJob should initially remain in simulation and review mode.
+
+## What “learning” means
+
+Your system will not improve merely by storing previous conversations or errors. It improves only when it performs this complete cycle:
+
+```text
+experience
+→ trace
+→ evaluation
+→ failure diagnosis
+→ proposed fix
+→ new candidate version
+→ sandbox test
+→ comparison with champion
+→ promotion or rejection
+
+The agent can automatically generate code, but generated code is only a candidate until tests, evaluation suites, security checks, and risk policies approve it.
+Recommended architecture
+text
+┌──────────────────────────────┐
+│ Project adapters              │
+│ Fidelis, Pedit, Allo,         │
+│ HunterXJob, Agent Gang        │
+└───────────────┬──────────────┘
+                │
+                v
+┌──────────────────────────────┐
+│ Runtime and trace collector   │
+│ Inputs, outputs, tools, cost, │
+│ latency, errors, artifacts    │
+└───────────────┬──────────────┘
+                v
+┌──────────────────────────────┐
+│ Experience store              │
+│ PostgreSQL + object storage   │
+└───────────────┬──────────────┘
+                v
+┌──────────────────────────────┐
+│ Evaluation engine             │
+│ Rules + domain metrics +      │
+│ LLM-as-judge                  │
+└───────────────┬──────────────┘
+                v
+┌──────────────────────────────┐
+│ Failure analyzer              │
+│ Clustering, root cause,       │
+│ defect reports                │
+└───────────────┬──────────────┘
+                v
+┌──────────────────────────────┐
+│ Improvement planner           │
+│ Prompts, schemas, configs,    │
+│ tests, code patches           │
+└───────────────┬──────────────┘
+                v
+┌──────────────────────────────┐
+│ Sandbox and CI/CD             │
+│ Tests, security, regressions, │
+│ champion/challenger scoring   │
+└───────────────┬──────────────┘
+                v
+┌──────────────────────────────┐
+│ Promotion and rollback        │
+│ Staging, canary, production   │
+└──────────────────────────────┘
+
+The live project should execute only the current champion. The improvement worker should operate separately, study historical runs, create challengers, and submit them to the evaluation pipeline.
+Build the shared kernel
+Create:
+text
+autonomous-improvement-kernel/
+├── kernel/
+│   ├── runtime/
+│   ├── tracing/
+│   ├── grading/
+│   ├── defects/
+│   ├── optimizer/
+│   ├── evaluations/
+│   ├── sandbox/
+│   └── promotion/
+├── projects/
+│   ├── fidelis/
+│   ├── pedit/
+│   ├── allo/
+│   ├── hunterxjob/
+│   └── agent_gang/
+├── evals/
+│   ├── fidelis/
+│   ├── pedit/
+│   ├── allo/
+│   ├── hunterxjob/
+│   └── agent_gang/
+├── migrations/
+├── workers/
+├── dashboard/
+└── .github/workflows/
+
+The kernel provides common capabilities. Each project adapter provides its own tools, task types, graders, and risk policy.
+Runtime contract
+Every task should run through one wrapper:
+python
+result = await improvement_runtime.run(
+    project="fidelis",
+    task_type="restore_image",
+    input_payload={
+        "image_path": "input/photo.jpg",
+        "profile": "natural_restore",
+        "scale": 4
+    },
+    agent_version="fidelis-champion"
+)
+
+Each run should record:
+text
+run_id
+trace_id
+project
+task_type
+agent_version
+input hash
+output hash
+model calls
+tool calls
+tool arguments
+tool results
+errors
+retries
+latency
+cost
+artifacts
+grader results
+user feedback
+final status
+
+A trace should capture the complete workflow, including model calls, tool calls, guardrails, and handoffs, because the problem may occur in an intermediate decision rather than the final result. [1][3]
+Use three evaluation layers
+Deterministic graders
+Use regular code for exact requirements:
+python
+def grade_pdf(result):
+    return {
+        "opens": result.opens,
+        "page_count_ok": result.page_count_ok,
+        "text_extractable": result.text_extractable,
+        "visual_diff_ok": result.visual_diff &lt; 0.02,
+    }
+
+Examples:
+• PDF opens.
+• JSON matches schema.
+• Image dimensions are correct.
+• Required job fields exist.
+• No duplicate application exists.
+• Browser action returned confirmed success.
+• Audio latency is within budget.
+• No secrets appear in output.
+Domain graders
+Use specialized metrics for each product:
+
+Project
+Metrics
+
+Fidelis
+Source fidelity, artifact rate, texture preservation, face quality, model provenance
+
+Pedit
+Text accuracy, layout drift, font preservation, OCR stability, page integrity
+
+Allo
+Time to first audio, interruption quality, latency, reconnection, persona consistency
+
+HunterXJob
+Extraction accuracy, field validity, duplicate prevention, submission confirmation
+
+Agent Gang
+Tool correctness, task completion, handoff count, cost, latency
+
+
+LLM-as-judge
+Use a fixed rubric and require structured output:
+json
+{
+  "overall_score": 0.84,
+  "passed": true,
+  "criteria": {
+    "task_completion": 0.9,
+    "correctness": 0.8,
+    "evidence_grounding": 0.85,
+    "tool_use": 0.8,
+    "safety": 1.0
+  },
+  "failure_codes": [],
+  "root_cause": null,
+  "recommended_fix": null
+}
+
+The judge should see the task contract, trace summary, tool results, final output or artifact, and deterministic grader results. It should not be the only promotion authority; combine it with exact tests, regression evaluation, security checks, and risk policies. Trace grading is intended to benchmark agent changes and identify regressions across many traces. [3]
+Error-to-improvement workflow
+Implement this worker:
+python
+async def improvement_cycle(project: str):
+    failed_runs = await run_store.recent_failures(
+        project=project,
+        limit=100
+    )
+
+<br>
+
+    grades = await grading_service.grade_all(failed_runs)
+
+<br>
+
+    defect_clusters = await defect_service.cluster(
+        runs=failed_runs,
+        grades=grades
+    )
+
+<br>
+
+    for cluster in defect_clusters:
+        if cluster.severity in {"high", "critical"}:
+            await review_queue.create(cluster)
+            continue
+
+<br>
+
+        candidate = await optimizer.propose(
+            project=project,
+            champion=version_registry.champion(project),
+            defect_cluster=cluster,
+            evidence=cluster.evidence
+        )
+
+<br>
+
+        await candidate_store.save(candidate)
+        await evaluation_queue.enqueue(candidate.id)
+
+The improvement planner may generate:
+• prompt changes
+• tool schema changes
+• routing changes
+• retry changes
+• validation rules
+• selectors
+• model profiles
+• layout heuristics
+• test cases
+• code patches
+Repeated failures should become new regression tests. This prevents the system from “fixing” the same defect repeatedly.
+Candidate evaluation gate
+Every candidate should pass:
+text
+unit tests
+→ type checks
+→ linting
+→ security and secret scans
+→ tool contract tests
+→ frozen golden eval set
+→ recent failure replay set
+→ deterministic graders
+→ LLM judge
+→ champion comparison
+→ staging smoke tests
+→ promotion decision
+
+Use two datasets:
+text
+golden set:
+  stable, human-reviewed, never modified automatically
+
+<br>
+
+replay set:
+  recent real failures, refreshed over time
+
+The golden set prevents overfitting to the newest failure. The replay set ensures the latest production problems are tested.
+Promotion rule
+Use a strict rule:
+python
+def should_promote(candidate, champion):
+    return (
+        candidate.tests_passed
+        and candidate.security_passed
+        and candidate.guardrails_passed
+        and candidate.regression_count == 0
+        and candidate.score &gt; champion.score
+        and candidate.latency &lt;= candidate.latency_budget
+        and candidate.cost &lt;= candidate.cost_budget
+    )
+
+Formally:
+If scores tie, retain the current champion. This prevents noisy LLM judges from constantly changing production.
+How to let it write code safely
+The code-writing agent should work inside a disposable environment:
+text
+no production credentials
+no production database access
+restricted filesystem
+restricted network
+CPU and memory limits
+execution timeout
+maximum patch size
+mandatory tests
+automatic cleanup
+
+Its permissions should be:
+text
+read repository
+read traces
+read defects
+modify candidate branch
+add tests
+run tests
+produce diff
+write implementation report
+
+It should not be able to:
+text
+deploy production directly
+read secrets
+delete production data
+submit applications
+place phone calls
+change permissions
+modify billing
+
+The system may author code continuously, but CI/CD—not the model—decides whether the code is eligible for deployment.
+Project rollout plan
+Stage 1: Fidelis
+Run:
+text
+input image
+→ champion restoration
+→ artifact detection
+→ deterministic quality metrics
+→ LLM or human quality judgment
+→ failure report
+→ candidate profile
+→ benchmark comparison
+→ promote or reject
+
+Automatically optimize:
+• model routing
+• restoration profile
+• tile size and overlap
+• region-specific processing
+• artifact thresholds
+• confidence gating
+Do not optimize for sharpness alone. Penalize hallucinated textures, ringing, plastic skin, face distortion, and unsupported detail. Fidelis’s provenance and fail-closed design make it the safest first project for this system. [4][5]
+Stage 2: Pedit
+Automatically improve:
+• operation planning
+• bounding-box detection
+• font fitting
+• layout heuristics
+• parser adapters
+• validation rules
+Require:
+text
+PDF opens
+page count is correct
+text remains extractable
+requested edit is correct
+unmodified regions remain stable
+visual comparison passes
+
+Stage 3: Allo
+Collect:
+• time to first audio
+• total response latency
+• interruption timing
+• speech-recognition errors
+• reconnect failures
+• response length
+• user feedback
+• persona consistency
+Automatically improve prompts, buffering, turn-taking, memory retrieval, and fallback behavior. Keep consent, recording, identity, privacy, and emergency behavior human-controlled.
+Stage 4: Agent Gang
+Start with one orchestrator and explicit tools. Measure:
+• correct tool
+• correct arguments
+• task completion
+• unnecessary delegation
+• repeated work
+• handoff failures
+• cost
+• latency
+Add more agents only when evaluation evidence shows specialization improves the result.
+Stage 5: HunterXJob
+Begin in simulation:
+text
+job page
+→ extract fields
+→ generate answers
+→ fill local test form
+→ validate
+→ produce application package
+→ human review
+
+Automatically optimize:
+• selectors
+• extraction
+• field mapping
+• answer validation
+• duplicate detection
+• retry behavior
+• ranking
+Require approval for:
+• final submission
+• legal agreements
+• sensitive demographic answers
+• employer messages
+• credentials
+A successful button click must not be treated as proof that an application was received.
+What may change automatically
+Allow automatic changes to:
+text
+prompts
+tool descriptions
+JSON schemas
+validation rules
+routing weights
+retry policies
+non-destructive configuration
+test generation
+failure clustering
+
+Require human approval for:
+text
+authentication
+permissions
+secrets
+payments
+data deletion
+database migrations
+job submissions
+phone calls
+recording and consent
+destructive file overwrites
+new external side effects
+
+Protected deployment environments can enforce approvals and other deployment rules before sensitive releases proceed. [6][7]
+First 30-day build sequence
+Days 1–7: tracing
+Build the runtime wrapper, trace IDs, redaction, PostgreSQL schema, artifact storage, and a basic trace viewer.
+Success condition: one Fidelis task creates one complete inspectable trace.
+Days 8–14: evaluation
+Build one Fidelis task adapter, deterministic artifact graders, an LLM judge, a failure taxonomy, and a golden dataset.
+Success condition: the system can distinguish acceptable output from unacceptable output.
+Days 15–21: improvement
+Build failure clustering, defect reports, candidate profile generation, replay evaluation, and champion/challenger comparison.
+Success condition: the system can propose a change and measure whether it helped.
+Days 22–30: CI/CD
+Build the sandbox code agent, candidate branch creation, patch application, tests, security scans, pull-request generation, staging deployment, and rollback.
+Success condition: the system can generate and test a patch without accessing production.
+Final recommendation
+Your best architecture is not five independent self-modifying agents and not one giant autonomous brain. It is:
+text
+one shared improvement kernel
++ one adapter per project
++ one trace format
++ one evaluation framework
++ project-specific metrics
++ project-specific risk policies
++ champion/challenger deployment
+
+Start with Fidelis, then Pedit, then Allo, then Agent Gang, and finally HunterXJob. Build the first complete loop before adding more agents or allowing unrestricted code modification.
+The system you want is achievable when “self-improvement” means:
+text
+observe
+→ measure
+→ diagnose
+→ propose
+→ test
+→ compare
+→ promote or reject
+→ repeat
+
+That gives you continuous learning from experience while preserving reproducibility, rollback, safety, and control.

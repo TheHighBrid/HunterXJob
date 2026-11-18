@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
@@ -7,22 +9,27 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from fastapi.routing import APIRoute
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from app import __version__
 from app.adapter_runtime import ADAPTER_CATALOG
 from app.ai import LocalAI
 from app.api_schemas import HealthOut
+from app.autofill_api import router as autofill_router
 from app.config import Settings, get_settings
+from app.dashboard_template import get_dashboard_html
 from app.db import SessionLocal, get_db, init_db
 from app.discovery import discover_all, upsert_jobs
 from app.flags import ensure_flags, snapshot
 from app.material_store import MaterialsError
 from app.material_workflow import generate_for_application
 from app.materials_api import router as materials_router
-from app.models import Application, PipelineEvent, ReviewTask
+from app.models import AnswerPolicy, Application, PipelineEvent, ReviewTask
 from app.pipeline import approve_application, execute_apply, score_pending_jobs
 from app.remote_api import router as remote_router
 from app.resume_facts import RESUME_FACTS_PATH, read_resume_facts
@@ -44,6 +51,9 @@ async def lifespan(_: FastAPI):
     db = SessionLocal()
     try:
         ensure_flags(db)
+        if settings.allow_live_submission and settings.application_mode == "autonomous":
+            from app.flags import set_flag
+            set_flag(db, "allow_live_submission", True, "enabled via environment (.env)")
         # Phone-edited settings (safe subset only) are layered over .env.
         apply_stored_overrides(db, settings)
     finally:
@@ -60,6 +70,13 @@ async def lifespan(_: FastAPI):
             runner.stop()
 
 
+def _deterministic_unique_id(route: APIRoute) -> str:
+    """Sort route methods so OpenAPI operation IDs never depend on PYTHONHASHSEED."""
+    operation_id = re.sub(r"\W", "_", f"{route.name}{route.path_format}")
+    method = sorted(route.methods)[0].lower() if route.methods else "get"
+    return f"{operation_id}_{method}"
+
+
 # Interactive API docs expose the full schema; only serve them in local dev mode.
 _docs = settings.local_dev_mode
 app = FastAPI(
@@ -71,16 +88,15 @@ app = FastAPI(
     openapi_url="/openapi.json" if _docs else None,
     # One schema per model (no "-Input"/"-Output" pairs) for the generated mobile types.
     separate_input_output_schemas=False,
+    generate_unique_id_function=_deterministic_unique_id,
 )
-if settings.cors_origin_list:
-    # Only needed for the Expo web preview; native apps do not use CORS.
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origin_list,
-        allow_credentials=False,
-        allow_methods=["GET", "POST", "PUT", "PATCH"],
-        allow_headers=[API_KEY_HEADER, "Authorization", "Content-Type"],
-    )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origin_list or ["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 api = APIRouter(dependencies=[Depends(require_api_key)])
 
 
@@ -98,33 +114,27 @@ class AnswerIn(BaseModel):
     note: str = ""
 
 
-@app.get("/", response_class=HTMLResponse)
+class VaultSimulateIn(BaseModel):
+    question: str = ""
+    options: list[str] = []
+    control_type: str = "text"
+    scope: str = "global"
+
+
+class InboxEmailIn(BaseModel):
+    sender: str
+    recipient: str = ""
+    subject: str
+    body: str
+    received_at: str | None = None
+
+
+@app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 def dashboard() -> str:
-    return """<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><title>HunterXJob v2</title>
-<style>body{font-family:system-ui;background:#111;color:#eee;max-width:960px;margin:auto;padding:24px}button{padding:12px;margin:4px;background:#eee;color:#111;border:0;border-radius:8px}input{padding:10px;width:60%;border-radius:8px;border:0}pre{white-space:pre-wrap;background:#1d1d1d;padding:16px;border-radius:10px}</style></head>
-<body><h1>HunterXJob v2</h1><p>Bounded autonomy. Dry-run by default. Live submit stays locked until an adapter is certified.</p>
-<p><input id='key' type='password' placeholder='API key (stored in this browser only)'><button onclick=\"saveKey()\">Save key</button></p>
-<button onclick=\"run('/api/discovery/run')\">Discover</button>
-<button onclick=\"run('/api/scoring/run')\">Score</button>
-<button onclick=\"run('/api/scheduler/run')\">Run cycle</button>
-<button onclick=\"load('/api/scheduler/status')\">Scheduler</button>
-<button onclick=\"load('/api/jobs')\">Jobs</button>
-<button onclick=\"load('/api/applications')\">Applications</button>
-<button onclick=\"load('/api/review-tasks')\">Review queue</button>
-<button onclick=\"load('/api/adapters')\">Adapters</button>
-<button onclick=\"load('/api/flags')\">Flags</button>
-<button onclick=\"load('/api/health')\">Health</button>
-<pre id='out'>Ready.</pre>
-<script>
-key.value=localStorage.getItem('hunterxKey')||'';
-function saveKey(){localStorage.setItem('hunterxKey',key.value);out.textContent='Key saved in this browser.'}
-function hdrs(){return {'X-API-Key':localStorage.getItem('hunterxKey')||''}}
-async function run(u){out.textContent='Working...';let r=await fetch(u,{method:'POST',headers:hdrs()});out.textContent=JSON.stringify(await r.json(),null,2)}
-async function load(u){let r=await fetch(u,{headers:hdrs()});out.textContent=JSON.stringify(await r.json(),null,2)}
-</script></body></html>"""
+    return get_dashboard_html()
 
 
-@app.get("/api/health", response_model=HealthOut, response_model_exclude_none=True)
+@app.api_route("/api/health", methods=["GET", "HEAD"], response_model=HealthOut, response_model_exclude_none=True)
 def health(request: Request, db: DbSession, current: CurrentSettings) -> dict[str, object]:
     """Liveness probe. Open to everyone; details only for authenticated callers."""
     posture = auth_posture(current)
@@ -137,7 +147,7 @@ def health(request: Request, db: DbSession, current: CurrentSettings) -> dict[st
         "mode": current.application_mode,
         "automation_enabled": current.automation_enabled,
         "allow_live_submission": current.allow_live_submission,
-        "live_submission_locked": True,
+        "live_submission_locked": not current.allow_live_submission,
         "continuous_run_enabled": current.continuous_run_enabled,
         "unattended_allowed": decision.allowed,
         "unattended_reason": decision.reason,
@@ -149,6 +159,141 @@ def health(request: Request, db: DbSession, current: CurrentSettings) -> dict[st
     }
 
 
+@api.get("/api/agent/champion")
+def get_agent_champion(
+    db: DbSession,
+    project: str = "allo",
+) -> dict[str, object]:
+    """Retrieve the current active champion agent configuration."""
+    from improvement_kernel.storage.db import get_current_champion
+    import json
+
+    champion = get_current_champion(db, project=project)
+    config_dict = {}
+    if champion.harness_config_json:
+        try:
+            config_dict = json.loads(champion.harness_config_json)
+        except Exception:
+            config_dict = {}
+
+    if project == "allo":
+        system_prompt = config_dict.get("system_prompt") or (
+            "You are Kenza, a warm, affectionate, natural-speaking female companion. "
+            "Speak conversationally in concise spoken English (1-2 sentences at a time). "
+            "Never sound like a formal robotic AI. Never monologue. "
+            "Never mention Kingston or repetitive family stories unless specifically brought up by the user. "
+            "Respond naturally to short affirmations and listening cues."
+        )
+        vad_sensitivity = config_dict.get("vad_sensitivity_threshold", "START_SENSITIVITY_LOW")
+        elevenlabs_cfg = config_dict.get("elevenlabs") or {
+            "stability": 0.50,
+            "similarity_boost": 0.80,
+            "style": 0.0,
+            "use_speaker_boost": True,
+        }
+        voice_cfg = config_dict.get("voice") or {
+            "name": "Aoede",
+            "gender": "female",
+            "style": "melodious_warm",
+            "forbidden_voices": ["Puck", "Charon", "Fenrir", "Kore"],
+        }
+        audio_pipeline = config_dict.get("audio_pipeline") or {
+            "input_chunk_ms": 40,
+            "vad_prefix_padding_ms": 60,
+            "vad_silence_duration_ms": 800,
+            "client_endpoint_hangover_chunks": 13,
+            "sustained_barge_in_chunks": 8,
+            "output_buffer_ms": 80,
+            "output_buffer_min_ms": 40,
+            "output_buffer_max_ms": 160,
+            "start_of_speech_sensitivity": "START_SENSITIVITY_LOW",
+            "end_of_speech_sensitivity": "END_SENSITIVITY_LOW",
+            "max_latency_ceiling_ms": 1500,
+        }
+        return {
+            "project": project,
+            "version": champion.version,
+            "system_prompt": system_prompt,
+            "vad_sensitivity_threshold": vad_sensitivity,
+            "vad_silence_duration_ms": audio_pipeline.get("vad_silence_duration_ms", 800),
+            "elevenlabs": elevenlabs_cfg,
+            "voice": voice_cfg,
+            "audio_pipeline": audio_pipeline,
+            "models": config_dict.get("models") or {
+                "live_model": "gemini-3.8-live",
+                "memory_model": "gemini-3.8-flash",
+                "script_model": "gemini-3.8-flash",
+            },
+        }
+
+    return {
+        "project": project,
+        "version": champion.version,
+        "config": config_dict,
+    }
+
+
+@api.post("/api/telemetry/trace")
+async def record_telemetry_trace(
+    request: Request,
+    db: DbSession,
+    project: str = "allo",
+) -> dict[str, object]:
+    """Receive and evaluate live conversation telemetry traces emitted by client apps."""
+    try:
+        payload = await request.json()
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="Trace payload must be a JSON object")
+
+        if project == "allo":
+            from improvement_kernel.adapters.allo import AlloAdapter
+            adapter = AlloAdapter(session=db, project=project)
+            eval_result = adapter.evaluate_session_trace(payload)
+            return {
+                "status": "ok",
+                "project": project,
+                "call_id": eval_result.get("call_id"),
+                "evaluation": eval_result,
+            }
+        elif project == "fidelis":
+            from improvement_kernel.adapters.fidelis import FidelisAdapter
+            adapter = FidelisAdapter(session=db, project=project)
+            eval_result = adapter.evaluate_restoration_trace(payload)
+            return {
+                "status": "ok",
+                "project": project,
+                "image_id": eval_result.get("image_id"),
+                "evaluation": eval_result,
+            }
+        elif project == "pedit":
+            from improvement_kernel.adapters.pedit import PeditAdapter
+            adapter = PeditAdapter(session=db, project=project)
+            eval_result = adapter.evaluate_pdf_trace(payload)
+            return {
+                "status": "ok",
+                "project": project,
+                "doc_id": eval_result.get("doc_id"),
+                "evaluation": eval_result,
+            }
+        elif project == "agent_gang":
+            from improvement_kernel.adapters.agent_gang import AgentGangAdapter
+            adapter = AgentGangAdapter(session=db, project=project)
+            eval_result = adapter.evaluate_swarm_trace(payload)
+            return {
+                "status": "ok",
+                "project": project,
+                "task_id": eval_result.get("task_id"),
+                "evaluation": eval_result,
+            }
+        return {"status": "ok", "project": project, "message": "Trace received"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("Error evaluating incoming telemetry trace for %s: %s", project, exc)
+        return {"status": "error", "project": project, "message": str(exc)}
+
+
+
 @api.put("/api/resume-facts")
 def save_resume_facts(payload: ResumeFactsIn) -> dict[str, object]:
     RESUME_FACTS_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -156,10 +301,131 @@ def save_resume_facts(payload: ResumeFactsIn) -> dict[str, object]:
     return {"saved": True, "characters": len(payload.text.strip())}
 
 
+@api.get("/api/answers")
+def list_answers(db: DbSession, scope: str | None = None) -> list[dict[str, object]]:
+    query = select(AnswerPolicy).order_by(AnswerPolicy.key.asc())
+    if scope:
+        query = query.where(AnswerPolicy.scope == scope)
+    rows = db.execute(query).scalars().all()
+    return [{
+        "id": r.id,
+        "key": r.key,
+        "value": r.value,
+        "source": r.source,
+        "scope": r.scope,
+        "confidence": r.confidence,
+        "sensitive": r.sensitive,
+        "note": r.note,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+        "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+    } for r in rows]
+
+
 @api.post("/api/answers")
 def save_answer(payload: AnswerIn, db: DbSession) -> dict[str, object]:
     row = upsert_answer(db, **payload.model_dump())
     return {"id": row.id, "key": row.key, "scope": row.scope, "source": row.source}
+
+
+@api.delete("/api/answers/{answer_id}")
+def delete_answer(answer_id: str, db: DbSession) -> dict[str, object]:
+    row = db.get(AnswerPolicy, answer_id)
+    if row is None:
+        raise HTTPException(404, "answer not found")
+    db.delete(row)
+    db.commit()
+    return {"deleted": True, "id": answer_id, "key": row.key}
+
+
+@api.post("/api/vault/simulate")
+def simulate_vault_matching(payload: VaultSimulateIn, db: DbSession) -> dict[str, object]:
+    from app.answer_vault import FieldRequest, ResolutionStatus
+    from app.form_engine import _normalize_option, _score_best_option
+    from app.greenhouse_form import shared_answer_key
+    from app.question_catalog import classify_question as catalog_classify
+    from app.vault_store import load_vault
+
+    question = (payload.question or "").strip()
+    if not question:
+        return {
+            "question": "",
+            "canonical_key": None,
+            "status": "missing",
+            "stored_value": None,
+            "matched_option": None,
+            "tier": None,
+            "confidence": 0.0,
+            "explanation": "No question provided.",
+        }
+
+    canonical_key = shared_answer_key(question)
+    if not canonical_key:
+        cat_match = catalog_classify(question)
+        if cat_match:
+            canonical_key = cat_match.get("canonical_key")
+    vault = load_vault(db)
+
+    # First try resolving via canonical key, then fallback to normalized question slug
+    req_key = canonical_key or question.lower().replace(" ", "_")
+    resolved = vault.resolve(FieldRequest(key=req_key))
+    if resolved.status != ResolutionStatus.RESOLVED and canonical_key:
+        resolved = vault.resolve(FieldRequest(key=canonical_key))
+
+    # Evaluate options if provided
+    options = [str(opt).strip() for opt in payload.options if str(opt).strip()]
+    matched_option = None
+    matched_tier = None
+    confidence = 1.0 if resolved.status == ResolutionStatus.RESOLVED else 0.0
+
+    if resolved.status == ResolutionStatus.RESOLVED and options:
+        lookup = {_normalize_option(opt): opt for opt in options}
+        exact = lookup.get(_normalize_option(resolved.value))
+        if exact is not None:
+            matched_option = exact
+            matched_tier = "Tier 1: Exact Normalized Match"
+            confidence = 1.0
+        else:
+            best = _score_best_option(resolved.value, options)
+            if best is not None:
+                matched_option = best
+                matched_tier = "Tier 2/3/4: Boolean Equivalence & Token Overlap"
+                confidence = 0.95
+            else:
+                confidence = 0.0
+
+    if resolved.status == ResolutionStatus.RESOLVED:
+        if options and not matched_option:
+            status = "review"
+            explanation = (
+                f"Resolved value '{resolved.value}' from key '{req_key}', but none of the "
+                f"{len(options)} options matched with high confidence (would route to human review)."
+            )
+        else:
+            status = "resolved"
+            explanation = f"Matched '{resolved.value}' from key '{req_key}' (source: {resolved.source.value})."
+            if matched_option:
+                explanation += f" Selected option '{matched_option}' via {matched_tier}."
+    else:
+        status = "missing"
+        explanation = (
+            f"Question was categorized as '{canonical_key}', but no answer is stored in the vault or verified profile."
+            if canonical_key
+            else "No canonical question pattern matched this text. Would route to human review."
+        )
+
+    return {
+        "question": question,
+        "canonical_key": canonical_key,
+        "resolved_key": req_key,
+        "status": status,
+        "stored_value": resolved.value if resolved.status == ResolutionStatus.RESOLVED else None,
+        "source": resolved.source.value if resolved.status == ResolutionStatus.RESOLVED else None,
+        "options_provided": len(options),
+        "matched_option": matched_option,
+        "tier": matched_tier,
+        "confidence": confidence,
+        "explanation": explanation,
+    }
 
 
 @api.post("/api/discovery/run")
@@ -235,6 +501,332 @@ def events(job_id: str, db: DbSession) -> list[dict[str, object]]:
     return [{"from": e.from_stage, "to": e.to_stage, "message": e.message, "created_at": e.created_at} for e in rows]
 
 
+@api.post("/api/autonomous/run")
+def trigger_autonomous_run(
+    db: DbSession,
+    current: CurrentSettings,
+    live: bool | None = None,
+    headed: bool = False,
+) -> dict[str, object]:
+    from app.autonomous_loop import AutonomousConfig, AutonomousRunner
+    from app.flags import is_enabled
+
+    try:
+        want_live = True if live is None else bool(live)
+        can_live = bool(
+            want_live
+            and current.allow_live_submission
+            and is_enabled(db, "allow_live_submission")
+        )
+        runner = AutonomousRunner(
+            db,
+            current,
+            AutonomousConfig(allow_live_submission=can_live, headless=not headed),
+        )
+        summary = runner.run()
+        return {
+            "started_at": summary.started_at,
+            "finished_at": summary.finished_at,
+            "aborted_by_kill_switch": summary.aborted_by_kill_switch,
+            "candidates_considered": summary.candidates_considered,
+            "shortlisted": summary.shortlisted,
+            "submitted_live": summary.submitted_live,
+            "verified_dry_runs": summary.verified_dry_runs,
+            "skipped_duplicates": summary.skipped_duplicates,
+            "errors": summary.errors,
+        }
+    except Exception as exc:
+        raise HTTPException(409, f"autonomous run failed: {exc}") from exc
+
+
+@api.get("/api/autonomous/status")
+def autonomous_status(db: DbSession) -> dict[str, object]:
+    from app.flags import is_enabled, kill_switch_engaged
+
+    return {
+        "kill_switch_engaged": kill_switch_engaged(db),
+        "allow_live_submission": is_enabled(db, "allow_live_submission"),
+        "unattended_mode": is_enabled(db, "unattended_mode"),
+        "adapters_available": [k for k, v in ADAPTER_CATALOG.items() if v.maturity.value != "unsupported"],
+    }
+
+
+@api.get("/api/certification/dossier")
+def get_certification_dossier() -> dict[str, object]:
+    import json
+    from app.certification_system import DEFAULT_DOSSIER_PATH, build_certification_dossier
+
+    if DEFAULT_DOSSIER_PATH.exists():
+        try:
+            return json.loads(DEFAULT_DOSSIER_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return build_certification_dossier()
+
+
+@api.get("/api/vault/catalog")
+def get_vault_catalog() -> dict[str, object]:
+    from app.question_catalog import QUESTION_CATALOG
+
+    items = []
+    for item in QUESTION_CATALOG:
+        items.append({
+            "id": item.get("canonical_key") or item.get("id"),
+            "canonical_key": item.get("canonical_key"),
+            "label": item.get("label", ""),
+            "category": item.get("category", "general"),
+            "setup_group": item.get("setup_group", "General"),
+            "resolved_answer": (item.get("suggested_answers") or ["Grounded profile facts"])[0],
+            "description": item.get("description", ""),
+        })
+    return {
+        "catalog_size": len(items),
+        "items": items,
+        "candidate": {
+            "name": "Mohamed Alem",
+            "location": "Ottawa, ON, Canada",
+            "languages": ["English (Fluent)", "French (Bilingual)"],
+            "work_authorization": "Canadian Citizen / Authorized without sponsorship",
+        },
+    }
+
+
+@api.post("/api/jobs/{job_id}/run-autonomous")
+def run_job_autonomous(
+    job_id: str,
+    db: DbSession,
+    current: CurrentSettings,
+    dry_run: bool = False,
+    headed: bool = False,
+) -> dict[str, object]:
+    from app.autonomous_loop import AutonomousConfig, AutonomousRunner
+    from app.flags import is_enabled
+    from app.models import Job
+
+    job = db.get(Job, job_id)
+    if not job:
+        raise HTTPException(404, f"Job {job_id} not found")
+
+    try:
+        live = bool(not dry_run and current.allow_live_submission and is_enabled(db, "allow_live_submission"))
+        runner = AutonomousRunner(
+            db,
+            current,
+            AutonomousConfig(allow_live_submission=live, headless=not headed),
+        )
+        record = runner.run_job(job)
+        return {
+            "job_id": record.job_id,
+            "status": record.status,
+            "submitted": record.submitted,
+            "platform": record.platform,
+            "stage": record.stage,
+            "evidence_sha256": record.evidence_sha256,
+            "error": record.error,
+        }
+    except Exception as exc:
+        raise HTTPException(409, f"autonomous job execution failed: {exc}") from exc
+
+
+@api.post("/api/inbox/match")
+def match_inbox_email(payload: InboxEmailIn, db: DbSession) -> dict[str, object]:
+    from datetime import UTC, datetime
+    from app.inbox_matcher import EmailMessage, process_inbox_email
+
+    dt = None
+    if payload.received_at:
+        try:
+            dt = datetime.fromisoformat(payload.received_at)
+        except Exception:
+            dt = datetime.now(UTC)
+
+    email = EmailMessage(
+        sender=payload.sender,
+        recipient=payload.recipient,
+        subject=payload.subject,
+        body=payload.body,
+        date=dt or datetime.now(UTC),
+    )
+    result = process_inbox_email(db, email)
+    return {
+        "matched": result.matched,
+        "application_id": result.application_id,
+        "job_id": result.job_id,
+        "intent": result.intent.value,
+        "confidence": result.confidence,
+        "extracted_reference_id": result.extracted_reference_id,
+        "extracted_links": result.extracted_links,
+        "summary": result.summary,
+    }
+
+
+@api.get("/api/follow-ups/due")
+def list_due_follow_ups(db: DbSession) -> list[dict[str, object]]:
+    from app.follow_up import get_due_follow_ups
+
+    due = get_due_follow_ups(db)
+    return [{
+        "application_id": app.id,
+        "job_id": job.id,
+        "company": job.company,
+        "title": job.title,
+        "follow_up_number": num,
+    } for app, job, num in due]
+
+
+@api.post("/api/follow-ups/run")
+def run_due_follow_ups(db: DbSession) -> dict[str, object]:
+    from app.follow_up import process_due_follow_ups
+    from app.profile import verified_profile
+
+    profile = verified_profile(db)
+    tasks = process_due_follow_ups(db, profile)
+    return {
+        "processed": len(tasks),
+        "tasks": [{"id": t.id, "title": t.title, "reason_code": t.reason_code} for t in tasks],
+    }
+
+
+class FollowUpDispatchIn(BaseModel):
+    recipient_email: str | None = None
+    dry_run: bool = False
+
+
+@api.post("/api/follow-ups/{task_id}/dispatch")
+def dispatch_follow_up(
+    task_id: str,
+    payload: FollowUpDispatchIn,
+    db: DbSession,
+    current: CurrentSettings,
+) -> dict[str, object]:
+    from app.follow_up import dispatch_follow_up_email
+
+    try:
+        res = dispatch_follow_up_email(
+            db=db,
+            task_id=task_id,
+            smtp_host=getattr(current, "smtp_host", None),
+            smtp_port=getattr(current, "smtp_port", 587),
+            smtp_user=getattr(current, "smtp_user", None),
+            smtp_password=getattr(current, "smtp_password", None),
+            recipient_email=payload.recipient_email,
+            dry_run=payload.dry_run,
+        )
+        return res
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@api.get("/api/jobs/{job_id}/artifacts")
+def list_job_artifacts(job_id: str, current: CurrentSettings) -> dict[str, object]:
+    out_dir = Path(getattr(current, "artifact_dir", None) or "/tmp/hunterx_autonomous")
+    job_dir = out_dir / f"job_{job_id}"
+    files = []
+    if job_dir.is_dir():
+        for p in sorted(job_dir.glob("*")):
+            if p.is_file() and not p.name.startswith("."):
+                files.append({
+                    "name": p.name,
+                    "size_bytes": p.stat().st_size,
+                    "url": f"/api/jobs/{job_id}/artifacts/{p.name}",
+                })
+    return {"job_id": job_id, "artifacts": files}
+
+
+@api.get("/api/jobs/{job_id}/artifacts/{artifact_name}")
+def get_job_artifact(job_id: str, artifact_name: str, current: CurrentSettings):
+    from fastapi.responses import FileResponse
+
+    allowed = {"pre_submit.png", "post_submit.png", "tailored_resume.pdf"}
+    if artifact_name not in allowed:
+        raise HTTPException(400, "Invalid artifact name requested")
+
+    out_dir = Path(getattr(current, "artifact_dir", None) or "/tmp/hunterx_autonomous")
+    file_path = out_dir / f"job_{job_id}" / artifact_name
+    if not file_path.is_file():
+        raise HTTPException(404, f"Artifact '{artifact_name}' not found for job {job_id}")
+
+    media_types = {
+        "pre_submit.png": "image/png",
+        "post_submit.png": "image/png",
+        "tailored_resume.pdf": "application/pdf",
+    }
+    return FileResponse(file_path, media_type=media_types[artifact_name])
+
+
+@api.get("/api/diagnostics/export")
+def export_system_diagnostics(db: DbSession, current: CurrentSettings) -> dict[str, object]:
+    """Compiles a complete offline diagnostic snapshot of the autonomous engine."""
+    from datetime import UTC, datetime
+    import platform
+    import sys
+    from app.certification_system import build_certification_dossier
+    from app.flags import snapshot as flags_snapshot
+    from app.models import Job, ReviewTask
+    from app.profile import verified_profile
+
+    # Job stage counts
+    stage_counts = dict(
+        db.execute(select(Job.stage, func.count(Job.id)).group_by(Job.stage)).all()
+    )
+    total_jobs = sum(stage_counts.values())
+
+    # Review tasks by reason
+    review_counts = dict(
+        db.execute(
+            select(ReviewTask.reason_code, func.count(ReviewTask.id))
+            .where(ReviewTask.status == "open")
+            .group_by(ReviewTask.reason_code)
+        ).all()
+    )
+    total_open_reviews = sum(review_counts.values())
+
+    profile = verified_profile(db)
+    try:
+        from app.certification_system import build_certification_dossier
+        db_path = getattr(current, "database_file", None) or getattr(current, "database_path", None) or "./data/hunterxjob-v2.db"
+        dossier = build_certification_dossier(db_path=db_path)
+        dossier_summary = {
+            "status": dossier.get("overall_certification_status"),
+            "total_verified_submissions": dossier.get("evidence_ledger", {}).get("total_verified_submissions", 0),
+            "dossier_digest": dossier.get("dossier_digest"),
+            "milestones": {k: v.get("passed") for k, v in (dossier.get("milestones") or {}).items()},
+        }
+    except Exception as exc:
+        dossier_summary = {"status": "unavailable", "error": str(exc)}
+
+    return {
+        "timestamp": datetime.now(UTC).isoformat(),
+        "hunterx_version": __version__,
+        "system": {
+            "platform": platform.platform(),
+            "python_version": sys.version,
+        },
+        "posture": {
+            "application_mode": current.application_mode,
+            "automation_enabled": current.automation_enabled,
+            "allow_live_submission": current.allow_live_submission,
+            "live_submission_locked": not current.allow_live_submission,
+            "continuous_run_enabled": current.continuous_run_enabled,
+            "flags": flags_snapshot(db),
+        },
+        "database": {
+            "total_jobs": total_jobs,
+            "by_stage": stage_counts,
+            "open_review_tasks_total": total_open_reviews,
+            "open_review_tasks_by_reason": review_counts,
+        },
+        "profile": {
+            "facts_count": len(profile.facts),
+            "is_empty": profile.empty,
+        },
+        "ai": LocalAI(current).health(),
+        "certification_dossier_summary": dossier_summary,
+    }
+
+
+
 app.include_router(api)
 app.include_router(remote_router)
 app.include_router(materials_router)
+app.include_router(autofill_router)

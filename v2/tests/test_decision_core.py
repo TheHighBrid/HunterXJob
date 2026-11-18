@@ -120,3 +120,58 @@ def test_liveness_classifier_distinguishes_expired_blocked_and_live():
 def test_generic_job_description_does_not_prove_liveness():
     result = classify_liveness(200, "https://example.test/careers", "Welcome. Here is the job description for our careers site.")
     assert result.status is Liveness.REVIEW
+
+
+def test_decision_engine_rejects_tech_pm_and_boilerplate_only_matches():
+    ctx = DecisionContext(
+        target_locations=("Ottawa", "Remote Canada", "Canada"),
+        target_keywords=("fraud", "aml", "compliance", "credit", "risk", "bilingual"),
+        excluded_locations=("United States", "US Remote"),
+        excluded_titles=("software engineer", "product manager"),
+    )
+    boilerplate = (
+        "Our fintech platform prevents fraud, ensures AML compliance, manages credit risk, "
+        "and serves bilingual Canadian customers across the country."
+    )
+    for title in (
+        "Head of MyG Core Workflows",
+        "Senior Product Designer",
+        "SVP, Product Management - Data Products",
+        "Manager, Strategic Finance",
+        "Manager, Product Support",
+        "Senior People Operations Partner",
+        "Full Stack Development",
+    ):
+        report = evaluate_job(
+            JobFacts(title=title, company="FinCo", location="Remote Canada", description=boilerplate, remote=True),
+            ctx,
+        )
+        assert report.decision is Decision.REJECT, f"{title} should be rejected, got {report}"
+
+    # Non-Canadian remote should also be rejected cleanly
+    remote_us = evaluate_job(
+        JobFacts(title="Fraud Operations Specialist", company="FinCo", location="Remote - US", description=boilerplate, remote=True),
+        ctx,
+    )
+    assert remote_us.decision is Decision.REJECT
+
+
+def test_decision_engine_shortlists_aligned_fraud_aml_and_bilingual_risk_roles():
+    ctx = DecisionContext(
+        target_locations=("Ottawa", "Remote Canada", "Canada"),
+        target_keywords=("fraud", "aml", "compliance", "credit", "risk", "bilingual"),
+        excluded_locations=("United States", "US Remote"),
+        excluded_titles=("software engineer", "product manager"),
+    )
+    long_desc = " ".join(["Investigate fraud, AML, KYC, compliance, credit risk, and client escalations."] * 10)
+    for title, loc in (
+        ("Sr. Fraud Analyst", "Canada"),
+        ("AML Analyst - Canada Wide - Remote", "Toronto, Ontario"),
+        ("Bilingual Operations Associate, Risk", "Remote, Canada"),
+    ):
+        report = evaluate_job(
+            JobFacts(title=title, company="Wave", location=loc, description=long_desc, remote=True),
+            ctx,
+        )
+        assert report.decision is Decision.SHORTLIST, f"{title} should shortlist, got {report}"
+        assert report.score >= 68.0
