@@ -1,5 +1,5 @@
 """Modern, interactive single-page application dashboard for HunterXJob v2.
-Adopts JobTomatik's command-center, autonomy-center, and evidence-dossier UX paradigms.
+Includes the native command center, autonomy center, and evidence dossier.
 Served directly from FastAPI without external build tools.
 """
 
@@ -525,7 +525,7 @@ def get_dashboard_html() -> str:
               <h3 class="text-sm font-bold text-white flex items-center gap-2">
                 Interactive Answer Simulator & 4-Tier Match Studio
               </h3>
-              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-brand-500/20 text-brand-300 border border-brand-500/30">JOBTOMATIK ENGINE</span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-brand-500/20 text-brand-300 border border-brand-500/30">HUNTERXJOB ENGINE</span>
             </div>
             <p class="text-xs text-slate-400 mt-1">Test real ATS screening questions, evaluate canonical category classifications, and simulate 4-tier option resolution in real time.</p>
           </div>
