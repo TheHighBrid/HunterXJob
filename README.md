@@ -2,6 +2,8 @@
 
 **HunterXJob** is an autonomous, self-hosted end-to-end job hunting and application engine designed for precision, strict truthfulness, and zero-touch operation.
 
+HunterXJob is the standalone end-to-end application engine. Its live path is implemented inside this repository; no external job-application engine may own or execute submission, browser handoff, retry, evidence, ledger, or state-machine operations. Existing safety gates remain mandatory. See [native live pathway](docs/LIVE_PATHWAY.md).
+
 It discovers live job postings, evaluates match scores against your verified profile, dynamically tailors ATS-friendly résumés and truthful cover letters, launches an interactive headless browser (Playwright) to fill application forms and attach files, resolves CAPTCHAs, executes verified submissions with cryptographic proof, prevents duplicate submissions across ATS platforms, and manages post-submission follow-ups.
 
 ---
@@ -13,7 +15,7 @@ It discovers live job postings, evaluates match scores against your verified pro
 * **Pre-Submission Truth Guard & Fail-Closed Integrity**: All generated résumé bullets, cover letters, and form answers are strictly audited against verified candidate facts before any application is prepared or submitted. For professional credentials (`cpa`, `cfa`, `p.eng`, `bar`) and security clearances, the system fails closed: if the credential is not in your verified profile, affirmative answers are strictly prohibited and replaced with truthful negative responses.
 * **Country-Aware Location Autocomplete**: Resolves location comboboxes (such as Ashby `_systemfield_location`) with country-aware intelligence. Prioritizes the candidate's home country (e.g. Canada over US for Ottawa, Ontario; explicitly penalizing and rejecting Ontario, California), and verifies selected container badge text on DOM read-back.
 * **Pre-Launch Commute & Hard Veto Filter**: Evaluates job location type and mandatory qualifications before browser launch. Rejects non-remote roles outside Ottawa–Gatineau and roles requiring unverified credentials before touching the browser.
-* **JobTomatik Master Answer Vault (v3.0)**: Integrated comprehensive answer policy system covering **143 question families** with multilingual English/French regex matching, backed by **63 seeded production answer policies** in SQLite and managed via `./hunterx vault`.
+* **HunterXJob Master Answer Vault (v3.0)**: Integrated comprehensive answer policy system covering **143 question families** with multilingual English/French regex matching, backed by **63 seeded production answer policies** in SQLite and managed via `./hunterx vault`.
 * **Candidate Knowledge Book + Local Ollama LLM (`llama3.2:3b`)**: Central factual vault loaded from your verified profile YAML. Deterministically resolves standard ATS screening questions (Canadian/US work authorization, sponsorship, relocation, bilingual English/French proficiency, domain/financial experience, salary expectations, notice period, background check consent) and wires into local **Ollama (`llama3.2:3b`)** (with deterministic heuristic fallbacks) to answer custom behavioral, scenario, and role-specific multiple-choice or open-ended questions.
 * **Smart CAPTCHA Bridge & Post-Submit Challenge Hold**: Detects Google reCAPTCHA (v2/v3/Enterprise), hCaptcha, and Cloudflare Turnstile. Automatically ignores passive invisible reCAPTCHA v3 badges so forms submit cleanly, supports automated token injection, and—when an interactive post-submit CAPTCHA puzzle (`bframe` / hCaptcha) appears—automatically holds the headed browser window open for up to 180 seconds for completion before capturing confirmation proof. Includes automatic backoff and retry for transient ATS anti-spam flags.
 * **Cross-ATS Deduplication & Submit Guard**: Detects cross-posted or duplicate roles across Greenhouse, Lever, Ashby, SmartRecruiters, and Workday, permanently blocking duplicate submissions.
@@ -124,7 +126,7 @@ cp v2/examples/profile.example.yaml my_profile.yaml
 ```
 
 ### 4. Manage Answer Vault Policies
-Seed and inspect the JobTomatik Master Answer Vault (143 question families, 63 seeded policies):
+Seed and inspect the HunterXJob Master Answer Vault (143 question families, 63 seeded policies):
 ```bash
 # Seed verified default policies into SQLite
 ./hunterx vault seed
