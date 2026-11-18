@@ -12,10 +12,12 @@ It has two parts:
 
 | Part | Where | Role |
 |---|---|---|
-| **v2 server** | `v2/` (Python 3.12, FastAPI, SQLAlchemy, SQLite, Playwright) | Autonomous core engine. Ingests postings, scores fit, pre-filters commute boundaries and mandatory qualifications, tailors truthful materials, audits answers via Truth Guard, resolves screening & custom scenario questions via Knowledge Book + JobTomatik Answer Vault + local Ollama LLM, controls Playwright browser automation, bridges CAPTCHAs, executes submissions, and tracks follow-up cadences. |
+| **v2 server** | `v2/` (Python 3.12, FastAPI, SQLAlchemy, SQLite, Playwright) | Autonomous core engine. Ingests postings, scores fit, pre-filters commute boundaries and mandatory qualifications, tailors truthful materials, audits answers via Truth Guard, resolves screening & custom scenario questions via Knowledge Book + HunterXJob Answer Vault + local Ollama LLM, controls Playwright browser automation, bridges CAPTCHAs, executes submissions, and tracks follow-up cadences. |
 | **Mobile app** | `mobile/` (Expo / React Native, TypeScript, Android APK v1.0.0) | Remote control and standalone client for the v2 server: status, kill switch, scheduler, jobs, review queue, settings, reports, and Free/Pro tier gating. Reaches the server over Tailscale (or a TLS tunnel) with the API key. |
 
 `backend/` is the **legacy v1 engine**. It is kept as a donor for ideas and reference code, but nothing depends on it.
+
+The owner has selected an independent runtime. All submission, browser ownership, evidence and ledger processing must remain in HunterXJob. No external job-application engine may be imported, invoked or used to transfer a live session. See [LIVE_PATHWAY.md](LIVE_PATHWAY.md).
 
 ## 2. Pipeline
 
@@ -46,7 +48,7 @@ discover ─▶ normalize ─▶ deterministic gate ─┬─▶ reject (commute
   `assert_transition`, and illegal transitions raise. Each change is written to `pipeline_events`.
 * **Deterministic core & pre-launch vetoes** (`app/decisioning.py`): a six-dimension weighted
   score runs before any AI. Pre-filters roles by commute boundaries (hybrid/in-person restricted to Ottawa–Gatineau NCR for local candidates; remote-only elsewhere) and hard qualification vetoes (auto-rejects roles requiring unverified credentials like CPA or Bar).
-* **JobTomatik Master Answer Vault & Compiler** (`app/answer_policy_compiler.py`, `app/vault_store.py`):
+* **HunterXJob Master Answer Vault & Compiler** (`app/answer_policy_compiler.py`, `app/vault_store.py`):
   compiles and classifies 143 question families using multilingual (English/French) regex matching. Seeds 63 verified production answer policies into SQLite, managed via `./hunterx vault`.
 * **Candidate Knowledge Book + Local LLM** (`app/knowledge_book.py`, `app/profile.py`): central
   vault loaded from verified profile facts. Deterministically resolves standard ATS system fields
