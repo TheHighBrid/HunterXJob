@@ -528,3 +528,93 @@ def test_time_zone_challenger_iter3_negatives():
             False,
             owner_answers={"time_zone": [ref]},
         ), bad_tz
+
+
+def test_no_worked_for_requires_in_any_capacity_and_rejects_smuggling():
+    for good_no in (
+        "No, I have not worked for D2L in any capacity",
+        "No, I have not previously worked at Acme Corp in any capacity",
+    ):
+        assert checks._value_matches_resolved(_item("prior_employment", good_no, "No")), good_no
+        assert not checks.planned_answer_problems(
+            [_item("prior_employment", good_no, "No", label="Worked here before?")],
+            {"prior_employment": ["No"]},
+            False,
+            owner_answers={"prior_employment": ["No"]},
+        ), good_no
+
+    for bad_no in (
+        "No, I have not worked for Acme",
+        "No, I have not worked for Acme excluding intern",
+        "No, I have not worked for Acme excluding intern in any capacity",
+        "No, I have not worked for Acme not full-time",
+        "No, I have not worked for Acme not full-time in any capacity",
+        "No, I have not worked for Acme outside Canada",
+        "No, I have not worked for Acme other than intern",
+        "No, I have not worked for Acme recently",
+        "No, I have not worked for Acme recently in any capacity",
+        "No, I have not worked for Acme save intern",
+        "No, I have not worked for Acme besides intern",
+    ):
+        assert not checks._value_matches_resolved(_item("prior_employment", bad_no, "No")), bad_no
+        assert checks.planned_answer_problems(
+            [_item("prior_employment", bad_no, "No", label="Worked here before?")],
+            {"prior_employment": ["No"]},
+            False,
+            owner_answers={"prior_employment": ["No"]},
+        ), bad_no
+
+
+def test_salary_range_never_scales_upper_bound_from_lower_k():
+    assert checks._salary_option_contains("60-70K", "65,000")
+    assert checks._salary_option_contains("$60 - $70k", "65,000")
+    assert checks._salary_option_contains("$60k - $70,000", "65,000")
+
+    for bad_sal, target in (
+        ("$60k - $700", "500,000"),
+        ("60k - 700", "500,000"),
+        ("$60k - $700", "65,000"),
+    ):
+        assert not checks._salary_option_contains(bad_sal, target), (bad_sal, target)
+        assert checks.planned_answer_problems(
+            [_item("salary_expectation", bad_sal, target, label="Expected salary")],
+            {"salary_expectation": [target]},
+            False,
+            owner_answers={"salary_expectation": [target]},
+        ), (bad_sal, target)
+
+
+def test_cefr_single_language_prefix_must_match_weaker_language():
+    res_fr_b2 = "English (Native)|French (B2)"
+    for good in ("French (B2)", "Fran\u00e7ais (B2)", "B2", "B2 - Upper Intermediate", "Bilingual (B2)"):
+        assert checks._value_matches_resolved(_item("language_proficiency", good, res_fr_b2)), good
+    for bad in ("English (B2)", "Anglais (B2)"):
+        assert not checks._value_matches_resolved(_item("language_proficiency", bad, res_fr_b2)), bad
+        assert checks.planned_answer_problems(
+            [_item("language_proficiency", bad, res_fr_b2, label="Language")],
+            {"language_proficiency": [res_fr_b2]},
+            False,
+            owner_answers={"language_proficiency": [res_fr_b2]},
+        ), bad
+
+    res_en_b1 = "English (B1)|French (Native)"
+    for good in ("English (B1)", "Anglais (B1)", "B1", "Bilingual (B1)"):
+        assert checks._value_matches_resolved(_item("language_proficiency", good, res_en_b1)), good
+    for bad in ("French (B1)", "Fran\u00e7ais (B1)"):
+        assert not checks._value_matches_resolved(_item("language_proficiency", bad, res_en_b1)), bad
+        assert checks.planned_answer_problems(
+            [_item("language_proficiency", bad, res_en_b1, label="Language")],
+            {"language_proficiency": [res_en_b1]},
+            False,
+            owner_answers={"language_proficiency": [res_en_b1]},
+        ), bad
+
+    res_both_b2 = "English (B2)|French (B2)"
+    for good in ("English (B2)", "French (B2)", "Bilingual (B2)", "B2"):
+        assert checks._value_matches_resolved(_item("language_proficiency", good, res_both_b2)), good
+
+    assert checks._cefr_option_matches("a1: no proficiency", "a1")
+    assert checks._cefr_option_matches("bilingual (b2)", "b2")
+    assert not checks._cefr_option_matches("english (b2)", "b2")
+    assert checks._cefr_option_matches("english (b2)", "b2", weaker_langs=frozenset({"english"}))
+    assert not checks._cefr_option_matches("english (b2)", "b2", weaker_langs=frozenset({"french"}))

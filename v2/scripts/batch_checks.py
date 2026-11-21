@@ -658,9 +658,12 @@ _NO_SAFE_TAILS: tuple[re.Pattern[str], ...] = (
     re.compile(r"^i\s+have\s+never$"),
     re.compile(
         r"^i\s+have\s+not\s+(?:previously\s+)?worked\s+(?:for|at)\s+"
-        r"(?!.*\b(?:if|unless|except|but|only|however|without|with|after|before|until|pending|"
+        r"(?!.*\b(?:not|never|no|none|excluding|excepting|outside|other|than|save|besides|less|minus|"
+        r"recently|currently|previously|since|during|prior|before|after|"
+        r"intern|contractor|part[\s-]+time|full[\s-]+time|remote|hybrid|on[\s-]*site|"
+        r"if|unless|except|but|only|however|without|with|until|pending|"
         r"requiring|needing|sponsor|sponsorship|visa|permit|or|and)\b)"
-        r"[a-z0-9&'.-]+(?:\s+[a-z0-9&'.-]+){0,3}(?:\s+in\s+any\s+capacity)?$"
+        r"[a-z0-9&'.-]+(?:\s+[a-z0-9&'.-]+){0,3}\s+in\s+any\s+capacity$"
     ),
     re.compile(
         r"^i\s+(?:do\s+not|don't|will\s+not|won't)\s+(?:require|need)\s+(?:any\s+)?"
@@ -690,9 +693,12 @@ _CEFR_DESCRIPTORS_BY_CODE: dict[str, str] = {
     "c1": r"(?:full\s+professional|advanced|fluent)(?:\s+proficiency)?",
     "c2": r"(?:bilingual\s*/\s*native|native\s*/\s*bilingual|native|bilingual|fluent)(?:\s+(?:speaker|proficiency))?",
 }
-_CEFR_LANG_PREFIX = (
-    r"(?:french|fran[c\u00e7]ais|english|anglais|bilingual|bilingue|"
-    r"english\s*(?:&|and|/)\s*french|french\s*(?:&|and|/)\s*english)"
+_CEFR_SINGLE_LANG_PREFIX: dict[str, str] = {
+    "english": r"(?:english|anglais)",
+    "french": r"(?:french|fran[c\u00e7]ais)",
+}
+_CEFR_BILINGUAL_PREFIX = (
+    r"(?:bilingual|bilingue|english\s*(?:&|and|/)\s*french|french\s*(?:&|and|/)\s*english)"
 )
 
 
@@ -849,12 +855,12 @@ def _parse_salary_range(body: str, extra_currs: list[_SalaryCurrency]) -> _Parse
         if p1 is None or p2 is None:
             return None
         v1, k1, dec1, c1 = p1
-        v2, k2, dec2, c2 = p2
+        v2, k2, _, c2 = p2
         combined = _combine_salary_currencies([c1, c2, *extra_currs])
         if combined is None:
             return None
         low = _scale_salary_bound(v1, k1, k2, dec1)
-        high = _scale_salary_bound(v2, k2, k1, dec2)
+        high = v2 * (1000.0 if k2 else 1.0)
         if low < 1000.0 or high < 1000.0 or low > high:
             return None
         return _ParsedSalary(low, high, True, True, combined)
@@ -1257,15 +1263,26 @@ def _no_option_matches(norm_val: str) -> bool:
     return any(pattern.fullmatch(tail) for pattern in _NO_SAFE_TAILS)
 
 
-def _cefr_option_matches(norm_val: str, weaker: str) -> bool:
+def _cefr_option_matches(
+    norm_val: str,
+    weaker: str,
+    weaker_langs: frozenset[str] = frozenset(),
+) -> bool:
     desc = _CEFR_DESCRIPTORS_BY_CODE.get(weaker)
     if not desc:
         return False
     cleaned = re.sub(r"\s*[.!]+\s*$", "", norm_val.strip())
     core = rf"{re.escape(weaker)}(?:(?:\s*[:\-\u2013\u2014/]\s*|\s+){desc}|\s*\(\s*{desc}\s*\))?"
     p_direct = re.compile(rf"^{core}$")
-    p_prefixed = re.compile(rf"^{_CEFR_LANG_PREFIX}\s*(?:\(\s*{core}\s*\)|[:\-\u2013\u2014]\s*{core})$")
-    return bool(p_direct.fullmatch(cleaned) or p_prefixed.fullmatch(cleaned))
+    if p_direct.fullmatch(cleaned):
+        return True
+    lang_alts = [_CEFR_BILINGUAL_PREFIX]
+    for lang in ("english", "french"):
+        if lang in weaker_langs:
+            lang_alts.append(_CEFR_SINGLE_LANG_PREFIX[lang])
+    prefix_pat = f"(?:{'|'.join(lang_alts)})"
+    p_prefixed = re.compile(rf"^{prefix_pat}\s*(?:\(\s*{core}\s*\)|[:\-\u2013\u2014]\s*{core})$")
+    return bool(p_prefixed.fullmatch(cleaned))
 
 
 def _value_matches_resolved(item: dict[str, Any]) -> bool:
@@ -1294,7 +1311,10 @@ def _value_matches_resolved(item: dict[str, Any]) -> bool:
             if levels and "english" in levels and "french" in levels:
                 weaker_upper = min(levels["english"], levels["french"], key=_CEFR_ORDER.index)
                 weaker = weaker_upper.lower()
-                if _cefr_option_matches(norm_val, weaker):
+                weaker_langs = frozenset(
+                    lang for lang in ("english", "french") if levels[lang] == weaker_upper
+                )
+                if _cefr_option_matches(norm_val, weaker, weaker_langs=weaker_langs):
                     return True
                 if _CEFR_ORDER.index(weaker_upper) >= _CEFR_ORDER.index("B2"):
                     cleaned_yn = _clean_yn_text(norm_val)
