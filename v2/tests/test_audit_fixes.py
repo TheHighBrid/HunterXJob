@@ -1,9 +1,10 @@
 from dataclasses import replace
 from pathlib import Path
-from app.knowledge_book import KnowledgeBook
-from app.truth_guard import audit_form_answers, enforce_answer_truthfulness
+
 from app.decisioning import Decision, DecisionContext, JobFacts, evaluate_job, targeting_policy
+from app.knowledge_book import KnowledgeBook
 from app.profile import Fact, VerifiedProfile
+from app.truth_guard import audit_form_answers, enforce_answer_truthfulness
 
 EXAMPLE_YAML = Path(__file__).parent.parent / "examples" / "profile.example.yaml"
 
@@ -11,7 +12,7 @@ EXAMPLE_YAML = Path(__file__).parent.parent / "examples" / "profile.example.yaml
 def test_truth_guard_cpa_question_fails_closed():
     """Verify that CPA designation questions NEVER return Yes when candidate lacks CPA."""
     kb = KnowledgeBook.from_yaml_file(EXAMPLE_YAML)
-    
+
     # Wealthsimple style question
     q_label = "Do you hold a CPA designation (or equivalent)?"
     ans, rule = kb.resolve_screening_question(q_label, options=["Yes", "No"])

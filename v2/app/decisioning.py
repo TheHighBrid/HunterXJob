@@ -127,7 +127,7 @@ def _keyword_matches(text: str, keywords: Iterable[str]) -> tuple[str, ...]:
         dict.fromkeys(
             keyword
             for keyword in keywords
-            if keyword.strip() and (normalized_keyword := _normalize(keyword)) and normalized_keyword in normalized
+            if keyword.strip() and (normalized_keyword := _normalize(keyword)) and _term_in(normalized, normalized_keyword)
         )
     )
 
@@ -140,6 +140,14 @@ def _term_in(normalized_text: str, term: str) -> bool:
     return re.search(rf"(?<![^\W_]){re.escape(normalized_term)}", normalized_text) is not None
 
 
+def _word_in(normalized_text: str, term: str) -> bool:
+    """Whole-word/phrase match on normalized text, so "on" does not hit "toronto"."""
+    normalized_term = _normalize(term)
+    if not normalized_term or not normalized_text:
+        return False
+    return re.search(rf"(?<![^\W_]){re.escape(normalized_term)}(?![^\W_])", normalized_text) is not None
+
+
 def _bounded_score(value: float) -> float:
     return round(max(0.0, min(5.0, value)), 2)
 
@@ -148,7 +156,21 @@ _OTTAWA_NCR_TERMS = (
     "ottawa", "gatineau", "national capital region", "kanata", "nepean", "gloucester", "hull", "orleans"
 )
 _REMOTE_TERMS = ("remote", "telework", "work from home", "wfh", "anywhere")
-_HYBRID_ON_SITE_TERMS = ("hybrid", "on-site", "onsite", "in-person", "in office", "office-based")
+_HYBRID_ON_SITE_RE = re.compile(
+    r"\b(?:hybrid|on[- ]?site|in[- ]?person|in[- ]?office|office[- ]?based)\b",
+    re.IGNORECASE,
+)
+_DESC_REMOTE_RE = re.compile(r"\b(?:100%|fully)\s+remote\b", re.IGNORECASE)
+_REMOTE_NEGATION_RE = re.compile(r"\b(?:not(?:\s+a)?|isn't|aren't|no)\s+$", re.IGNORECASE)
+
+
+def _has_affirmative_remote_desc(desc_sample: str) -> bool:
+    for match in _DESC_REMOTE_RE.finditer(desc_sample):
+        prefix = desc_sample[max(0, match.start() - 16):match.start()]
+        if not _REMOTE_NEGATION_RE.search(prefix):
+            return True
+    return False
+
 
 _CANADA_GEO_RE = re.compile(
     r"\b(?:canada|ontario|quebec|québec|british\s+columbia|alberta|manitoba|saskatchewan|"
@@ -156,7 +178,7 @@ _CANADA_GEO_RE = re.compile(
     r"ottawa|gatineau|toronto|montreal|montréal|vancouver|calgary|edmonton|winnipeg|"
     r"waterloo|kitchener|mississauga|brampton|halifax|victoria)\b"
     r"|(?:^|[,\s(])(?:ON|QC|BC|AB|MB|SK|NS|NB|NL|PE)(?:$|[,\s)])",
-    re.I,
+    re.IGNORECASE,
 )
 _FOREIGN_GEO_RE = re.compile(
     r"\b(?:united\s+states|u\.s\.a?\.?|usa|san\s+francisco|new\s+york|nyc|california|texas|"
@@ -164,7 +186,7 @@ _FOREIGN_GEO_RE = re.compile(
     r"great\s+britain|england|london,\s*uk|ireland|dublin|germany|berlin|france|paris|"
     r"singapore|india|bangalore|bengaluru|australia|sydney|melbourne|mexico|brazil)\b"
     r"|(?:^|[,\s(-])U\.?S\.?(?:$|[,\s)-])",
-    re.I,
+    re.IGNORECASE,
 )
 
 # Role families clearly outside Mohamed's financial operations, fraud/AML, collections,
@@ -173,49 +195,49 @@ _NON_TARGET_ROLE_PATTERNS = (
     re.compile(
         r"\b(?:software|full[- ]?stack|front[- ]?end|back[- ]?end|web|mobile|ios|android|cloud|"
         r"devops|sre|platform|infrastructure|systems?|network|embedded|firmware|cybersecurity|"
-        r"application|qa|quality\s+assurance|test|sdet|machine\s+learning|ml|ai|llm)\s+"
+        r"application|qa|quality\s+assurance|test|sdet|ai|llm)\s+"
         r"(?:engineer(?:ing)?|developer|architect|programmer|scientist)\b",
-        re.I,
+        re.IGNORECASE,
     ),
-    re.compile(r"\bfull[- ]?stack\s+development\b|\bsite\s+reliability\b", re.I),
+    re.compile(r"\bfull[- ]?stack\s+development\b|\bsite\s+reliability\b", re.IGNORECASE),
     re.compile(
         r"\b(?:staff|principal|distinguished|fellow)\s+(?:software\s+)?(?:engineer|developer|architect|designer)\b",
-        re.I,
+        re.IGNORECASE,
     ),
     re.compile(
         r"\b(?:product|technical\s+product|product\s+growth)\s+(?:manager|management|owner|lead|director|specialist)\b",
-        re.I,
+        re.IGNORECASE,
     ),
     re.compile(
         r"\b(?:product|ux|ui|graphic|visual|brand|motion|web)\s+(?:designer|design|researcher)\b",
-        re.I,
+        re.IGNORECASE,
     ),
     re.compile(
         r"\b(?:marketing|public\s+relations|copywriter|content\s+writer|seo|demand\s+gen|"
         r"brand|growth\s+marketing|product\s+marketing|lifecycle\s+marketing)\b",
-        re.I,
+        re.IGNORECASE,
     ),
     re.compile(
         r"\b(?:account\s+executive|business\s+development|sales\s+development|sales\s+engineer|"
         r"sales\s+representative|shopping\s+centre|solutions\s+architect|solutions\s+engineer|"
         r"revenue\s+enablement|sales\s+enablement|operations\s+enablement|bdr|sdr)\b",
-        re.I,
+        re.IGNORECASE,
     ),
     re.compile(
         r"\b(?:recruiter|talent\s+acquisition|people\s+partner|people\s+operations|hris|human\s+resources|"
         r"general\s+counsel|legal\s+counsel|paralegal|attorney)\b",
-        re.I,
+        re.IGNORECASE,
     ),
     re.compile(
         r"\b(?:strategic\s+finance|fp&a|financial\s+planning|corporate\s+accounting|accounting\s+manager|"
         r"gl\s+operations|intercompany|tax\s+(?:manager|analyst|accountant)|payroll\s+(?:manager|specialist|administrator)|"
         r"it\s+operations|security\s+risk|financial\s+model\s+risk|"
         r"product\s+support\s+manager|manager,?\s+product\s+support)\b",
-        re.I,
+        re.IGNORECASE,
     ),
     re.compile(
         r"\b(?:chief\s+\w+\s+officer|ceo|cto|cfo|coo|cpo|cro|cmo|ciso|svp|evp|vice\s+president)\b",
-        re.I,
+        re.IGNORECASE,
     ),
 )
 
@@ -243,13 +265,13 @@ _TITLE_SYNONYMS: dict[str, tuple[str, ...]] = {
 }
 
 _MANDATORY_CPA_PATTERNS = (
-    re.compile(r"\bcpa\s+(?:designation\s+)?(?:is\s+)?required\b", re.I),
-    re.compile(r"\b(?:must|should)\s+(?:hold|have|possess)\s+(?:an?\s+)?(?:active\s+)?cpa\b", re.I),
-    re.compile(r"\bactive\s+cpa\b", re.I),
-    re.compile(r"\bholding\s+(?:a\s+)?cpa\b", re.I),
-    re.compile(r"\bdesignated\s+cpa\b", re.I),
-    re.compile(r"\bcpa\s+(?:or\s+equivalent)\s+required\b", re.I),
-    re.compile(r"\bcpa\s+designation\s+\(or\s+equivalent\)\b", re.I),
+    re.compile(r"\bcpa\s+(?:designation\s+)?(?:is\s+)?required\b", re.IGNORECASE),
+    re.compile(r"\b(?:must|should)\s+(?:hold|have|possess)\s+(?:an?\s+)?(?:active\s+)?cpa\b", re.IGNORECASE),
+    re.compile(r"\bactive\s+cpa\b", re.IGNORECASE),
+    re.compile(r"\bholding\s+(?:a\s+)?cpa\b", re.IGNORECASE),
+    re.compile(r"\bdesignated\s+cpa\b", re.IGNORECASE),
+    re.compile(r"\bcpa\s+(?:or\s+equivalent)\s+required\b", re.IGNORECASE),
+    re.compile(r"\bcpa\s+designation\s+\(or\s+equivalent\)\b", re.IGNORECASE),
 )
 
 
@@ -376,19 +398,20 @@ def _hard_veto(job: JobFacts, context: DecisionContext) -> tuple[DecisionReport 
         ), False
 
     # 2. Location & Workplace Type Analysis
-    explicit_canada = bool(_CANADA_GEO_RE.search(location) or "canada" in norm_title)
+    location_canada = bool(_CANADA_GEO_RE.search(location))
+    location_foreign = bool(_FOREIGN_GEO_RE.search(location))
+    explicit_canada = bool(location_canada or ("canada" in norm_title and not location_foreign))
     excluded_location = _contains_any(location, context.excluded_locations)
     is_remote = (
         job.remote
         or any(term in norm_location or term in norm_title for term in _REMOTE_TERMS)
-        or "100% remote" in desc_sample
-        or "fully remote" in desc_sample
+        or _has_affirmative_remote_desc(desc_sample)
     )
     target_location = _contains_any(location, context.target_locations) or (explicit_canada and is_remote)
     if excluded_location and not target_location:
         return DecisionReport(Decision.REJECT, "excluded location", 0.0, vetoes=("excluded_location",)), target_location
 
-    explicit_foreign = bool(_FOREIGN_GEO_RE.search(location)) and not explicit_canada
+    explicit_foreign = location_foreign and not location_canada
     if explicit_foreign:
         return DecisionReport(
             Decision.REJECT,
@@ -398,23 +421,26 @@ def _hard_veto(job: JobFacts, context: DecisionContext) -> tuple[DecisionReport 
         ), False
 
     is_ottawa_ncr = any(term in norm_location for term in _OTTAWA_NCR_TERMS)
-    location_hybrid = any(term in norm_location or term in norm_title for term in _HYBRID_ON_SITE_TERMS)
-    desc_hybrid = any(term in desc_sample[:300] for term in _HYBRID_ON_SITE_TERMS) and not is_remote
+    location_hybrid = bool(_HYBRID_ON_SITE_RE.search(location) or _HYBRID_ON_SITE_RE.search(job.title or ""))
+    desc_hybrid = bool(_HYBRID_ON_SITE_RE.search(desc_sample[:300])) and not is_remote
     is_explicit_hybrid_or_onsite = location_hybrid or desc_hybrid
 
     # Check if a non-Ottawa location was explicitly targeted as a specific city (e.g. "Montréal")
     explicit_city_target = any(
-        _normalize(target) in norm_location
+        _word_in(norm_location, normalized_target)
         for target in context.target_locations
-        if _normalize(target) not in ("canada", "remote canada", "remote", "anywhere")
+        if (normalized_target := _normalize(target))
+        and normalized_target not in ("canada", "remote canada", "canada remote", "remote", "anywhere")
     )
 
     # Candidate rule: In-person or hybrid work is allowed ONLY in Ottawa-Gatineau (or explicitly targeted city),
     # unless the targeting policy allows in-person work anywhere in Canada ("broad").
+    canada_targeted = any(_normalize(item) == "canada" for item in context.target_locations)
     onsite_elsewhere = (not is_remote or is_explicit_hybrid_or_onsite) and not is_ottawa_ncr and not explicit_city_target
-    if onsite_elsewhere and location and context.policy.allow_onsite_canada and explicit_canada:
-        return None, False
-    if onsite_elsewhere and location:
+    onsite_canada_allowed = bool(
+        onsite_elsewhere and location and context.policy.allow_onsite_canada and explicit_canada and canada_targeted
+    )
+    if onsite_elsewhere and location and not (context.policy.allow_onsite_canada and explicit_canada):
         return DecisionReport(
             Decision.REJECT,
             f"non-remote or hybrid position outside Ottawa-Gatineau: {location}",
@@ -425,7 +451,7 @@ def _hard_veto(job: JobFacts, context: DecisionContext) -> tuple[DecisionReport 
     remote_targeted = is_remote and (explicit_canada or norm_location in ("", "remote", "anywhere")) and any(
         "remote" in _normalize(item) for item in context.target_locations if _normalize(item)
     )
-    if not target_location and not remote_targeted:
+    if not target_location and not remote_targeted and not onsite_canada_allowed:
         return DecisionReport(Decision.REJECT, "location not eligible", 0.0, vetoes=("location_not_eligible",)), target_location
     return None, target_location
 
@@ -433,15 +459,18 @@ def _hard_veto(job: JobFacts, context: DecisionContext) -> tuple[DecisionReport 
 _SECTOR_TERMS = ("bank", "banking", "financial", "fintech", "payments", "credit", "fraud", "aml", "kyc", "compliance")
 _LANGUAGE_TERMS = ("bilingual", "french", "français", "english and french", "fr/en", "en/fr")
 _IC_TITLE_TERMS = ("analyst", "officer", "specialist", "associate", "coordinator", "representative", "advisor", "investigator")
+_SENIOR_EXEC_RE = re.compile(r"\b(?:vice\s+president|vp|principal)\b", re.IGNORECASE)
 
 
 def _seniority(title: str, policy: TargetingPolicy) -> tuple[float, list[str]]:
-    if _contains_any(title, ("vice president", "vp", "principal")):
+    if _SENIOR_EXEC_RE.search(title):
         return 1.5, ["seniority may exceed target level"]
     if _SENIOR_LEADERSHIP_RE.search(title):
         # Only reachable when the policy allows senior leadership (otherwise vetoed earlier).
         return 1.5, [] if policy.allow_senior_leadership else ["seniority may exceed target level"]
-    if _contains_any(title, ("manager", "lead")) and not _contains_any(title, _IC_TITLE_TERMS):
+    if (_PEOPLE_MANAGER_RE.search(title) or _contains_any(title, ("manager", "lead"))) and not _contains_any(
+        title, _IC_TITLE_TERMS
+    ):
         if _SALES_ACCOUNT_RE.search(title):
             return 2.5, []
         if not policy.allow_senior_leadership and _PEOPLE_MANAGER_RE.search(title):

@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -69,7 +69,10 @@ class Settings(BaseSettings):
     materials_llm_timeout: float = Field(default=180.0, gt=0, le=1800)
 
     target_locations: str = "Ottawa,Gatineau,National Capital Region,Remote Canada,Canada"
-    target_keywords: str = "fraud,disputes,AML,KYC,compliance,collections,credit,bilingual"
+    target_keywords: str = (
+        "fraud,disputes,AML,KYC,compliance,collections,credit,"
+        "account administration,bilingual,customer operations"
+    )
     excluded_locations: str = "United States,US Remote,Bengaluru,Dublin,Tokyo"
     excluded_titles: str = "software engineer,legal counsel,product manager"
     blacklisted_companies: str = ""
@@ -83,6 +86,28 @@ class Settings(BaseSettings):
     targeting_allow_sales_account_mgmt: bool | None = None
     targeting_allow_adjacent_investigations: bool | None = None
     targeting_allow_onsite_canada: bool | None = None
+
+    @field_validator("targeting_preset", mode="before")
+    @classmethod
+    def _normalize_targeting_preset(cls, value: object) -> object:
+        if isinstance(value, str):
+            stripped = value.strip().lower()
+            return stripped or "broad"
+        return value
+
+    @field_validator(
+        "targeting_allow_senior_leadership",
+        "targeting_allow_data_science",
+        "targeting_allow_sales_account_mgmt",
+        "targeting_allow_adjacent_investigations",
+        "targeting_allow_onsite_canada",
+        mode="before",
+    )
+    @classmethod
+    def _empty_targeting_override_is_none(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     # Public job boards to discover from (comma-separated board tokens/slugs).
     # Editable from the phone (Settings > Job sources); see examples/boards.canada.example.env.
@@ -107,7 +132,7 @@ class Settings(BaseSettings):
     # Directory for Playwright trace zips of browser verification sessions
     # (hashed into the dry-run evidence). Empty = no trace is written.
     browser_trace_dir: str = ""
-    artifact_dir: str = "/tmp/hunterx_autonomous"
+    artifact_dir: str = "/tmp/hunterx_autonomous"  # noqa: S108  # nosec B108
 
     # Liveness / closed-listing detection. A posting is closed only after two
     # definitive "gone" answers at least ``liveness_confirm_minutes`` apart;

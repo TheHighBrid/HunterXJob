@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from targeting_fixture import FRAUD_SEARCH_POSTINGS
 
@@ -13,6 +15,9 @@ from app.decisioning import (
     evaluate_job,
     targeting_policy,
 )
+from app.models import Job
+from app.pipeline import deterministic_gate
+from app.runtime_settings import SettingsPatch, apply_changes
 
 LOCATIONS = ("Ottawa", "Gatineau", "National Capital Region", "Remote Canada", "Canada")
 EXCLUDED = ("United States", "US Remote", "Bengaluru", "Dublin", "Tokyo")
@@ -134,3 +139,163 @@ def test_single_toggle_override_on_core():
     ctx = _ctx("core", allow_data_science=True)
     assert evaluate_job(_job("Data Scientist, Risk & Fraud"), ctx).decision is Decision.SHORTLIST
     assert evaluate_job(_job("Head of Fraud Operations"), ctx).decision is Decision.REJECT
+
+
+def test_config_and_env_example_consistency():
+    env_example = Path(__file__).resolve().parents[1] / ".env.example"
+    env_values: dict[str, str] = {}
+    for line in env_example.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, val = line.split("=", 1)
+        env_values[key.strip()] = val.strip()
+
+    settings = Settings(_env_file=None)
+    assert settings.targeting_preset == env_values["TARGETING_PRESET"]
+    assert settings.target_keyword_list == [item.strip() for item in env_values["TARGET_KEYWORDS"].split(",") if item.strip()]
+    assert settings.target_location_list == [item.strip() for item in env_values["TARGET_LOCATIONS"].split(",") if item.strip()]
+    assert settings.excluded_location_list == [item.strip() for item in env_values["EXCLUDED_LOCATIONS"].split(",") if item.strip()]
+    assert settings.excluded_title_list == [item.strip() for item in env_values["EXCLUDED_TITLES"].split(",") if item.strip()]
+
+
+def test_blank_targeting_overrides_and_preset_normalization_in_settings():
+    settings = Settings(
+        _env_file=None,
+        targeting_preset=" CORE ",
+        targeting_allow_senior_leadership="",
+        targeting_allow_data_science="   ",
+        targeting_allow_onsite_canada="true",
+    )
+    assert settings.targeting_preset == "core"
+    assert settings.targeting_allow_senior_leadership is None
+    assert settings.targeting_allow_data_science is None
+    assert settings.targeting_allow_onsite_canada is True
+
+    policy = targeting_policy(settings.targeting_preset, **settings.targeting_overrides)
+    assert policy.preset == "core"
+    assert policy.allow_senior_leadership is False
+    assert policy.allow_onsite_canada is True
+
+
+def test_runtime_settings_patch_compatible_with_deterministic_gate():
+    settings = Settings(_env_file=None)
+    patch = SettingsPatch(target_keywords=["fraud", "aml"], blacklisted_companies=["Blocked Bank"])
+    apply_changes(settings, patch.changes())
+
+    blocked = Job(
+        source="test",
+        external_id="blocked-1",
+        title="Fraud Analyst",
+        company="Blocked Bank",
+        location="Ottawa, ON",
+        url="https://example.test/blocked",
+        description=LONG_DESC,
+        remote=False,
+    )
+    res_blocked = deterministic_gate(blocked, settings)
+    assert res_blocked.decision is Decision.REJECT
+    assert "blacklisted_company" in (res_blocked.report or {}).get("vetoes", [])
+
+    allowed = Job(
+        source="test",
+        external_id="allowed-1",
+        title="Fraud Analyst",
+        company="Open Bank",
+        location="Ottawa, ON",
+        url="https://example.test/allowed",
+        description=LONG_DESC,
+        remote=False,
+    )
+    res_allowed = deterministic_gate(allowed, settings)
+    assert res_allowed.decision is Decision.SHORTLIST
+
+
+def test_direct_keyword_matching_avoids_substring_false_positives():
+    report = evaluate_job(
+        _job("Streamlined Office Coordinator"),
+        _ctx("broad", ("fraud", "aml", "compliance")),
+    )
+    assert report.decision is Decision.REJECT
+    assert report.vetoes == ("no_role_overlap",)
+
+
+def test_core_preset_catches_hyphenated_onsite_and_negated_remote_descriptions():
+    # Hyphenated "On-Site" / "In-Person" in location or title even if remote flag is mis-set.
+    for job in (
+        _job("Fraud Analyst", location="Toronto, ON (On-Site)", remote=True),
+        _job("Fraud Analyst - In-Person", location="Vancouver, BC", remote=True),
+        JobFacts(
+            title="Fraud Analyst",
+            company="Example Co",
+            location="Toronto, ON",
+            description="In-office role in downtown Toronto. " + LONG_DESC,
+            remote=False,
+        ),
+        JobFacts(
+            title="Fraud Analyst",
+            company="Example Co",
+            location="Toronto, ON",
+            description="Hybrid role (2 days/week), not 100% remote. " + LONG_DESC,
+            remote=False,
+        ),
+    ):
+        report = evaluate_job(job, _ctx("core"))
+        assert report.decision is Decision.REJECT, job
+        assert report.vetoes == ("non_remote_outside_ottawa",)
+
+
+def test_explicit_city_target_uses_word_boundaries_and_canada_target_scope():
+    # "on" as a target token must not match "Toronto" as an explicit city target.
+    ctx_on = DecisionContext(
+        target_locations=("Ottawa", "ON", "Canada"),
+        target_keywords=("fraud",),
+        policy=targeting_policy("core"),
+    )
+    rep_toronto_core = evaluate_job(_job("Fraud Analyst", location="Toronto, Ontario", remote=False), ctx_on)
+    assert rep_toronto_core.decision is Decision.REJECT
+    assert rep_toronto_core.vetoes == ("non_remote_outside_ottawa",)
+
+    # Ottawa-only target_locations must not allow Toronto onsite even under broad.
+    ctx_ottawa_only = DecisionContext(
+        target_locations=("Ottawa",),
+        target_keywords=("fraud",),
+        policy=targeting_policy("broad"),
+    )
+    rep_ottawa_only = evaluate_job(_job("Fraud Analyst", location="Toronto, Ontario", remote=False), ctx_ottawa_only)
+    assert rep_ottawa_only.decision is Decision.REJECT
+    assert rep_ottawa_only.vetoes == ("location_not_eligible",)
+
+    # When "Canada" is in target_locations and location explicitly includes Canada, location_fit stays 5.0.
+    rep_broad_ca = evaluate_job(_job("Fraud Analyst", location="Toronto, Ontario, Canada", remote=False), _ctx("broad"))
+    assert rep_broad_ca.decision is Decision.SHORTLIST
+    loc_dim = next(d for d in rep_broad_ca.dimensions if d.name == "location_fit")
+    assert loc_dim.score == 5.0
+
+
+@pytest.mark.parametrize("preset", ["broad", "core"])
+def test_foreign_location_rejected_even_when_title_mentions_canada(preset: str):
+    report = evaluate_job(
+        _job("Fraud Analyst (Canada)", location="New York, NY", remote=False),
+        _ctx(preset),
+    )
+    assert report.decision is Decision.REJECT
+    assert "international_non_canada" in report.vetoes or "excluded_location" in report.vetoes
+
+
+def test_supervisor_and_gestionnaire_titles_respect_preset_and_ml_data_science_toggle():
+    for title in ("Fraud Supervisor", "Gestionnaire de fraude"):
+        core = evaluate_job(_job(title), _ctx("core"))
+        assert core.decision is Decision.REVIEW, title
+        assert "manager title may be a people-management role" in core.review_flags
+        assert evaluate_job(_job(title), _ctx("broad")).decision is Decision.SHORTLIST
+
+    ml_job = _job("ML Engineer, Fraud")
+    assert evaluate_job(ml_job, _ctx("broad")).decision is Decision.SHORTLIST
+    ml_core = evaluate_job(ml_job, _ctx("core"))
+    assert ml_core.decision is Decision.REJECT
+    assert ml_core.vetoes == ("role_family_data_science",)
+
+    vp_job = evaluate_job(_job("VP, Fraud Operations"), _ctx("broad"))
+    assert vp_job.decision is Decision.REVIEW
+    assert "seniority may exceed target level" in vp_job.review_flags
