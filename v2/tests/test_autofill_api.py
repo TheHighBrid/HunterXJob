@@ -4,17 +4,18 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+
 import pytest
+from profile_helpers import load_example_profile
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 from starlette.testclient import TestClient
 
 from app.config import Settings, get_settings
 from app.db import Base, get_db
 from app.main import app
 from app.models import AnswerPolicy
-from profile_helpers import load_example_profile
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 KEY = "k" * 40
 HEADERS = {"X-API-Key": KEY}

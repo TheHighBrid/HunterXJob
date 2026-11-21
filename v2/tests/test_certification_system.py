@@ -1,6 +1,5 @@
 import json
 import os
-from pathlib import Path
 
 import pytest
 
@@ -10,7 +9,6 @@ from app.certification_system import (
     SubmissionEvidenceRecord,
     build_certification_dossier,
     evaluate_milestones,
-    hash_payload,
 )
 
 
