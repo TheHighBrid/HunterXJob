@@ -107,7 +107,7 @@ def test_iso_date_and_verify_filled_for_date_controls():
     assert verify_filled(date_ctrl, "2027-01-04", "") is False
 
 
-def test_greenhouse_smartrecruiters_workday_lever_and_ashby_date_controls():
+def test_greenhouse_smartrecruiters_and_workday_date_controls():
     # Greenhouse API input_date/date mapping
     payload = load_fixture_json("d2l_7696196.json")
     payload["questions"].append({
@@ -138,6 +138,8 @@ def test_greenhouse_smartrecruiters_workday_lever_and_ashby_date_controls():
     assert _only(plan_fill([wd_date], _vault({"start_date": "2 weeks notice"}))).status == "review"
     assert _only(plan_fill([wd_date], _vault({"start_date": "January 4, 2027"}))).value == "2027-01-04"
 
+
+def test_lever_and_ashby_date_controls():
     # Lever date card
     lever_tpl = json.dumps({"text": "Start", "fields": [{"id": "f0", "text": "Earliest start date", "type": "date", "required": True}]})
     lever_html = f'<form id="application-form"><input type="hidden" name="cards[00000000-0000-0000-0000-000000000001][baseTemplate]" value=\'{lever_tpl}\' /></form>'
