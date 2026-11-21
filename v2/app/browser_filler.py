@@ -16,11 +16,18 @@ import json
 import logging
 import re
 import sys
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from app.form_engine import phone_values_equivalent
+from app.greenhouse_browser import (
+    SUBMIT_MONITOR_JS,
+    _NetworkLog,
+    _ReadOnlyRouter,
+    _submit_attempts,
+)
 from app.knowledge_book import enforce_length_constraints
 from app.question_catalog import (
     OptionRecord,
@@ -91,6 +98,11 @@ class FormFillResult:
     post_submit_screenshot_path: str | None = None
     post_submit_screenshot_sha256: str | None = None
     error: str | None = None
+    submit_events: list[dict[str, Any]] = field(default_factory=list)
+    unreadable_frames: list[str] = field(default_factory=list)
+    non_get_attempts: int = 0
+    aborted_requests: int = 0
+    browser_evidence: dict[str, Any] = field(default_factory=dict)
 
 
 def _file_record(path: Path, key: str) -> FileAttachmentRecord:
@@ -948,9 +960,9 @@ async def fill_application_form(
     browser: Any | None = None,
 ) -> FormFillResult:
     """Open the application page, fill in all answers, attach files, and verify read-backs."""
-    from collections.abc import Collection
     from contextlib import AsyncExitStack
-    from playwright.async_api import async_playwright
+
+    from playwright.async_api import Error as PlaywrightError, async_playwright
 
     labels = labels or {}
     files = files or {}
@@ -962,6 +974,15 @@ async def fill_application_form(
     candidate_id: str | None = None
     post_sc_sha256: str | None = None
     submit_error: str | None = None
+    network_log = _NetworkLog() if not allow_live_submit else None
+    router = _ReadOnlyRouter(network_log, ()) if network_log is not None else None
+    read_only_evidence: dict[str, Any] = (
+        {"service_workers": "block", "accept_downloads": False}
+        if not allow_live_submit
+        else {}
+    )
+    submit_events: list[dict[str, Any]] = []
+    unreadable_frames: list[str] = []
 
     # If target_fields is provided, filter answers and files down to only targeted fields
     items_to_fill = answers
@@ -981,22 +1002,38 @@ async def fill_application_form(
         if owns_browser:
             playwright = await stack.enter_async_context(async_playwright())
             browser = await launch_playwright_browser(playwright, headless=headless)
-        context = await browser.new_context(
-            locale="en-CA",
-            viewport={"width": 1280, "height": 900},
-        )
+        context_kwargs: dict[str, Any] = {
+            "locale": "en-CA",
+            "viewport": {"width": 1280, "height": 900},
+        }
+        if not allow_live_submit:
+            # Service workers can bypass context.route() and downloads can write artifacts.
+            context_kwargs["accept_downloads"] = False
+            context_kwargs["service_workers"] = "block"
+        context = await browser.new_context(**context_kwargs)
         await context.add_init_script(
             """
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
             window.chrome = window.chrome || { runtime: {} };
             """
         )
+        if not allow_live_submit:
+            await context.add_init_script(SUBMIT_MONITOR_JS)
+            if router is not None:
+                await context.route("**/*", router)
 
         if trace_path:
             trace_path.parent.mkdir(parents=True, exist_ok=True)
             await context.tracing.start(screenshots=True, snapshots=True, sources=True)
 
         page = await context.new_page()
+        if network_log is not None:
+            page.on(
+                "framenavigated",
+                lambda frame: network_log.navigations.append(frame.url[:300])
+                if frame == page.main_frame
+                else None,
+            )
 
         try:
             try:
@@ -1104,6 +1141,11 @@ async def fill_application_form(
                 await page.screenshot(path=str(screenshot_path), full_page=True)
                 sc_sha256 = hashlib.sha256(screenshot_path.read_bytes()).hexdigest()
 
+            # 3b. Inspect every frame for refused submit attempts / unreadable frames in read-only mode
+            if not allow_live_submit:
+                submit_events = await _submit_attempts(page, read_only_evidence)
+                unreadable_frames = list(read_only_evidence.get("unreadable_frames") or [])
+
             # 4. Live submission execution if enabled and no blocking unmatched fields
             blocking_unmatched = [
                 k for k in unmatched if required_fields is None or k in required_fields
@@ -1136,6 +1178,16 @@ async def fill_application_form(
                     submit_error = sub_res.error
 
         except Exception as exc:
+            if not allow_live_submit:
+                try:
+                    submit_events = await _submit_attempts(page, read_only_evidence)
+                    unreadable_frames = list(read_only_evidence.get("unreadable_frames") or [])
+                except PlaywrightError as sub_exc:
+                    logger.debug("Could not read submit attempts after error: %s", sub_exc)
+                if network_log is not None:
+                    read_only_evidence.update(network_log.summary())
+                read_only_evidence["submit_events"] = submit_events
+                read_only_evidence["unreadable_frames"] = unreadable_frames
             return FormFillResult(
                 url=url,
                 success=False,
@@ -1145,6 +1197,11 @@ async def fill_application_form(
                 unmatched_fields=unmatched,
                 files_attached=files_attached,
                 error=str(exc),
+                submit_events=submit_events,
+                unreadable_frames=unreadable_frames,
+                non_get_attempts=int(read_only_evidence.get("non_get_attempts") or 0),
+                aborted_requests=int(read_only_evidence.get("aborted") or 0),
+                browser_evidence=dict(read_only_evidence),
             )
         finally:
             if not headless and headed_pause_ms > 0:
@@ -1170,6 +1227,14 @@ async def fill_application_form(
                 except Exception:
                     pass
 
+    if not allow_live_submit and network_log is not None:
+        read_only_evidence.update(network_log.summary())
+        read_only_evidence["submit_events"] = submit_events
+        read_only_evidence["unreadable_frames"] = unreadable_frames
+
+    non_get_attempts = int(read_only_evidence.get("non_get_attempts") or 0)
+    aborted_requests = int(read_only_evidence.get("aborted") or 0)
+
     filled_count = sum(1 for r in field_reports.values() if r.matched)
     total_attempted = len(field_reports)
 
@@ -1181,6 +1246,21 @@ async def fill_application_form(
 
     if allow_live_submit:
         success = success and submitted
+    else:
+        isolation_failures: list[str] = []
+        if submit_events:
+            isolation_failures.append(
+                f"read-only session refused {len(submit_events)} form submission attempt(s)"
+            )
+        if unreadable_frames:
+            isolation_failures.append(
+                f"read-only session encountered {len(unreadable_frames)} unreadable/detached frame(s)"
+            )
+        if isolation_failures:
+            reason_text = "; ".join(isolation_failures)
+            submit_error = f"{submit_error}; {reason_text}" if submit_error else reason_text
+            success = False
+            submitted = False
 
     return FormFillResult(
         url=url,
@@ -1200,4 +1280,9 @@ async def fill_application_form(
         post_submit_screenshot_path=str(post_submit_screenshot_path) if post_submit_screenshot_path else None,
         post_submit_screenshot_sha256=post_sc_sha256,
         error=submit_error,
+        submit_events=submit_events,
+        unreadable_frames=unreadable_frames,
+        non_get_attempts=non_get_attempts,
+        aborted_requests=aborted_requests,
+        browser_evidence=dict(read_only_evidence),
     )
