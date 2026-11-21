@@ -11,8 +11,8 @@ Fills real application forms inside a Playwright browser session:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
-import json
 import logging
 import re
 import sys
@@ -20,6 +20,8 @@ from collections.abc import Collection
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.form_engine import phone_values_equivalent
 from app.greenhouse_browser import (
@@ -37,12 +39,21 @@ from app.question_catalog import (
     score_option,
 )
 
+try:
+    from playwright.async_api import Error as PlaywrightError
+except ImportError:  # pragma: no cover - optional [browser] extra
+
+    class _FallbackPlaywrightError(Exception):
+        pass
+
+    PlaywrightError = _FallbackPlaywrightError  # type: ignore[misc, assignment]
+
 logger = logging.getLogger(__name__)
 
 
 def get_current_champion_harness(project: str = "hunterxjob") -> dict[str, Any]:
     """Dynamically fetch the active champion agent harness config in real time without restarting the daemon.
-    
+
     Queries the database for the active champion of the specified project. If the database
     is unavailable or no champion exists, returns an empty configuration dict gracefully.
     """
@@ -54,7 +65,7 @@ def get_current_champion_harness(project: str = "hunterxjob") -> dict[str, Any]:
             champion = get_current_champion(session, project=project)
             if champion and champion.harness_config:
                 return dict(champion.harness_config)
-    except Exception as exc:
+    except (ImportError, OSError, SQLAlchemyError, ValueError, TypeError) as exc:
         logger.debug("Failed fetching active champion harness in real time: %s", exc)
     return {}
 
@@ -188,7 +199,8 @@ async def _find_input_in_target(
                 loc = page.locator(sel)
                 if await loc.count() > 0 and await loc.first.is_visible():
                     return loc.first, f"champion:{sel}"
-            except Exception:
+            except (PlaywrightError, ValueError, TypeError, AttributeError) as exc:
+                logger.debug("Skipping promoted selector %r for %s: %s", sel, key, exc)
                 continue
 
     # Location specialized locator (Ashby _systemfield_location, Greenhouse, Workable)
@@ -200,26 +212,22 @@ async def _find_input_in_target(
             "input[placeholder*='Location' i], input[aria-label*='Location' i], "
             "input[name*='location' i], input[id*='location' i]"
         )
-        try:
+        with contextlib.suppress(PlaywrightError, ValueError, TypeError, AttributeError):
             if await loc_candidates.count() > 0 and await loc_candidates.first.is_visible():
                 return loc_candidates.first, "specialized:location_input"
-        except Exception:
-            pass
 
     # 0a. Check for button option toggles (e.g. Ashby yes/no buttons)
     if value_hint is not None:
         v_str = str(value_hint).strip().lower()
         btn_loc = page.locator(f'[data-field-path*="{key}"] button[data-option="{v_str}" i], [id*="{key}"] button[data-option="{v_str}" i]')
-        try:
+        with contextlib.suppress(PlaywrightError, ValueError, TypeError, AttributeError):
             if await btn_loc.count() > 0 and await btn_loc.first.is_visible():
                 return btn_loc.first, f'button[data-option="{v_str}"]'
-        except Exception:
-            pass
 
     # 0b. Check for data-field-path container (Ashby standard container)
     for k in (key, key_camel):
         container = page.locator(f'[data-field-path="{k}" i], [data-field-path*="{k}" i]')
-        try:
+        with contextlib.suppress(PlaywrightError, ValueError, TypeError, AttributeError):
             if await container.count() > 0:
                 if value_hint is not None:
                     v_str = str(value_hint).strip().lower()
@@ -231,9 +239,12 @@ async def _find_input_in_target(
                     for b_idx in range(await btns.count()):
                         btn_el = btns.nth(b_idx)
                         b_text = (await btn_el.inner_text()).strip().lower()
-                        if b_text == v_str or (v_str in ("yes", "true", "1") and b_text == "yes") or (v_str in ("no", "false", "0") and b_text == "no"):
-                            if await btn_el.is_visible():
-                                return btn_el, f'[data-field-path="{k}"] button:{b_text}'
+                        if (
+                            b_text == v_str
+                            or (v_str in ("yes", "true", "1") and b_text == "yes")
+                            or (v_str in ("no", "false", "0") and b_text == "no")
+                        ) and await btn_el.is_visible():
+                            return btn_el, f'[data-field-path="{k}"] button:{b_text}'
                     # Check radio or checkbox buttons inside container matching value_hint
                     c_options = container.locator('input[type="radio"], input[type="checkbox"]')
                     co_count = await c_options.count()
@@ -255,8 +266,6 @@ async def _find_input_in_target(
                 any_input = container.locator('input, select, textarea')
                 if await any_input.count() > 0:
                     return any_input.first, f'[data-field-path="{k}"] backing-input'
-        except Exception:
-            pass
 
     # 0c. Check for radio or checkbox group matching key (e.g. Lever cards[...][field0], Ashby compound {option_id}_{field_id}, or Greenhouse question_123[] checkboxes)
     for k in (key, key_camel):
@@ -268,7 +277,7 @@ async def _find_input_in_target(
             f'input[type="checkbox"][name*="{k}"]',
             f'input[type="checkbox"][id*="{k}"]',
         ):
-            try:
+            with contextlib.suppress(PlaywrightError, ValueError, TypeError, AttributeError):
                 elements = page.locator(sel)
                 el_count = await elements.count()
                 if el_count > 0:
@@ -286,13 +295,11 @@ async def _find_input_in_target(
                                 opt_type = (await r.get_attribute("type")) or "choice"
                                 return r, f'{opt_type}:{k}={value_hint}'
                     return elements.first, f'choice:{k}'
-            except Exception:
-                pass
 
     # 1. Exact ID (snake_case and camelCase) using safe [id="..."] selector to support IDs starting with digits/UUIDs
     for k in (key, key_camel):
         loc = page.locator(f'[id="{k}"]')
-        try:
+        with contextlib.suppress(PlaywrightError, ValueError, TypeError, AttributeError):
             if await loc.count() > 0 and await loc.first.is_visible():
                 tag = await loc.first.evaluate("el => el.tagName.toLowerCase()")
                 if tag not in ("input", "select", "textarea", "button"):
@@ -300,13 +307,11 @@ async def _find_input_in_target(
                     if await child_input.count() > 0:
                         return child_input.first, f'[id="{k}"] {tag}->input'
                 return loc.first, f'[id="{k}"]'
-        except Exception:
-            pass
 
     for part in key_parts:
         if len(part) >= 4:
             loc = page.locator(f'[id="{part}"]')
-            try:
+            with contextlib.suppress(PlaywrightError, ValueError, TypeError, AttributeError):
                 if await loc.count() > 0 and await loc.first.is_visible():
                     tag = await loc.first.evaluate("el => el.tagName.toLowerCase()")
                     if tag not in ("input", "select", "textarea", "button"):
@@ -314,53 +319,41 @@ async def _find_input_in_target(
                         if await child_input.count() > 0:
                             return child_input.first, f'[id="{part}"] {tag}->input'
                     return loc.first, f'[id="{part}"]'
-            except Exception:
-                pass
 
     # 2. Exact Name (snake_case and camelCase)
     for k in (key, key_camel):
         loc = page.locator(f'[name="{k}"]')
-        try:
+        with contextlib.suppress(PlaywrightError, ValueError, TypeError, AttributeError):
             if await loc.count() > 0 and await loc.first.is_visible():
                 return loc.first, f'[name="{k}"]'
-        except Exception:
-            pass
 
     # 3. data-automation-id (Workday), data-qa, data-testid, data-ui (Workable)
     for k in (key, key_camel):
         for attr in ("data-automation-id", "data-qa", "data-testid", "data-ui"):
             loc = page.locator(f'[{attr}*="{k}" i]')
-            try:
+            with contextlib.suppress(PlaywrightError, ValueError, TypeError, AttributeError):
                 if await loc.count() > 0 and await loc.first.is_visible():
                     return loc.first, f'[{attr}*="{k}"]'
-            except Exception:
-                pass
 
     # 4. Partial Name or ID (e.g. key in cards[...][field0] or Ashby compound UUIDs)
     for k in (key, key_camel):
         loc = page.locator(f'input[name*="{k}" i], select[name*="{k}" i], textarea[name*="{k}" i], [id*="{k}" i]')
-        try:
+        with contextlib.suppress(PlaywrightError, ValueError, TypeError, AttributeError):
             if await loc.count() > 0 and await loc.first.is_visible():
                 return loc.first, f'name/id*="{k}"'
-        except Exception:
-            pass
 
     # 5. Label text matching
     search_text = label_hint or key.replace("_", " ")
-    try:
+    with contextlib.suppress(PlaywrightError, ValueError, TypeError, AttributeError):
         by_label = page.get_by_label(search_text, exact=False)
         if await by_label.count() > 0 and await by_label.first.is_visible():
             return by_label.first, f"label:{search_text}"
-    except Exception:
-        pass
 
     # 6. Placeholder matching
-    try:
+    with contextlib.suppress(PlaywrightError, ValueError, TypeError, AttributeError):
         by_placeholder = page.get_by_placeholder(search_text, exact=False)
         if await by_placeholder.count() > 0 and await by_placeholder.first.is_visible():
             return by_placeholder.first, f"placeholder:{search_text}"
-    except Exception:
-        pass
 
     # 7. Check if there's any element whose aria-label matches
     loc = page.locator(f'[aria-label*="{search_text}" i]')
@@ -413,22 +406,18 @@ async def _find_file_input_in_target(page: Any, key: str, harness: dict[str, Any
                         file_sels.append(s)
 
         for sel in file_sels:
-            try:
+            with contextlib.suppress(PlaywrightError, ValueError, TypeError, AttributeError):
                 loc = page.locator(sel)
                 if await loc.count() > 0:
                     return loc.first, f"champion:{sel}"
-            except Exception:
-                pass
 
     # Try direct id / name / data-qa / data-ui
     loc = page.locator(
         f'input[type="file"][id="{key}"], input[type="file"][name="{key}"], input[type="file"][data-qa*="{key}"], input[type="file"][data-ui*="{key}"]'
     )
-    try:
+    with contextlib.suppress(PlaywrightError, ValueError, TypeError, AttributeError):
         if await loc.count() > 0:
             return loc.first, f'input[type="file"][name/id="{key}"]'
-    except Exception:
-        pass
 
     # Look for file inputs matching key or keywords
     keywords = ["resume", "cv"] if "resume" in key.lower() or "cv" in key.lower() else ["cover", "letter"]
@@ -492,7 +481,7 @@ async def _read_back_value(locator: Any, tag: str, control_type: str) -> Any:
             }"""
         )
         return custom_val or val
-    except Exception as exc:
+    except (PlaywrightError, ValueError, TypeError, AttributeError) as exc:
         logger.debug("Failed reading back value: %s", exc)
         return ""
 
@@ -505,7 +494,7 @@ async def _fill_input_by_heuristics(
     harness: dict[str, Any] | None = None,
 ) -> FieldFillReport:
     """Locate and fill a single form input using active champion selector overrides and heuristics.
-    
+
     Dynamically loads the promoted champion harness config in real time without restarting
     the daemon, executes champion-promoted selector overrides first, and falls back to
     robust heuristics.
@@ -587,10 +576,8 @@ async def _fill_input_by_heuristics(
                 bool_val = boolean_value(value) if boolean_value(value) is not None else (
                     value is not False and str(value).strip().lower() not in ("no", "false", "0", "")
                 )
-            try:
+            with contextlib.suppress(PlaywrightError):
                 await locator.scroll_into_view_if_needed()
-            except Exception:
-                pass
             clicked_label = await locator.evaluate("""(el, targetChecked) => {
                 if (el.checked !== targetChecked) {
                     if (el.labels && el.labels[0]) {
@@ -608,7 +595,7 @@ async def _fill_input_by_heuristics(
             if not clicked_label:
                 try:
                     await locator.set_checked(bool_val)
-                except Exception:
+                except PlaywrightError:
                     await locator.evaluate("""(el, checked) => {
                         el.checked = checked;
                         el.dispatchEvent(new Event('input', {bubbles: true}));
@@ -617,10 +604,8 @@ async def _fill_input_by_heuristics(
             await locator.dispatch_event("change")
 
         elif control_type == "radio":
-            try:
+            with contextlib.suppress(PlaywrightError):
                 await locator.scroll_into_view_if_needed()
-            except Exception:
-                pass
             clicked_label = await locator.evaluate("""el => {
                 if (el.labels && el.labels[0]) {
                     el.labels[0].click();
@@ -648,10 +633,10 @@ async def _fill_input_by_heuristics(
             max_l = dom_constraints.get("maxLen")
 
             if label:
-                min_m = re.search(r"min(?:imum)?\s*(?:of\s*)?(\d+)\s*(?:chars?|characters?)", label, re.I)
+                min_m = re.search(r"min(?:imum)?\s*(?:of\s*)?(\d+)\s*(?:chars?|characters?)", label, re.IGNORECASE)
                 if min_m:
                     min_l = max(min_l, int(min_m.group(1)))
-                max_m = re.search(r"max(?:imum)?\s*(?:of\s*)?(\d+)\s*(?:chars?|characters?)", label, re.I)
+                max_m = re.search(r"max(?:imum)?\s*(?:of\s*)?(\d+)\s*(?:chars?|characters?)", label, re.IGNORECASE)
                 if max_m:
                     max_l = int(max_m.group(1)) if not max_l else min(max_l, int(max_m.group(1)))
 
@@ -660,12 +645,10 @@ async def _fill_input_by_heuristics(
                 val_str = enforce_length_constraints(val_str, min_length=min_l, max_length=max_l)
 
             is_combobox = False
-            try:
+            with contextlib.suppress(PlaywrightError):
                 is_combobox = await locator.evaluate(
                     "el => el.getAttribute('role') === 'combobox' || (el.className && (el.className.includes('autocomplete') || el.className.includes('select__input'))) || !!el.closest('[data-field-path*=\"location\"], .select-shell, .select__container, [class*=\"select__control\"]')"
                 )
-            except Exception:
-                pass
 
             if is_combobox:
                 try:
@@ -673,7 +656,7 @@ async def _fill_input_by_heuristics(
                     await locator.click()
                     await asyncio.sleep(0.2)
                     await locator.press_sequentially(val_str, delay=30)
-                except Exception:
+                except PlaywrightError:
                     await locator.fill(val_str)
             else:
                 await locator.fill(val_str)
@@ -683,13 +666,11 @@ async def _fill_input_by_heuristics(
 
             selected_combobox_text: str | None = None
             if is_combobox:
-                try:
+                with contextlib.suppress(PlaywrightError, ValueError, TypeError, AttributeError):
                     # 1. Target scoped listbox via aria-controls / aria-owns if available
                     controls_id = None
-                    try:
+                    with contextlib.suppress(PlaywrightError):
                         controls_id = await locator.get_attribute("aria-controls") or await locator.get_attribute("aria-owns")
-                    except Exception:
-                        pass
 
                     opt_loc = None
                     if controls_id:
@@ -698,7 +679,7 @@ async def _fill_input_by_heuristics(
                             listbox_loc = page.locator(f'[id="{controls_id}"]')
                             if await listbox_loc.count() > 0:
                                 opt_loc = listbox_loc.locator('[role="option"]:visible')
-                        except Exception:
+                        except PlaywrightError:
                             opt_loc = None
 
                     if opt_loc is None or await opt_loc.count() == 0:
@@ -719,7 +700,7 @@ async def _fill_input_by_heuristics(
                     if opt_count == 0 and is_loc and "," in val_str:
                         city_prefix = val_str.split(",")[0].strip()
                         if city_prefix:
-                            try:
+                            with contextlib.suppress(PlaywrightError):
                                 await locator.fill("")
                                 await asyncio.sleep(0.1)
                                 await locator.press_sequentially(city_prefix, delay=35)
@@ -728,8 +709,6 @@ async def _fill_input_by_heuristics(
                                     opt_count = await opt_loc.count()
                                     if opt_count > 0:
                                         break
-                            except Exception:
-                                pass
 
                     clicked_option = False
                     if opt_count > 0:
@@ -775,14 +754,15 @@ async def _fill_input_by_heuristics(
                                     norm_digits = re.sub(r"[^\d]", "", val_str)
                                     if norm_digits and len(norm_digits) >= 2:
                                         val_num = float(norm_digits)
-                                        val_k = int(round(val_num / 1000.0)) if val_num >= 1000 else int(round(val_num))
+                                        val_k = round(val_num / 1000.0) if val_num >= 1000 else round(val_num)
                                         nums = [int(n) for n in re.findall(r"\d+", text)]
                                         if nums:
                                             has_k = "k" in text
                                             ranges = nums if has_k else [n // 1000 if n >= 1000 else n for n in nums]
-                                            if len(ranges) == 1 and ((val_k >= ranges[0] and "+" in text) or val_k == ranges[0]):
-                                                score += 500.0
-                                            elif len(ranges) >= 2 and (ranges[0] == val_k or ranges[0] <= val_k <= ranges[1]):
+                                            if (
+                                                (len(ranges) == 1 and ((val_k >= ranges[0] and "+" in text) or val_k == ranges[0]))
+                                                or (len(ranges) >= 2 and (ranges[0] == val_k or ranges[0] <= val_k <= ranges[1]))
+                                            ):
                                                 score += 500.0
 
                             if score > best_score:
@@ -808,12 +788,8 @@ async def _fill_input_by_heuristics(
                         selected_combobox_text = val_str
                     await asyncio.sleep(0.3)
                     if not clicked_option:
-                        try:
+                        with contextlib.suppress(PlaywrightError):
                             await locator.press("Escape")
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
 
         # Read back for verification
         read_back = await _read_back_value(locator, tag, control_type)
@@ -846,12 +822,13 @@ async def _fill_input_by_heuristics(
             norm_val = normalize_text(val_str)
             norm_rb = normalize_text(read_back)
             # Location read-back matching: Ottawa, Ontario, Canada aliases
-            if "ottawa" in norm_rb or ("canada" in norm_rb and "ontario" in norm_rb):
-                matched = True
-            elif norm_val in norm_rb or norm_rb in norm_val:
-                matched = True
-            elif str(read_back).strip() and not any(us in norm_rb for us in ("california", "united states", "usa")):
-                # Any non-empty Canadian location read-back
+            if (
+                "ottawa" in norm_rb
+                or ("canada" in norm_rb and "ontario" in norm_rb)
+                or norm_val in norm_rb
+                or norm_rb in norm_val
+                or (str(read_back).strip() and not any(us in norm_rb for us in ("california", "united states", "usa")))
+            ):
                 matched = True
         elif control_type == "tel" or "phone" in key.lower():
             matched = phone_values_equivalent(read_back, val_str)
@@ -882,7 +859,7 @@ async def _fill_input_by_heuristics(
             matched=matched,
         )
 
-    except Exception as exc:
+    except (PlaywrightError, ValueError, TypeError, AttributeError, RuntimeError, OSError) as exc:
         return FieldFillReport(
             key=key,
             control_type=tag if tag in ("select", "textarea") else (control_type or "text"),
@@ -941,6 +918,78 @@ async def launch_playwright_browser(playwright: Any, headless: bool = True) -> A
         raise
 
 
+async def _create_fill_context(
+    browser: Any,
+    allow_live_submit: bool,
+    router: _ReadOnlyRouter | None,
+) -> Any:
+    """Create a browser context with read-only isolation guards when live submit is off."""
+    context_kwargs: dict[str, Any] = {
+        "locale": "en-CA",
+        "viewport": {"width": 1280, "height": 900},
+    }
+    if not allow_live_submit:
+        # Service workers can bypass context.route() and downloads can write artifacts.
+        context_kwargs["accept_downloads"] = False
+        context_kwargs["service_workers"] = "block"
+    context = await browser.new_context(**context_kwargs)
+    await context.add_init_script(
+        """
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+        window.chrome = window.chrome || { runtime: {} };
+        """
+    )
+    if not allow_live_submit:
+        await context.add_init_script(SUBMIT_MONITOR_JS)
+        if router is not None:
+            await context.route("**/*", router)
+    return context
+
+
+async def _collect_read_only_evidence(
+    page: Any,
+    read_only_evidence: dict[str, Any],
+    network_log: _NetworkLog | None,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Collect frame submit attempts, unreadable frames, and network summary."""
+    submit_events: list[dict[str, Any]] = []
+    unreadable_frames: list[str] = []
+    try:
+        submit_events = await _submit_attempts(page, read_only_evidence)
+        unreadable_frames = list(read_only_evidence.get("unreadable_frames") or [])
+    except PlaywrightError as sub_exc:
+        logger.debug("Could not read submit attempts: %s", sub_exc)
+    if network_log is not None:
+        read_only_evidence.update(network_log.summary())
+    read_only_evidence["submit_events"] = submit_events
+    read_only_evidence["unreadable_frames"] = unreadable_frames
+    return submit_events, unreadable_frames
+
+
+def _apply_read_only_fail_closed(
+    submit_error: str | None,
+    submit_events: list[dict[str, Any]],
+    unreadable_frames: list[str],
+    success: bool,
+    submitted: bool,
+) -> tuple[str | None, bool, bool]:
+    """Fail closed when read-only mode intercepted submit attempts or unreadable frames."""
+    isolation_failures: list[str] = []
+    if submit_events:
+        isolation_failures.append(
+            f"read-only session refused {len(submit_events)} form submission attempt(s)"
+        )
+    if unreadable_frames:
+        isolation_failures.append(
+            f"read-only session encountered {len(unreadable_frames)} unreadable/detached frame(s)"
+        )
+    if not isolation_failures:
+        return submit_error, success, submitted
+    reason_text = "; ".join(isolation_failures)
+    combined_error = f"{submit_error}; {reason_text}" if submit_error else reason_text
+    return combined_error, False, False
+
+
 async def fill_application_form(
     url: str,
     answers: dict[str, Any],
@@ -962,7 +1011,7 @@ async def fill_application_form(
     """Open the application page, fill in all answers, attach files, and verify read-backs."""
     from contextlib import AsyncExitStack
 
-    from playwright.async_api import Error as PlaywrightError, async_playwright
+    from playwright.async_api import async_playwright
 
     labels = labels or {}
     files = files or {}
@@ -1002,25 +1051,7 @@ async def fill_application_form(
         if owns_browser:
             playwright = await stack.enter_async_context(async_playwright())
             browser = await launch_playwright_browser(playwright, headless=headless)
-        context_kwargs: dict[str, Any] = {
-            "locale": "en-CA",
-            "viewport": {"width": 1280, "height": 900},
-        }
-        if not allow_live_submit:
-            # Service workers can bypass context.route() and downloads can write artifacts.
-            context_kwargs["accept_downloads"] = False
-            context_kwargs["service_workers"] = "block"
-        context = await browser.new_context(**context_kwargs)
-        await context.add_init_script(
-            """
-            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            window.chrome = window.chrome || { runtime: {} };
-            """
-        )
-        if not allow_live_submit:
-            await context.add_init_script(SUBMIT_MONITOR_JS)
-            if router is not None:
-                await context.route("**/*", router)
+        context = await _create_fill_context(browser, allow_live_submit, router)
 
         if trace_path:
             trace_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1038,23 +1069,19 @@ async def fill_application_form(
         try:
             try:
                 await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-                try:
+                with contextlib.suppress(PlaywrightError):
                     await page.wait_for_load_state("networkidle", timeout=4000)
-                except Exception:
-                    pass
 
                 # If an external wrapper page embeds a Greenhouse application iframe, navigate directly
                 if not any(ats in page.url.lower() for ats in ("greenhouse.io", "ashbyhq.com", "jobs.lever.co")):
-                    try:
+                    with contextlib.suppress(PlaywrightError):
                         gh_iframe = page.locator('iframe[src*="job-boards.greenhouse.io/embed"], iframe[src*="boards.greenhouse.io/embed"], iframe#grnhse_iframe')
                         if await gh_iframe.count() > 0:
                             iframe_src = await gh_iframe.first.get_attribute("src")
                             if iframe_src and iframe_src.startswith("http"):
                                 logger.info("Found embedded Greenhouse iframe %s; navigating directly", iframe_src)
                                 await page.goto(iframe_src, wait_until="domcontentloaded", timeout=timeout_ms)
-                    except Exception:
-                        pass
-            except Exception as e:
+            except (PlaywrightError, OSError, ValueError) as e:
                 logger.warning("Navigation warning for %s: %s", url, e)
 
             # Fetch latest promoted champion harness in real time for dynamic selector overrides
@@ -1067,10 +1094,14 @@ async def fill_application_form(
                 label_hint = labels.get(key, "")
                 report = await _fill_single_field(page, key, val, label=label_hint, harness=champion_harness)
                 # If element wasn't found on the page and required_fields is specified
-                if not report.matched and not report.selector_used:
-                    if required_fields is not None and key not in required_fields:
-                        # Extra unasked profile answer; do not penalize
-                        continue
+                if (
+                    not report.matched
+                    and not report.selector_used
+                    and required_fields is not None
+                    and key not in required_fields
+                ):
+                    # Extra unasked profile answer; do not penalize
+                    continue
                 field_reports[key] = report
                 if not report.matched:
                     unmatched.append(key)
@@ -1085,10 +1116,8 @@ async def fill_application_form(
                 file_loc, sel_used = await _find_file_input(page, file_key, harness=champion_harness)
                 if file_loc:
                     await file_loc.set_input_files(str(file_path))
-                    try:
+                    with contextlib.suppress(PlaywrightError):
                         await file_loc.dispatch_event("change", timeout=1000)
-                    except Exception:
-                        pass
                     record = _file_record(file_path, file_key)
                     files_attached.append(record)
                     file_report = FieldFillReport(
@@ -1129,9 +1158,8 @@ async def fill_application_form(
             if required_fields is not None:
                 for rk in required_fields:
                     rep = field_reports.get(rk)
-                    if not rep or not rep.matched:
-                        if rk not in unmatched:
-                            unmatched.append(rk)
+                    if (not rep or not rep.matched) and rk not in unmatched:
+                        unmatched.append(rk)
 
             # 3. Capture screenshot of filled form if requested
             sc_sha256 = None
@@ -1143,8 +1171,9 @@ async def fill_application_form(
 
             # 3b. Inspect every frame for refused submit attempts / unreadable frames in read-only mode
             if not allow_live_submit:
-                submit_events = await _submit_attempts(page, read_only_evidence)
-                unreadable_frames = list(read_only_evidence.get("unreadable_frames") or [])
+                submit_events, unreadable_frames = await _collect_read_only_evidence(
+                    page, read_only_evidence, network_log
+                )
 
             # 4. Live submission execution if enabled and no blocking unmatched fields
             blocking_unmatched = [
@@ -1177,17 +1206,11 @@ async def fill_application_form(
                 if not submitted and sub_res.error:
                     submit_error = sub_res.error
 
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - fail-closed across unexpected DOM/solver/submit errors
             if not allow_live_submit:
-                try:
-                    submit_events = await _submit_attempts(page, read_only_evidence)
-                    unreadable_frames = list(read_only_evidence.get("unreadable_frames") or [])
-                except PlaywrightError as sub_exc:
-                    logger.debug("Could not read submit attempts after error: %s", sub_exc)
-                if network_log is not None:
-                    read_only_evidence.update(network_log.summary())
-                read_only_evidence["submit_events"] = submit_events
-                read_only_evidence["unreadable_frames"] = unreadable_frames
+                submit_events, unreadable_frames = await _collect_read_only_evidence(
+                    page, read_only_evidence, network_log
+                )
             return FormFillResult(
                 url=url,
                 success=False,
@@ -1205,32 +1228,19 @@ async def fill_application_form(
             )
         finally:
             if not headless and headed_pause_ms > 0:
-                try:
+                with contextlib.suppress(PlaywrightError):
                     await page.wait_for_timeout(headed_pause_ms)
-                except Exception:
-                    pass
             trace_sha256 = None
             if trace_path:
-                try:
+                with contextlib.suppress(PlaywrightError, OSError):
                     await context.tracing.stop(path=str(trace_path))
                     if trace_path.is_file():
                         trace_sha256 = hashlib.sha256(trace_path.read_bytes()).hexdigest()
-                except Exception:
-                    pass
-            try:
+            with contextlib.suppress(PlaywrightError):
                 await context.close()
-            except Exception:
-                pass
             if owns_browser:
-                try:
+                with contextlib.suppress(PlaywrightError):
                     await browser.close()
-                except Exception:
-                    pass
-
-    if not allow_live_submit and network_log is not None:
-        read_only_evidence.update(network_log.summary())
-        read_only_evidence["submit_events"] = submit_events
-        read_only_evidence["unreadable_frames"] = unreadable_frames
 
     non_get_attempts = int(read_only_evidence.get("non_get_attempts") or 0)
     aborted_requests = int(read_only_evidence.get("aborted") or 0)
@@ -1247,20 +1257,9 @@ async def fill_application_form(
     if allow_live_submit:
         success = success and submitted
     else:
-        isolation_failures: list[str] = []
-        if submit_events:
-            isolation_failures.append(
-                f"read-only session refused {len(submit_events)} form submission attempt(s)"
-            )
-        if unreadable_frames:
-            isolation_failures.append(
-                f"read-only session encountered {len(unreadable_frames)} unreadable/detached frame(s)"
-            )
-        if isolation_failures:
-            reason_text = "; ".join(isolation_failures)
-            submit_error = f"{submit_error}; {reason_text}" if submit_error else reason_text
-            success = False
-            submitted = False
+        submit_error, success, submitted = _apply_read_only_fail_closed(
+            submit_error, submit_events, unreadable_frames, success, submitted
+        )
 
     return FormFillResult(
         url=url,
