@@ -233,12 +233,39 @@ def check_inspector_has_no_input_apis(data: dict[str, Any]) -> tuple[bool, dict[
     return not found, evidence
 
 
-_HOURLY_RATE_RE = re.compile(r"(?:/\s*(?:hr|hour|h)\b|\b(?:hourly|per\s+hour|per\s+hr)\b)", re.IGNORECASE)
-_PERIOD_RATE_RE = re.compile(
-    r"(?:/\s*(?:wk|week|mo|month|day|diem)\b|\b(?:weekly|monthly|daily|per\s+(?:week|month|day))\b)",
+_HOURLY_RATE_RE = re.compile(
+    r"(?:/\s*(?:hrs?|hours?|h)\b|\bp\s*/\s*h\b|\b(?:hourly|(?:per|an|a)\s+(?:hrs?|hours?))\b)",
     re.IGNORECASE,
 )
-_CURRENCY_PREFIX_RE = re.compile(r"\b(?:cad|usd|aud|eur|gbp)(?=\d|\b)|ca\$|us\$|[$€£]", re.IGNORECASE)
+_PERIOD_RATE_RE = re.compile(
+    r"(?:/\s*(?:wks?|weeks?|mos?|months?|days?|diem)\b|"
+    r"\b(?:(?:bi[- ]?|semi[- ]?)?(?:weekly|monthly|daily)|fortnightly|"
+    r"(?:per|a)\s+(?:wks?|weeks?|mos?|months?|days?)|per\s+diem)\b)",
+    re.IGNORECASE,
+)
+_CURRENCY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("CAD", re.compile(r"\bcad(?=\d|\b)|(?<![a-z])ca?\$", re.IGNORECASE)),
+    ("USD", re.compile(r"\busd(?=\d|\b)|(?<![a-z])us\$", re.IGNORECASE)),
+    ("AUD", re.compile(r"\baud(?=\d|\b)|(?<![a-z])au\$", re.IGNORECASE)),
+    ("EUR", re.compile(r"\beur(?=\d|\b)|€", re.IGNORECASE)),
+    ("GBP", re.compile(r"\bgbp(?=\d|\b)|£", re.IGNORECASE)),
+    ("NZD", re.compile(r"\bnzd(?=\d|\b)|(?<![a-z])nz\$", re.IGNORECASE)),
+    ("HKD", re.compile(r"\bhkd(?=\d|\b)|(?<![a-z])hk\$", re.IGNORECASE)),
+    ("SGD", re.compile(r"\bsgd(?=\d|\b)|(?<![a-z])sg?\$", re.IGNORECASE)),
+    ("INR", re.compile(r"\binr(?=\d|\b)|₹", re.IGNORECASE)),
+    ("JPY", re.compile(r"\bjpy(?=\d|\b)|¥", re.IGNORECASE)),
+    ("CHF", re.compile(r"\bchf(?=\d|\b)", re.IGNORECASE)),
+)
+_GENERIC_DOLLAR_RE = re.compile(r"(?<![a-z])\$")
+_NA_DOLLAR_CURRENCIES = frozenset({"CAD", "USD"})
+_CURRENCY_PREFIX_RE = re.compile(
+    r"\b(?:cad|usd|aud|eur|gbp|nzd|hkd|sgd|inr|jpy|chf)(?=\d|\b)|"
+    r"(?<![a-z])(?:ca|us|au|nz|hk|sg|c|s)\$|[$€£₹¥]",
+    re.IGNORECASE,
+)
+_SALARY_NEGATION_RE = re.compile(r"\b(?:not|other\s+than|except|excluding|neither)\b", re.IGNORECASE)
+_DOT_THOUSANDS_RE = re.compile(r"\d\.\d{3}(?!\d)")
+_CENTS_DECIMAL_RE = re.compile(r"\.\d{2}$")
 _BONUS_SPLIT_RE = re.compile(r"\b(?:bonus|commission|equity|ote|sign[- ]?on)\b", re.IGNORECASE)
 _SALARY_NUM_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(k)?\b", re.IGNORECASE)
 _SALARY_RANGE_RE = re.compile(
@@ -256,18 +283,36 @@ _SALARY_UNDER_RE = re.compile(
     re.IGNORECASE,
 )
 
-_TZ_NEGATION_RE = re.compile(r"\bnot\b", re.IGNORECASE)
+_TZ_NEGATION_RE = re.compile(
+    r"\b(?:not|non|except|outside|other\s+than|excluding|exclude|neither|never)\b",
+    re.IGNORECASE,
+)
 _TZ_POSITIVE_OR_UNSIGNED_OFFSET_RE = re.compile(r"\b(?:utc|gmt)\s*(?:\+|\d)", re.IGNORECASE)
 _TZ_NON_NA_RE = re.compile(
-    r"\b(?:australia|australian|china|chinese|arabia|arabian|auckland|india|indian|cuba|cuban|"
+    r"\b(?:australia|australian|asia|asian|siberia|siberian|middle\s+east(?:ern)?|"
+    r"south\s+america(?:n)?|latin\s+america(?:n)?|oceania|pacific\s+islands?|"
+    r"china|chinese|arabia|arabian|auckland|india|indian|cuba|cuban|"
     r"europe|european|uk|united\s+kingdom|britain|british|london|tokyo|singapore|brazil|brasil|"
     r"pakistan|beijing|shanghai|hong[ _]?kong|sydney|melbourne|brisbane|perth|adelaide|paris|"
     r"berlin|moscow|dubai|riyadh|cairo|seoul|jakarta|manila|bangkok|taipei|kolkata|mumbai|"
     r"delhi|havana|african|africa|"
     r"eet|cet|wet|bst|ist|jst|kst|sgt|hkt|gst|aest|aedt|acst|acdt|awst|nzst|nzdt|cat|sast|wat|eat|apt)\b"
-    r"|(?:asia|europe|australia|africa|indian|antarctica)/"
-    r"|pacific/(?:auckland|fiji|guam|honolulu|tahiti|samoa|midway|chatham|tongatapu|port_moresby|noumea|wake)"
-    r"|atlantic/(?:azores|canary|cape_verde|faroe|faeroe|jan_mayen|madeira|reykjavik|south_georgia|st_helena|stanley)",
+    r"|(?:asia|europe|australia|africa|indian|antarctica|pacific|atlantic)/",
+    re.IGNORECASE,
+)
+_TZ_NON_TZ_PLACE_RE = re.compile(
+    r"\b(?:mountain\s+view|central\s+park|grand\s+central|pacific\s+palisades|"
+    r"pacific\s+highway|atlantic\s+city|atlantic\s+ocean|pacific\s+ocean|eastern\s+parkway)\b",
+    re.IGNORECASE,
+)
+_TZ_CONTEXT_RE = re.compile(
+    r"\b(?:time|zone|tz|standard|daylight|saving|"
+    r"est|edt|est5edt|cst|cdt|cst6cdt|mst|mdt|mst7mdt|pst|pdt|pst8pdt|"
+    r"ast|adt|nst|ndt|utc|gmt)\b|(?:america|us|canada)/",
+    re.IGNORECASE,
+)
+_TZ_BARE_FAMILY_RE = re.compile(
+    r"^(?:eastern|central|mountain|pacific|atlantic|newfoundland)$",
     re.IGNORECASE,
 )
 _BATCH_TZ_PATTERNS: dict[str, re.Pattern[str]] = {
@@ -305,12 +350,55 @@ _BATCH_TZ_PATTERNS: dict[str, re.Pattern[str]] = {
 
 _YES_OPTION_RE = re.compile(r"^yes(?:\s|$|[,;:/().!])")
 _NO_OPTION_RE = re.compile(r"^no(?:\s|$|[,;:/().!])")
-_YES_NO_CONDITIONAL_RE = re.compile(
-    r"\b(?:only|if|unless|provided|subject\s+to|except|but|however|conditional(?:ly)?|"
-    r"depending|assuming|contingent|bonus|compensation)\b|"
-    r"(?:^yes|^no)\s*[,;:\-" "\u2013\u2014" r"(/]+\s*with\b|\$",
+_YES_NO_DISJUNCTION_RE = re.compile(
+    r"\b(?:yes\s*(?:/|\bor\b|-)\s*no|no\s*(?:/|\bor\b|-)\s*yes|maybe|unsure)\b",
     re.IGNORECASE,
 )
+_YES_NO_CONDITIONAL_RE = re.compile(
+    r"\b(?:only|if|unless|provided|subject\s+to|except|but|however|conditional(?:ly)?|condition|"
+    r"depending|assuming|contingent|bonus|compensation|after|when|preference|comment|opinion|"
+    r"answer|response|with)\b|\$",
+    re.IGNORECASE,
+)
+_YES_CONTRADICTION_RE = re.compile(
+    r"\b(?:not|never|cannot|no|non|neither|nor|none|unable|ineligible|unauthorized|unauthorised|"
+    r"disagree|decline|refuse|require[sd]?|sponsorship|sponsored|visa)\b|n't\b",
+    re.IGNORECASE,
+)
+_NO_NEGATION_RE = re.compile(r"\b(?:not|never|cannot|non|neither)\b|n't\b", re.IGNORECASE)
+_NO_AFFIRMATIVE_RE = re.compile(
+    r"\b(?:i\s+am|i'm|am|are|have|can|will|able|authorized|authorised|eligible|legally)\b",
+    re.IGNORECASE,
+)
+_NO_SPONSORSHIP_COND_RE = re.compile(r"\b(?:require[sd]?|sponsorship|sponsored|visa)\b", re.IGNORECASE)
+_LANG_CEFR_TOKEN_RE = re.compile(r"(?<![a-z0-9])([abc][12])(?![a-z0-9])", re.IGNORECASE)
+_LANG_NEGATION_RE = re.compile(
+    r"\b(?:not|below|under|less\s+than|lower\s+than|except|excluding|non|neither|or)\b|\bno\s+[abc][12]\b",
+    re.IGNORECASE,
+)
+
+
+def _extract_salary_currencies(raw: str) -> tuple[set[str], bool]:
+    currencies = {code for code, pattern in _CURRENCY_PATTERNS if pattern.search(raw)}
+    has_generic_dollar = bool(_GENERIC_DOLLAR_RE.search(raw))
+    return currencies, has_generic_dollar
+
+
+def _currencies_compatible(option: str, resolved_str: str) -> bool:
+    opt_currencies, _ = _extract_salary_currencies(option)
+    res_currencies, _ = _extract_salary_currencies(resolved_str)
+    if len(opt_currencies) > 1 or len(res_currencies) > 1:
+        return False
+    if opt_currencies and res_currencies:
+        return opt_currencies == res_currencies
+    if opt_currencies and not (opt_currencies <= _NA_DOLLAR_CURRENCIES):
+        return False
+    return not res_currencies or res_currencies <= _NA_DOLLAR_CURRENCIES
+
+
+def _has_negative_salary_number(cleaned: str) -> bool:
+    without_range_hyphens = re.sub(r"(?<=[\dk])\s*-\s*(?=\d)", " ", cleaned)
+    return bool(re.search(r"-\s*\d", without_range_hyphens))
 
 
 def _clean_salary_text(raw: Any) -> str:
@@ -324,35 +412,57 @@ def _parse_scalar_salary(raw: Any) -> float | None:
     if raw is None or isinstance(raw, bool):
         return None
     raw_str = str(raw).strip()
-    if not raw_str or re.search(r"\bn/?a\b", raw_str, re.IGNORECASE):
-        return None
-    if _HOURLY_RATE_RE.search(raw_str) or _PERIOD_RATE_RE.search(raw_str):
+    if (
+        not raw_str
+        or re.search(r"\bn/?a\b", raw_str, re.IGNORECASE)
+        or _SALARY_NEGATION_RE.search(raw_str)
+        or _DOT_THOUSANDS_RE.search(raw_str)
+        or _HOURLY_RATE_RE.search(raw_str)
+        or _PERIOD_RATE_RE.search(raw_str)
+    ):
         return None
     cleaned = _clean_salary_text(raw_str)
-    if re.search(r"^\s*-\s*\d", cleaned):
+    if re.search(r"-\s*\d", cleaned):
         return None
     tokens = _SALARY_NUM_RE.findall(cleaned)
     if len(tokens) != 1:
         return None
     num_str, k_suffix = tokens[0]
     val = float(num_str) * (1000.0 if k_suffix else 1.0)
-    return val if val > 0 else None
+    return val if val >= 1000.0 else None
 
 
-def _scale_salary_bound(num: float, has_k: bool, peer_has_k: bool, peer_num: float | None, is_rate: bool) -> float:
+def _scale_salary_bound(
+    num: float,
+    has_k: bool,
+    peer_has_k: bool,
+    has_cents: bool,
+    is_rate: bool,
+) -> float:
     if has_k:
-        return num * 1000.0 if num < 1000 else num
-    if not is_rate and num < 1000 and (peer_has_k or peer_num is None or peer_num < 1000):
+        return num * 1000.0
+    if not is_rate and num < 1000 and peer_has_k and not has_cents:
         return num * 1000.0
     return num
 
 
+def _valid_annual_bracket(low: float, high: float) -> bool:
+    return low >= 0.0 and (low == 0.0 or low >= 1000.0) and high >= 1000.0 and low <= high
+
+
 def _parse_salary_bracket(option: str) -> tuple[float, float] | None:
-    if re.search(r"\bn/?a\b", option, re.IGNORECASE) or _BONUS_SPLIT_RE.search(option):
+    if (
+        re.search(r"\bn/?a\b", option, re.IGNORECASE)
+        or _SALARY_NEGATION_RE.search(option)
+        or _DOT_THOUSANDS_RE.search(option)
+        or _BONUS_SPLIT_RE.search(option)
+    ):
         return None
     is_rate = bool(_HOURLY_RATE_RE.search(option) or _PERIOD_RATE_RE.search(option))
+    if is_rate:
+        return None
     cleaned = _clean_salary_text(option)
-    if not cleaned or re.search(r"^\s*-\s*\d", cleaned) or re.search(r"\d\s*\+\s*\d", cleaned):
+    if not cleaned or _has_negative_salary_number(cleaned) or re.search(r"\d\s*\+\s*\d", cleaned):
         return None
     all_nums = _SALARY_NUM_RE.findall(cleaned)
     if not all_nums:
@@ -362,13 +472,14 @@ def _parse_salary_bracket(option: str) -> tuple[float, float] | None:
     if range_m:
         if len(all_nums) != 2:
             return None
-        low_num = float(range_m.group(1))
-        low_k = bool(range_m.group(2))
-        high_num = float(range_m.group(3))
-        high_k = bool(range_m.group(4))
-        low = _scale_salary_bound(low_num, low_k, high_k, high_num, is_rate)
-        high = _scale_salary_bound(high_num, high_k, low_k, low_num, is_rate)
-        if low <= 0 or high <= 0 or low > high:
+        low_str, low_k_str, high_str, high_k_str = range_m.groups()
+        low_num = float(low_str)
+        low_k = bool(low_k_str)
+        high_num = float(high_str)
+        high_k = bool(high_k_str)
+        low = _scale_salary_bound(low_num, low_k, high_k, bool(_CENTS_DECIMAL_RE.search(low_str)), is_rate)
+        high = _scale_salary_bound(high_num, high_k, low_k, bool(_CENTS_DECIMAL_RE.search(high_str)), is_rate)
+        if low <= 0 or not _valid_annual_bracket(low, high):
             return None
         return (low, high)
 
@@ -377,21 +488,21 @@ def _parse_salary_bracket(option: str) -> tuple[float, float] | None:
 
     plus_m = _SALARY_PLUS_RE.search(cleaned)
     if plus_m:
-        num = float(plus_m.group(1) or plus_m.group(3))
+        num_str = plus_m.group(1) or plus_m.group(3)
         has_k = bool(plus_m.group(2) or plus_m.group(4))
-        low = _scale_salary_bound(num, has_k, False, None, is_rate)
-        return (low, float("inf")) if low > 0 else None
+        low = _scale_salary_bound(float(num_str), has_k, False, bool(_CENTS_DECIMAL_RE.search(num_str)), is_rate)
+        return (low, float("inf")) if low >= 1000.0 else None
 
     under_m = _SALARY_UNDER_RE.search(cleaned)
     if under_m:
-        num = float(under_m.group(1) or under_m.group(3))
+        num_str = under_m.group(1) or under_m.group(3)
         has_k = bool(under_m.group(2) or under_m.group(4))
-        high = _scale_salary_bound(num, has_k, False, None, is_rate)
-        return (0.0, high) if high > 0 else None
+        high = _scale_salary_bound(float(num_str), has_k, False, bool(_CENTS_DECIMAL_RE.search(num_str)), is_rate)
+        return (0.0, high) if high >= 1000.0 else None
 
     num_str, k_suffix = all_nums[0]
-    val = float(num_str) * (1000.0 if k_suffix and float(num_str) < 1000 else 1.0)
-    return (val, val) if val > 0 else None
+    val = float(num_str) * (1000.0 if k_suffix else 1.0)
+    return (val, val) if val >= 1000.0 else None
 
 
 def _salary_option_contains(option: Any, resolved: Any) -> bool:
@@ -399,7 +510,9 @@ def _salary_option_contains(option: Any, resolved: Any) -> bool:
     target = _parse_scalar_salary(resolved)
     if target is None or not isinstance(option, str) or not re.search(r"\d", option):
         return False
-    if (_HOURLY_RATE_RE.search(option) or _PERIOD_RATE_RE.search(option)) and target >= 1000:
+    if not _currencies_compatible(option, str(resolved)):
+        return False
+    if _HOURLY_RATE_RE.search(option) or _PERIOD_RATE_RE.search(option):
         return False
     bounds = _parse_salary_bracket(option)
     return bounds is not None and bounds[0] <= target <= bounds[1]
@@ -414,7 +527,10 @@ def _classify_time_zone(raw: Any) -> str | None:
         or _TZ_NEGATION_RE.search(text)
         or _TZ_POSITIVE_OR_UNSIGNED_OFFSET_RE.search(text)
         or _TZ_NON_NA_RE.search(text)
+        or _TZ_NON_TZ_PLACE_RE.search(text)
     ):
+        return None
+    if not (_TZ_CONTEXT_RE.search(text) or _TZ_BARE_FAMILY_RE.fullmatch(text)):
         return None
     matches = [name for name, pattern in _BATCH_TZ_PATTERNS.items() if pattern.search(text)]
     return matches[0] if len(matches) == 1 else None
@@ -429,6 +545,27 @@ def _same_time_zone(option: Any, resolved: Any) -> bool:
     return stored is not None and opt_zone == stored
 
 
+def _yes_option_matches(norm_val: str) -> bool:
+    return (
+        bool(_YES_OPTION_RE.match(norm_val))
+        and not _YES_NO_DISJUNCTION_RE.search(norm_val)
+        and not _YES_NO_CONDITIONAL_RE.search(norm_val)
+        and not _YES_CONTRADICTION_RE.search(norm_val)
+    )
+
+
+def _no_option_matches(norm_val: str) -> bool:
+    if (
+        not _NO_OPTION_RE.match(norm_val)
+        or _YES_NO_DISJUNCTION_RE.search(norm_val)
+        or _YES_NO_CONDITIONAL_RE.search(norm_val)
+    ):
+        return False
+    if _NO_NEGATION_RE.search(norm_val):
+        return True
+    return not (_NO_SPONSORSHIP_COND_RE.search(norm_val) or _NO_AFFIRMATIVE_RE.search(norm_val))
+
+
 def _value_matches_resolved(item: dict[str, Any]) -> bool:
     val = item.get("value")
     resolved = item.get("resolved_value")
@@ -439,9 +576,9 @@ def _value_matches_resolved(item: dict[str, Any]) -> bool:
         return True
     norm_res = normalize(resolved)
     norm_val = normalize(val_str)
-    if norm_res in {"yes", "y", "true"} and _YES_OPTION_RE.match(norm_val) and not _YES_NO_CONDITIONAL_RE.search(norm_val):
+    if norm_res in {"yes", "y", "true"} and _yes_option_matches(norm_val):
         return True
-    if norm_res in {"no", "n", "false"} and _NO_OPTION_RE.match(norm_val) and not _YES_NO_CONDITIONAL_RE.search(norm_val):
+    if norm_res in {"no", "n", "false"} and _no_option_matches(norm_val):
         return True
     if item.get("resolved_key") == "salary_expectation" and _salary_option_contains(val_str, resolved):
         return True
@@ -453,9 +590,11 @@ def _value_matches_resolved(item: dict[str, Any]) -> bool:
         with contextlib.suppress(KeyError, ValueError, AttributeError):
             levels = parse_languages(resolved)
             if levels and "english" in levels and "french" in levels:
-                weaker = min(levels["english"], levels["french"], key=_CEFR_ORDER.index)
-                if weaker.lower() in norm_val:
-                    return True
+                weaker = min(levels["english"], levels["french"], key=_CEFR_ORDER.index).lower()
+                if not _LANG_NEGATION_RE.search(norm_val):
+                    tokens = [tok.lower() for tok in _LANG_CEFR_TOKEN_RE.findall(norm_val)]
+                    if tokens and set(tokens) == {weaker}:
+                        return True
     return False
 
 
