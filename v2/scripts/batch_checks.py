@@ -821,6 +821,74 @@ def _strip_annual_and_paren_currency(text: str) -> tuple[str, list[_SalaryCurren
     return s, extra_currs
 
 
+def _parse_salary_single(body: str, extra_currs: list[_SalaryCurrency]) -> _ParsedSalary | None:
+    m = _SALARY_SINGLE_RE.fullmatch(body)
+    if not m:
+        return None
+    parsed = _extract_money_match(m.groupdict(), "m0_")
+    if parsed is None:
+        return None
+    val, has_k, _, ci = parsed
+    combined = _combine_salary_currencies([ci, *extra_currs])
+    if combined is None:
+        return None
+    scaled = val * (1000.0 if has_k else 1.0)
+    if scaled < 1000.0:
+        return None
+    return _ParsedSalary(scaled, scaled, True, True, combined)
+
+
+def _parse_salary_range(body: str, extra_currs: list[_SalaryCurrency]) -> _ParsedSalary | None:
+    for pat in _SALARY_RANGE_RES:
+        m = pat.fullmatch(body)
+        if not m:
+            continue
+        gd = m.groupdict()
+        p1 = _extract_money_match(gd, "m1_")
+        p2 = _extract_money_match(gd, "m2_")
+        if p1 is None or p2 is None:
+            return None
+        v1, k1, dec1, c1 = p1
+        v2, k2, dec2, c2 = p2
+        combined = _combine_salary_currencies([c1, c2, *extra_currs])
+        if combined is None:
+            return None
+        low = _scale_salary_bound(v1, k1, k2, dec1)
+        high = _scale_salary_bound(v2, k2, k1, dec2)
+        if low < 1000.0 or high < 1000.0 or low > high:
+            return None
+        return _ParsedSalary(low, high, True, True, combined)
+    return None
+
+
+def _parse_salary_open_bound(
+    body: str,
+    extra_currs: list[_SalaryCurrency],
+    patterns: tuple[tuple[tuple[re.Pattern[str], ...], bool], ...],
+    *,
+    is_lower_bound: bool,
+) -> _ParsedSalary | None:
+    for pats, incl in patterns:
+        for pat in pats:
+            m = pat.fullmatch(body)
+            if not m:
+                continue
+            parsed = _extract_money_match(m.groupdict(), "m0_")
+            if parsed is None:
+                return None
+            val, has_k, _, ci = parsed
+            combined = _combine_salary_currencies([ci, *extra_currs])
+            if combined is None:
+                return None
+            bound = val * (1000.0 if has_k else 1.0)
+            if bound < 1000.0:
+                return None
+            if is_lower_bound:
+                return _ParsedSalary(bound, float("inf"), incl, False, combined)
+            return _ParsedSalary(0.0, bound, False, incl, combined)
+    return None
+
+
 def _parse_salary_grammar(raw: Any, *, scalar_only: bool = False) -> _ParsedSalary | None:
     norm = _normalize_salary_raw(raw)
     if norm is None:
@@ -832,75 +900,21 @@ def _parse_salary_grammar(raw: Any, *, scalar_only: bool = False) -> _ParsedSala
     if not body:
         return None
 
-    m = _SALARY_SINGLE_RE.fullmatch(body)
-    if m:
-        parsed = _extract_money_match(m.groupdict(), "m0_")
-        if parsed is None:
-            return None
-        val, has_k, _, ci = parsed
-        combined = _combine_salary_currencies([ci, *extra_currs])
-        if combined is None:
-            return None
-        scaled = val * (1000.0 if has_k else 1.0)
-        if scaled < 1000.0:
-            return None
-        return _ParsedSalary(scaled, scaled, True, True, combined)
-
+    single = _parse_salary_single(body, extra_currs)
+    if single is not None:
+        return single
     if scalar_only:
         return None
 
-    for pat in _SALARY_RANGE_RES:
-        m = pat.fullmatch(body)
-        if m:
-            gd = m.groupdict()
-            p1 = _extract_money_match(gd, "m1_")
-            p2 = _extract_money_match(gd, "m2_")
-            if p1 is None or p2 is None:
-                return None
-            v1, k1, dec1, c1 = p1
-            v2, k2, dec2, c2 = p2
-            combined = _combine_salary_currencies([c1, c2, *extra_currs])
-            if combined is None:
-                return None
-            low = _scale_salary_bound(v1, k1, k2, dec1)
-            high = _scale_salary_bound(v2, k2, k1, dec2)
-            if low < 1000.0 or high < 1000.0 or low > high:
-                return None
-            return _ParsedSalary(low, high, True, True, combined)
-
-    for pats, incl in ((_SALARY_PLUS_INCL_RES, True), (_SALARY_PLUS_STRICT_RES, False)):
-        for pat in pats:
-            m = pat.fullmatch(body)
-            if m:
-                parsed = _extract_money_match(m.groupdict(), "m0_")
-                if parsed is None:
-                    return None
-                val, has_k, _, ci = parsed
-                combined = _combine_salary_currencies([ci, *extra_currs])
-                if combined is None:
-                    return None
-                low = val * (1000.0 if has_k else 1.0)
-                if low < 1000.0:
-                    return None
-                return _ParsedSalary(low, float("inf"), incl, False, combined)
-
-    for pats, incl in ((_SALARY_UNDER_INCL_RES, True), (_SALARY_UNDER_STRICT_RES, False)):
-        for pat in pats:
-            m = pat.fullmatch(body)
-            if m:
-                parsed = _extract_money_match(m.groupdict(), "m0_")
-                if parsed is None:
-                    return None
-                val, has_k, _, ci = parsed
-                combined = _combine_salary_currencies([ci, *extra_currs])
-                if combined is None:
-                    return None
-                high = val * (1000.0 if has_k else 1.0)
-                if high < 1000.0:
-                    return None
-                return _ParsedSalary(0.0, high, False, incl, combined)
-
-    return None
+    return (
+        _parse_salary_range(body, extra_currs)
+        or _parse_salary_open_bound(
+            body, extra_currs, ((_SALARY_PLUS_INCL_RES, True), (_SALARY_PLUS_STRICT_RES, False)), is_lower_bound=True
+        )
+        or _parse_salary_open_bound(
+            body, extra_currs, ((_SALARY_UNDER_INCL_RES, True), (_SALARY_UNDER_STRICT_RES, False)), is_lower_bound=False
+        )
+    )
 
 
 def _salary_currencies_match(opt_c: _SalaryCurrency, res_c: _SalaryCurrency) -> bool:
@@ -1053,37 +1067,34 @@ def _tz_offsets_match_family(offsets: list[int], family: str, kind: str) -> bool
     return off in (std_min, dst_min)
 
 
-def _classify_time_zone(raw: Any) -> str | None:
-    if not isinstance(raw, str):
+def _tz_zone_name_match(text: str) -> tuple[str, str] | None:
+    zm = _TZ_ZONE_NAME_RE.fullmatch(text)
+    if not zm:
         return None
-    text = " ".join(raw.replace("\u2212", "-").strip().split())
-    if not text:
-        return None
+    mod = (zm.group(2) or "").lower()
+    kind = "std" if mod == "standard" else ("dst" if mod == "daylight" else "any")
+    return zm.group(1).casefold(), kind
 
-    # 1. Pure standalone IANA / legacy identifier
+
+def _classify_tz_standalone(text: str) -> str | None:
     if (fam := _TZ_NA_IANA_TO_FAMILY.get(_normalize_iana_tz(text))) is not None:
         return fam
-
-    # 2. Pure standalone bare family name
     if _TZ_BARE_FAMILY_RE.fullmatch(text):
         return text.casefold()
-
-    # 3. Pure standalone negative NA offset
     if (off := _parse_tz_offset_minutes(text)) is not None:
         return _TZ_STD_OFFSET_TO_FAMILY.get(off)
-
-    # 4. Pure standalone NA abbreviation
     if (abbr := _match_tz_abbr(text)) is not None:
         return abbr[0]
+    return None
 
-    # 5. Structured composite forms: [leading_offset] body [trailing_offset]
+
+def _extract_tz_body_and_offsets(text: str) -> tuple[str, list[int]] | None:
     offsets: list[int] = []
     body = text
 
     lead_m = _TZ_LEADING_OFFSET_RE.match(body)
     if lead_m:
-        off_tok = lead_m.group(1) or lead_m.group(6)
-        off = _parse_tz_offset_minutes(off_tok)
+        off = _parse_tz_offset_minutes(lead_m.group(1) or lead_m.group(6))
         if off is None:
             return None
         offsets.append(off)
@@ -1099,10 +1110,10 @@ def _classify_time_zone(raw: Any) -> str | None:
                 offsets.append(off)
         body = body[:trail_m.start()].strip()
 
-    if not body:
-        return None
+    return (body, offsets) if body else None
 
-    # 5a. Offset-wrapped IANA, abbreviation, bare family, or Rails ActiveSupport regional forms
+
+def _classify_tz_wrapped_body(body: str, offsets: list[int]) -> str | None:
     if (fam := _TZ_NA_IANA_TO_FAMILY.get(_normalize_iana_tz(body))) is not None:
         return fam if _tz_offsets_match_family(offsets, fam, "any") else None
     if (abbr_info := _match_tz_abbr(body)) is not None:
@@ -1111,42 +1122,45 @@ def _classify_time_zone(raw: Any) -> str | None:
     if offsets and _TZ_BARE_FAMILY_RE.fullmatch(body):
         fam = body.casefold()
         return fam if _tz_offsets_match_family(offsets, fam, "any") else None
-
     body_cf = body.casefold()
     if body_cf == "indiana (east)":
         return "eastern" if _tz_offsets_match_family(offsets, "eastern", "any") else None
     if body_cf in {"arizona", "saskatchewan"} and offsets:
         fam = "mountain" if body_cf == "arizona" else "central"
         return fam if _tz_offsets_match_family(offsets, fam, "any") else None
+    return None
 
-    # 5b/5c. IANA identifier or leading abbreviation + qualifier
+
+def _classify_tz_head_qualifier(body: str, offsets: list[int]) -> tuple[bool, str | None]:
     split_hq = _split_tz_head_qualifier(body)
-    if split_hq is not None:
-        head, qual = split_hq
-        if (fam := _TZ_NA_IANA_TO_FAMILY.get(_normalize_iana_tz(head))) is not None:
-            zm = _TZ_ZONE_NAME_RE.fullmatch(qual)
-            if zm:
-                z_fam = zm.group(1).casefold()
-                z_mod = (zm.group(2) or "").lower()
-                z_kind = "std" if z_mod == "standard" else ("dst" if z_mod == "daylight" else "any")
-                return fam if (z_fam == fam and _tz_offsets_match_family(offsets, fam, z_kind)) else None
-            ok, q_kind = _valid_tz_qualifier(qual, fam)
-            return fam if (ok and _tz_offsets_match_family(offsets, fam, q_kind or "any")) else None
+    if split_hq is None:
+        return False, None
+    head, qual = split_hq
+    if (fam := _TZ_NA_IANA_TO_FAMILY.get(_normalize_iana_tz(head))) is not None:
+        z_match = _tz_zone_name_match(qual)
+        if z_match is not None:
+            z_fam, z_kind = z_match
+            ok = z_fam == fam and _tz_offsets_match_family(offsets, fam, z_kind)
+            return True, fam if ok else None
+        ok, q_kind = _valid_tz_qualifier(qual, fam)
+        return True, fam if (ok and _tz_offsets_match_family(offsets, fam, q_kind or "any")) else None
 
-        if (abbr_info := _match_tz_abbr(head)) is not None:
-            fam_a, kind_a = abbr_info
-            zm = _TZ_ZONE_NAME_RE.fullmatch(qual)
-            if zm and zm.group(1).casefold() == fam_a:
-                z_mod = (zm.group(2) or "").lower()
-                kind_z = "std" if z_mod == "standard" else ("dst" if z_mod == "daylight" else "any")
-                if kind_a != "any" and kind_z != "any" and kind_a != kind_z:
-                    return None
-                eff_kind = kind_z if kind_z != "any" else kind_a
-                if _tz_offsets_match_family(offsets, fam_a, eff_kind):
-                    return fam_a
-            return None
+    if (abbr_info := _match_tz_abbr(head)) is not None:
+        fam_a, kind_a = abbr_info
+        z_match = _tz_zone_name_match(qual)
+        if z_match is not None and z_match[0] == fam_a:
+            kind_z = z_match[1]
+            if kind_a != "any" and kind_z != "any" and kind_a != kind_z:
+                return True, None
+            eff_kind = kind_z if kind_z != "any" else kind_a
+            if _tz_offsets_match_family(offsets, fam_a, eff_kind):
+                return True, fam_a
+        return True, None
 
-    # 5d. Zone Name + optional parenthetical(s) + optional trailing dash qualifier
+    return False, None
+
+
+def _classify_tz_zone_body(body: str, offsets: list[int]) -> str | None:
     zone_part = body
     trailing_quals: list[str] = []
 
@@ -1165,13 +1179,10 @@ def _classify_time_zone(raw: Any) -> str | None:
         trailing_quals.append(inner)
         zone_part = zone_part[:idx].strip()
 
-    zm = _TZ_ZONE_NAME_RE.fullmatch(zone_part)
-    if not zm:
+    z_match = _tz_zone_name_match(zone_part)
+    if z_match is None:
         return None
-
-    family = zm.group(1).casefold()
-    mod = (zm.group(2) or "").lower()
-    kind = "std" if mod == "standard" else ("dst" if mod == "daylight" else "any")
+    family, kind = z_match
 
     for qual in trailing_quals:
         if not offsets and (parsed_offs := _parse_tz_offset_group(qual)) is not None:
@@ -1185,9 +1196,29 @@ def _classify_time_zone(raw: Any) -> str | None:
                 return None
             kind = q_kind
 
-    if not _tz_offsets_match_family(offsets, family, kind):
+    return family if _tz_offsets_match_family(offsets, family, kind) else None
+
+
+def _classify_time_zone(raw: Any) -> str | None:
+    if not isinstance(raw, str):
         return None
-    return family
+    text = " ".join(raw.replace("\u2212", "-").strip().split())
+    if not text:
+        return None
+    standalone = _classify_tz_standalone(text)
+    if standalone is not None:
+        return standalone
+    extracted = _extract_tz_body_and_offsets(text)
+    if extracted is None:
+        return None
+    body, offsets = extracted
+    wrapped = _classify_tz_wrapped_body(body, offsets)
+    if wrapped is not None:
+        return wrapped
+    handled, head_result = _classify_tz_head_qualifier(body, offsets)
+    if handled:
+        return head_result
+    return _classify_tz_zone_body(body, offsets)
 
 
 def _same_time_zone(option: Any, resolved: Any) -> bool:

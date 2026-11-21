@@ -288,32 +288,12 @@ def test_language_proficiency_uses_word_boundary_and_rejects_negations():
     )
 
     for bad_lang in (
-        "Not B2",
-        "Below B2",
-        "Under B2",
-        "Less than B2",
-        "B20",
-        "I speak A1, not B2",
-        "B1 or B2",
-        "No B2",
-        "No, B2",
-        "< B2",
-        "<= B2",
-        "Max B2",
-        "Up to B2",
-        "Never B2",
-        "Other than B2",
-        "Exclude B2",
-        "Without B2",
-        "Lacks B2",
-        "B2 / C1",
-        "B2-C1",
-        "B2+",
-        "B2?",
-        "French (< B2)",
-        "French (Not B2)",
-        "B2: No proficiency",
-        "Spanish (B2)",
+        "Not B2", "Below B2", "Under B2", "Less than B2", "B20",
+        "I speak A1, not B2", "B1 or B2", "No B2", "No, B2",
+        "< B2", "<= B2", "Max B2", "Up to B2", "Never B2",
+        "Other than B2", "Exclude B2", "Without B2", "Lacks B2",
+        "B2 / C1", "B2-C1", "B2+", "B2?",
+        "French (< B2)", "French (Not B2)", "B2: No proficiency", "Spanish (B2)",
     ):
         assert not checks._value_matches_resolved(_item("language_proficiency", bad_lang, resolved)), bad_lang
     assert not checks._value_matches_resolved(
@@ -322,7 +302,7 @@ def test_language_proficiency_uses_word_boundary_and_rejects_negations():
     )
 
 
-def test_yes_no_positive_allowlist_and_challenger_iter3_vectors():
+def test_yes_positive_allowlist_and_challenger_iter3_vectors():
     for good_yes in (
         "Yes",
         "Yes / Oui",
@@ -363,6 +343,8 @@ def test_yes_no_positive_allowlist_and_challenger_iter3_vectors():
             owner_answers={"work_authorization_ca": ["Yes"]},
         ), bad_yes
 
+
+def test_no_positive_allowlist_and_challenger_iter3_vectors():
     for good_no in (
         "No",
         "No / Non",
@@ -404,8 +386,7 @@ def test_yes_no_positive_allowlist_and_challenger_iter3_vectors():
         ), bad_no
 
 
-def test_salary_grammar_and_universal_currency_vectors():
-    # Positive annual, Unicode dash, Quebec space-thousands, and +100K
+def test_salary_grammar_annual_and_currency_vectors():
     assert checks._salary_option_contains("$60,000 - $70,000 / year", "65,000")
     assert checks._salary_option_contains("$60,000 - $70,000 CAD/yr", "CAD 65,000")
     assert checks._salary_option_contains("$60,000 - $70,000 annually", "65,000")
@@ -414,20 +395,19 @@ def test_salary_grammar_and_universal_currency_vectors():
     assert checks._salary_option_contains("$60,000 \u2212 $70,000", "65,000")
     assert checks._salary_option_contains("60 000 $ - 70 000 $", "65 000")
     assert checks._salary_option_contains("+100K", "120,000")
-
-    # Strict > / < boundaries
     assert not checks._salary_option_contains("Over $65,000", "65,000")
     assert not checks._salary_option_contains("Under $65,000", "65,000")
 
-    # Spaced & unspaced country-dollar mismatches
-    assert not checks._salary_option_contains("US $60,000 - $70,000", "CAD 65,000")
-    assert not checks._salary_option_contains("CA $60,000 - $70,000", "USD 65,000")
-    assert not checks._salary_option_contains("AU $60,000 - $70,000", "$65,000")
-    assert not checks._salary_option_contains("NZ $60,000 - $70,000", "$65,000")
-    assert not checks._salary_option_contains("$60,000 - $70,000 (CAD)", "USD 65,000")
-    assert not checks._salary_option_contains("U.S. $60,000 - $70,000", "CAD 65,000")
+    for opt, res in (
+        ("US $60,000 - $70,000", "CAD 65,000"),
+        ("CA $60,000 - $70,000", "USD 65,000"),
+        ("AU $60,000 - $70,000", "$65,000"),
+        ("NZ $60,000 - $70,000", "$65,000"),
+        ("$60,000 - $70,000 (CAD)", "USD 65,000"),
+        ("U.S. $60,000 - $70,000", "CAD 65,000"),
+    ):
+        assert not checks._salary_option_contains(opt, res), (opt, res)
 
-    # Universal ISO codes & non-$ Unicode currency symbols
     for foreign_opt in (
         "MXN 60,000 - 70,000",
         "60,000 - 70,000 MXN",
@@ -443,7 +423,8 @@ def test_salary_grammar_and_universal_currency_vectors():
         for res in ("CAD 65,000", "USD 65,000", "$65,000", "65,000"):
             assert not checks._salary_option_contains(foreign_opt, res), (foreign_opt, res)
 
-    # Non-annual rates & arbitrary wrappers
+
+def test_salary_grammar_rates_minus_and_negations():
     for rate_opt, target in (
         ("$2,500 per fortnight", "2,500"),
         ("$5,000 p/w", "5,000"),
@@ -457,7 +438,6 @@ def test_salary_grammar_and_universal_currency_vectors():
     ):
         assert not checks._salary_option_contains(rate_opt, target), rate_opt
 
-    # Unicode minus & negations
     for bad_sal in (
         "\u221265,000",
         "\u221260,000 to 70,000",
@@ -480,7 +460,7 @@ def test_salary_grammar_and_universal_currency_vectors():
         ), bad_sal
 
 
-def test_time_zone_us_canada_strict_allowlist_and_challenger_iter3_vectors():
+def test_time_zone_us_canada_strict_allowlist_positives():
     eastern = "Eastern Time (US & Canada)"
     for good_eastern in (
         "ET",
@@ -504,10 +484,14 @@ def test_time_zone_us_canada_strict_allowlist_and_challenger_iter3_vectors():
     ):
         assert checks._same_time_zone(good_nfld, newfoundland), good_nfld
 
+
+def test_time_zone_challenger_iter3_negatives():
+    eastern = "Eastern Time (US & Canada)"
     pacific = "Pacific Time (US & Canada)"
     mountain = "Mountain Time (US & Canada)"
     atlantic = "Atlantic Time (Canada)"
     central = "Central Time (US & Canada)"
+    newfoundland = "Newfoundland Time"
     for bad_tz, ref in (
         ("Philippine Standard Time (PST)", pacific),
         ("Malaysia Standard Time (MST)", mountain),
