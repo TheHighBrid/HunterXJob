@@ -150,7 +150,7 @@ def _parse_salary_bounds(opt: str) -> tuple[float, float] | None:
         val = float(num) * (1000.0 if (is_k or float(num) < 1000) else 1.0)
         return (val, float("inf"))
     # Range "30-40k", "60-70k", "90k-100k", "50000 - 60000", "50000 to 60000"
-    range_m = re.search(r"(\d+(?:\.\d+)?)\s*(k)?\s*(?:-|–|—|to)\s*(\d+(?:\.\d+)?)\s*(k)?", text)
+    range_m = re.search(r"(\d+(?:\.\d+)?)\s*(k)?\s*(?:-|\u2013|\u2014|to)\s*(\d+(?:\.\d+)?)\s*(k)?", text)
     if range_m:
         low_num = float(range_m.group(1))
         high_num = float(range_m.group(3))
@@ -443,7 +443,7 @@ def _referral_match(control: Any, value: Any) -> Any | None:
 # ---------------------------------------------------------------------------
 
 _POS_DURATION_RE = re.compile(
-    r"^\s*[1-9]\d*(?:\s*[-–+]\s*\d+)?\s*(?:\+\s*)?(?:years?|yrs?|\+)?\s*$",
+    r"^\s*[1-9]\d*(?:\s*[-\u2013+]\s*\d+)?\s*(?:\+\s*)?(?:years?|yrs?|\+)?\s*$",
     re.IGNORECASE,
 )
 
@@ -485,10 +485,7 @@ def derive_option(control: Any, value: Any, key: Any = "") -> Any | None:
         )
         key = key_name
 
-    if isinstance(key, (list, tuple, set)):
-        key_str = ""
-    else:
-        key_str = str(key or "")
+    key_str = "" if isinstance(key, (list, tuple, set)) else str(key or "")
 
     lookup_keys = {
         key_str.lower(),
@@ -641,7 +638,8 @@ def single_language_answer(control: FormControl, value: Any, key: str = "") -> s
     return option if option is not None else ""
 
 
-_DATE_FORMATS = ("%Y-%m-%d", "%B %d, %Y", "%b %d, %Y", "%d %B %Y", "%d %b %Y")
+_DATE_FORMATS = ("%Y-%m-%d", "%Y/%m/%d", "%B %d, %Y", "%b %d, %Y", "%B %d %Y", "%b %d %Y", "%d %B %Y", "%d %b %Y")
+_ORDINAL_DAY_RE = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)\b", re.IGNORECASE)
 
 
 def iso_date(value: Any) -> str | None:
@@ -650,7 +648,7 @@ def iso_date(value: Any) -> str | None:
         return value.date().isoformat()
     if isinstance(value, date):
         return value.isoformat()
-    text = " ".join(str(value or "").split())
+    text = _ORDINAL_DAY_RE.sub(r"\1", " ".join(str(value or "").split()))
     for fmt in _DATE_FORMATS:
         try:
             return datetime.strptime(text, fmt).replace(tzinfo=UTC).date().isoformat()

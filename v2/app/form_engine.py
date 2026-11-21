@@ -54,6 +54,12 @@ _DECLINE_OPTION_RE = re.compile(
     r"decline|don.?t wish|do not wish|prefer not|not to (?:say|disclose|answer|respond|self)|choose not|wish not",
     re.IGNORECASE,
 )
+_REFERRER_NAME_RE = re.compile(
+    r"referr(?:er|al)'?s? (?:full )?name|name of (?:the |your )?(?:referr\w*|employee)|"
+    r"employee'?s? (?:full )?name|who referred you|referred by|"
+    r"referred you.{0,80}\b(?:their |full )?name\b",
+    re.IGNORECASE,
+)
 ASSESSMENT_PATTERNS = ("assessment", "hirevue", "codility", "hackerrank", "personality test")
 CAPTCHA_PATTERNS = ("captcha", "recaptcha", "hcaptcha", "verify you are human", "cf-challenge")
 
@@ -312,7 +318,7 @@ def _resolve_control(control: FormControl, vault: AnswerVault, request_sensitive
         keys.extend(["race_ethnicity", "race"])
     if "disab" in lbl:
         keys.extend(["disability", "disability_status"])
-    if "how did you hear" in lbl or "hear about" in lbl:
+    if ("how did you hear" in lbl or "hear about" in lbl) and not _REFERRER_NAME_RE.search(lbl):
         keys.extend(["referral_source", "hear_about_us"])
     if "onboard" in lbl and "date" in lbl:
         keys.extend(["start_date", "availability_date"])
@@ -441,10 +447,9 @@ def phone_values_equivalent(actual: Any, expected: Any) -> bool:
     # European national trunk prefix 0 (e.g. 020... in UK, 01... in France)
     actual_trim = actual_digits.lstrip("0")
     expected_trim = expected_digits.lstrip("0")
-    if min(len(actual_trim), len(expected_trim)) >= 7:
-        if actual_digits.endswith(expected_trim) or expected_digits.endswith(actual_trim):
-            return True
-    return False
+    return min(len(actual_trim), len(expected_trim)) >= 7 and (
+        actual_digits.endswith(expected_trim) or expected_digits.endswith(actual_trim)
+    )
 
 
 def verify_filled(control: FormControl, expected: Any, actual: Any) -> bool:
@@ -454,4 +459,10 @@ def verify_filled(control: FormControl, expected: Any, actual: Any) -> bool:
         return bool(actual) == bool(expected)
     if control.control_type is ControlType.TEL or "phone" in (control.key or "").lower():
         return phone_values_equivalent(actual, expected)
+    if control.control_type is ControlType.DATE:
+        exp_iso = iso_date(expected)
+        act_iso = iso_date(actual)
+        if exp_iso is not None and act_iso is not None:
+            return exp_iso == act_iso
+        return str(actual).strip() == str(expected).strip()
     return str(actual).strip() == str(expected).strip()

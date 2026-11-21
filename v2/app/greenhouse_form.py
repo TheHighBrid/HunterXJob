@@ -332,7 +332,8 @@ _LANGUAGE_RE = re.compile(
     r"bilingual(?:ism)?|"
     r"(?:canadian )?french.{0,60}english|english.{0,60}(?:canadian )?french|"
     r"level of language skill|spoken languages?|language proficiency|"
-    r"fluen(?:t|cy) in (?:french|english|fran[cç]ais)|"
+    r"(?:fluen(?:t|cy)|proficien(?:t|cy)) in (?:french|english|fran[cç]ais)|"
+    r"speak (?:french|english|fran[cç]ais) fluently|"
     r"english and french|french and english"
 )
 _PROGRAMMING_LANG_RE = re.compile(
@@ -343,7 +344,8 @@ _CITIZENSHIP_RE = re.compile(r"\bcitizen(?:ship)?\b")
 # "Who referred you / employee's name" asks for a person, not a source.
 _REFERRER_NAME_RE = re.compile(
     r"referr(?:er|al)'?s? (?:full )?name|name of (?:the |your )?(?:referr\w*|employee)|"
-    r"employee'?s? (?:full )?name|who referred you|referred by"
+    r"employee'?s? (?:full )?name|who referred you|referred by|"
+    r"referred you.{0,80}\b(?:their |full )?name\b"
 )
 
 
@@ -440,6 +442,8 @@ def _is_sensitive_key(key: str | None) -> bool:
 
 _TYPE_MAP = {
     "input_text": ControlType.TEXT,
+    "input_date": ControlType.DATE,
+    "date": ControlType.DATE,
     "textarea": ControlType.TEXTAREA,
     "input_file": ControlType.FILE,
     "input_hidden": ControlType.HIDDEN,
