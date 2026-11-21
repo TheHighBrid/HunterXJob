@@ -6,7 +6,7 @@ Only narrow, explainable rules; anything else stays in review:
 - verified ``language_proficiency`` answers bilingual English+French questions:
   a Yes/No question gets "Yes" only when both languages are at professional
   working level or above, and a CEFR-scale question gets the weaker of the two
-  languages' levels.
+  languages' levels;
 - compensation / salary range questions evaluate candidate target / minimum
   compensation against option brackets (e.g. 60-70K for $65,000 / $60,000);
 - time zone questions normalize candidate Eastern Time / America/Toronto / EST
@@ -14,11 +14,17 @@ Only narrow, explainable rules; anything else stays in review:
 - work location questions match remote preferences for non-local roles
   (e.g. 'Remote Canada' or 'Remote within Canada');
 - legal disclaimer and consent declarations resolve to universal affirmative
-  options (e.g. 'Yes' or 'I agree').
+  options (e.g. 'Yes' or 'I agree');
+- a single-language fluency question ("Are you fluent in French?") gets a plain
+  "Yes" only when that language is at professional working level or above,
+  otherwise review; never the whole stored language list;
+- date-picker fields only take a concrete calendar date, written as ISO
+  ``YYYY-MM-DD``; relative answers ("2 weeks notice") go to review.
 """
 from __future__ import annotations
 
 import re
+from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -144,7 +150,7 @@ def _parse_salary_bounds(opt: str) -> tuple[float, float] | None:
         val = float(num) * (1000.0 if (is_k or float(num) < 1000) else 1.0)
         return (val, float("inf"))
     # Range "30-40k", "60-70k", "90k-100k", "50000 - 60000", "50000 to 60000"
-    range_m = re.search(r"(\d+(?:\.\d+)?)\s*(k)?\s*(?:-|–|—|to)\s*(\d+(?:\.\d+)?)\s*(k)?", text)
+    range_m = re.search(r"(\d+(?:\.\d+)?)\s*(k)?\s*(?:-|\u2013|\u2014|to)\s*(\d+(?:\.\d+)?)\s*(k)?", text)
     if range_m:
         low_num = float(range_m.group(1))
         high_num = float(range_m.group(3))
@@ -437,7 +443,7 @@ def _referral_match(control: Any, value: Any) -> Any | None:
 # ---------------------------------------------------------------------------
 
 _POS_DURATION_RE = re.compile(
-    r"^\s*[1-9]\d*(?:\s*[-–+]\s*\d+)?\s*(?:\+\s*)?(?:years?|yrs?|\+)?\s*$",
+    r"^\s*[1-9]\d*(?:\s*[-\u2013+]\s*\d+)?\s*(?:\+\s*)?(?:years?|yrs?|\+)?\s*$",
     re.IGNORECASE,
 )
 
@@ -479,10 +485,7 @@ def derive_option(control: Any, value: Any, key: Any = "") -> Any | None:
         )
         key = key_name
 
-    if isinstance(key, (list, tuple, set)):
-        key_str = ""
-    else:
-        key_str = str(key or "")
+    key_str = "" if isinstance(key, (list, tuple, set)) else str(key or "")
 
     lookup_keys = {
         key_str.lower(),
@@ -545,7 +548,7 @@ def derive_option(control: Any, value: Any, key: Any = "") -> Any | None:
     if (
         "gender" in lookup_keys
         or "gender_identity" in lookup_keys
-        or any("demographic" in k for k in lookup_keys) and "gender" in label_lower
+        or (any("demographic" in k for k in lookup_keys) and "gender" in label_lower)
         or "gender" in label_lower
     ):
         gender_res = _gender_match(control, value)
@@ -588,12 +591,12 @@ def derive_option(control: Any, value: Any, key: Any = "") -> Any | None:
 
     ctrl_options = getattr(control, "options", []) or []
     # 7. Final fallback: try category matchers based on options structure
-    if any(re.search(r"\b\d+k\b|\b\d+-\d+k\b|\$\d+", opt, re.I) for opt in ctrl_options):
+    if any(re.search(r"\b\d+k\b|\b\d+-\d+k\b|\$\d+", opt, re.IGNORECASE) for opt in ctrl_options):
         sal_res = _salary_range(control, value)
         if sal_res is not None:
             return sal_res
 
-    if any(re.search(r"gmt[-+]|utc[-+]|eastern|pacific|central|mountain", opt, re.I) for opt in ctrl_options):
+    if any(re.search(r"gmt[-+]|utc[-+]|eastern|pacific|central|mountain", opt, re.IGNORECASE) for opt in ctrl_options):
         tz_res = _timezone(control, value)
         if tz_res is not None:
             return tz_res
@@ -603,4 +606,52 @@ def derive_option(control: Any, value: Any, key: Any = "") -> Any | None:
         if loc_res is not None:
             return loc_res
 
+    return None
+
+
+
+_KNOWN_LANGUAGES = ("english", "french", "spanish", "german", "portuguese", "italian", "mandarin", "arabic")
+_SINGLE_LANGUAGE_RE = re.compile(
+    r"^\s*(?:are you|do you|can you|is your)\b.{0,40}\b(?:fluent|speak|proficient|bilingual|work)\b",
+    re.IGNORECASE,
+)
+
+
+def single_language_answer(control: FormControl, value: Any, key: str = "") -> str | list[str] | None:
+    """Yes for a one-language yes/no fluency question.
+
+    Returns None when the rule does not apply, "" when it applies but the
+    stored level is below professional working (review), else the answer.
+    """
+    if key != "language_proficiency":
+        return None
+    label = " ".join((control.label or "").split()).casefold()
+    named = [lang for lang in _KNOWN_LANGUAGES if re.search(rf"\b{lang}\b", label)]
+    if len(named) != 1 or not _SINGLE_LANGUAGE_RE.search(label):
+        return None
+    level = parse_languages(value).get(named[0])
+    if level is None or _CEFR_ORDER.index(level) < _CEFR_ORDER.index(_PROFESSIONAL):
+        return ""
+    if not control.options:
+        return "Yes"
+    option = _wrap(control, _single_prefixed(control, "yes"))
+    return option if option is not None else ""
+
+
+_DATE_FORMATS = ("%Y-%m-%d", "%Y/%m/%d", "%B %d, %Y", "%b %d, %Y", "%B %d %Y", "%b %d %Y", "%d %B %Y", "%d %b %Y")
+_ORDINAL_DAY_RE = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)\b", re.IGNORECASE)
+
+
+def iso_date(value: Any) -> str | None:
+    """``YYYY-MM-DD`` for a concrete, unambiguous date; else None."""
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    text = _ORDINAL_DAY_RE.sub(r"\1", " ".join(str(value or "").split()))
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(text, fmt).replace(tzinfo=UTC).date().isoformat()
+        except ValueError:
+            continue
     return None

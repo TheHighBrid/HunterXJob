@@ -11,7 +11,7 @@ employer-specific custom screening questions and privacy consent checkboxes.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urlparse
@@ -22,7 +22,6 @@ from app.form_engine import LEGAL_PATTERNS, ControlType, FormControl
 from app.greenhouse_form import (
     FormFetchError,
     RealForm,
-    demographic_key,
     is_sensitive_field,
     looks_like,
     shared_answer_key,
@@ -115,7 +114,7 @@ class _SmartRecruitersHTMLParser(HTMLParser):
             input_type = ad.get("type", "text" if tag == "input" else "textarea").lower()
             required = "required" in ad or ad.get("aria-required") == "true"
             label = ad.get("placeholder") or ad.get("aria-label") or self._current_label or name
-            
+
             ctrl_type = ControlType.TEXT
             if input_type == "email":
                 ctrl_type = ControlType.EMAIL
@@ -127,11 +126,19 @@ class _SmartRecruitersHTMLParser(HTMLParser):
                 ctrl_type = ControlType.CHECKBOX
             elif input_type == "radio":
                 ctrl_type = ControlType.RADIO
+            elif input_type == "date":
+                ctrl_type = ControlType.DATE
+            elif input_type == "number":
+                ctrl_type = ControlType.NUMBER
+            elif input_type == "hidden":
+                ctrl_type = ControlType.HIDDEN
             elif tag == "textarea":
                 ctrl_type = ControlType.TEXTAREA
 
             key = _map_key(name, label, ctrl_type)
-            is_legal = any(pat in label.lower() for pat in LEGAL_PATTERNS) or "consent" in key or "privacy" in key
+            canonical = shared_answer_key(label.strip())
+            is_legal = looks_like(label, LEGAL_PATTERNS) or "consent" in key or "privacy" in key
+            vault_keys = [key] + ([canonical] if canonical and canonical != key else [])
 
             if key and not any(c.key == key for c in self.controls):
                 self.controls.append(
@@ -142,8 +149,10 @@ class _SmartRecruitersHTMLParser(HTMLParser):
                         required=required,
                         name=name,
                         input_type=input_type,
+                        sensitive=is_sensitive_field(label, canonical, False),
                         legal=is_legal,
                         section="legal" if is_legal else "application",
+                        vault_keys=vault_keys,
                         confidence=0.9 if key in ("first_name", "last_name", "email", "phone", "resume") else 0.7,
                     )
                 )
@@ -157,7 +166,9 @@ class _SmartRecruitersHTMLParser(HTMLParser):
             label = self._select_attrs.get("aria-label") or self._current_label or name
             required = "required" in self._select_attrs or self._select_attrs.get("aria-required") == "true"
             key = _map_key(name, label, ControlType.SELECT)
-            is_legal = any(pat in label.lower() for pat in LEGAL_PATTERNS)
+            canonical = shared_answer_key(label.strip())
+            is_legal = looks_like(label, LEGAL_PATTERNS)
+            vault_keys = [key] + ([canonical] if canonical and canonical != key else [])
             if key and not any(c.key == key for c in self.controls):
                 self.controls.append(
                     FormControl(
@@ -168,8 +179,10 @@ class _SmartRecruitersHTMLParser(HTMLParser):
                         name=name,
                         options=list(self._options),
                         option_values=dict(self._option_values),
+                        sensitive=is_sensitive_field(label, canonical, False),
                         legal=is_legal,
                         section="legal" if is_legal else "application",
+                        vault_keys=vault_keys,
                     )
                 )
 
@@ -188,15 +201,15 @@ def _map_key(name: str, label: str, ctype: ControlType) -> str:
     hay = f"{name} {label}".lower()
     if ctype == ControlType.FILE or "resume" in hay or "cv" in hay:
         return "resume"
-    if "first" in hay and "name" in hay or name == "firstName":
+    if ("first" in hay and "name" in hay) or name == "firstName":
         return "first_name"
-    if "last" in hay and "name" in hay or name == "lastName":
+    if ("last" in hay and "name" in hay) or name == "lastName":
         return "last_name"
     if "email" in hay:
         return "email"
     if "phone" in hay or "mobile" in hay or name == "phoneNumber":
         return "phone"
-    if "cover" in hay and "letter" in hay or "additionalinformation" in hay or "message" in hay:
+    if ("cover" in hay and "letter" in hay) or "additionalinformation" in hay or "message" in hay:
         return "cover_letter"
     if "linkedin" in hay:
         return "linkedin"
@@ -227,7 +240,7 @@ def default_smartrecruiters_controls() -> list[FormControl]:
 def parse_smartrecruiters_form(html: str, ref: SmartRecruitersJobRef, title: str = "") -> RealForm:
     parser = _SmartRecruitersHTMLParser()
     parser.feed(html)
-    controls = parser.controls if parser.controls else default_smartrecruiters_controls()
+    controls = parser.controls or default_smartrecruiters_controls()
     return RealForm(
         platform="smartrecruiters",
         source="smartrecruiters",
