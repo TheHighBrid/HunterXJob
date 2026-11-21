@@ -11,8 +11,11 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import html
+import math
 import re
+import unicodedata
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -233,307 +236,958 @@ def check_inspector_has_no_input_apis(data: dict[str, Any]) -> tuple[bool, dict[
     return not found, evidence
 
 
-_HOURLY_RATE_RE = re.compile(
-    r"(?:/\s*(?:hrs?|hours?|h)\b|\bp\s*/\s*h\b|\b(?:hourly|(?:per|an|a)\s+(?:hrs?|hours?))\b)",
-    re.IGNORECASE,
-)
-_PERIOD_RATE_RE = re.compile(
-    r"(?:/\s*(?:wks?|weeks?|mos?|months?|days?|diem)\b|"
-    r"\b(?:(?:bi[- ]?|semi[- ]?)?(?:weekly|monthly|daily)|fortnightly|"
-    r"(?:per|a)\s+(?:wks?|weeks?|mos?|months?|days?)|per\s+diem)\b)",
-    re.IGNORECASE,
-)
-_CURRENCY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("CAD", re.compile(r"\bcad(?=\d|\b)|(?<![a-z])ca?\$", re.IGNORECASE)),
-    ("USD", re.compile(r"\busd(?=\d|\b)|(?<![a-z])us\$", re.IGNORECASE)),
-    ("AUD", re.compile(r"\baud(?=\d|\b)|(?<![a-z])au\$", re.IGNORECASE)),
-    ("EUR", re.compile(r"\beur(?=\d|\b)|€", re.IGNORECASE)),
-    ("GBP", re.compile(r"\bgbp(?=\d|\b)|£", re.IGNORECASE)),
-    ("NZD", re.compile(r"\bnzd(?=\d|\b)|(?<![a-z])nz\$", re.IGNORECASE)),
-    ("HKD", re.compile(r"\bhkd(?=\d|\b)|(?<![a-z])hk\$", re.IGNORECASE)),
-    ("SGD", re.compile(r"\bsgd(?=\d|\b)|(?<![a-z])sg?\$", re.IGNORECASE)),
-    ("INR", re.compile(r"\binr(?=\d|\b)|₹", re.IGNORECASE)),
-    ("JPY", re.compile(r"\bjpy(?=\d|\b)|¥", re.IGNORECASE)),
-    ("CHF", re.compile(r"\bchf(?=\d|\b)", re.IGNORECASE)),
-)
-_GENERIC_DOLLAR_RE = re.compile(r"(?<![a-z])\$")
 _NA_DOLLAR_CURRENCIES = frozenset({"CAD", "USD"})
-_CURRENCY_PREFIX_RE = re.compile(
-    r"\b(?:cad|usd|aud|eur|gbp|nzd|hkd|sgd|inr|jpy|chf)(?=\d|\b)|"
-    r"(?<![a-z])(?:ca|us|au|nz|hk|sg|c|s)\$|[$€£₹¥]",
+
+_COUNTRY_DOLLAR_CODES: dict[str, str] = {
+    "C": "CAD",
+    "CA": "CAD",
+    "CAD": "CAD",
+    "US": "USD",
+    "USD": "USD",
+    "A": "AUD",
+    "AU": "AUD",
+    "AUD": "AUD",
+    "NZ": "NZD",
+    "NZD": "NZD",
+    "HK": "HKD",
+    "HKD": "HKD",
+    "S": "SGD",
+    "SG": "SGD",
+    "SGD": "SGD",
+    "MX": "MXN",
+    "MXN": "MXN",
+    "NT": "TWD",
+    "TW": "TWD",
+    "TWD": "TWD",
+    "R": "BRL",
+    "BR": "BRL",
+    "BRL": "BRL",
+}
+
+_DOLLAR_USING_CURRENCIES = frozenset({
+    "CAD", "USD", "AUD", "NZD", "HKD", "SGD", "TWD", "MXN", "BRL",
+    "ARS", "CLP", "COP", "UYU", "JMD", "BSD", "BZD", "BBD", "BMD",
+    "BND", "FJD", "GYD", "KYD", "LRD", "NAD", "SBD", "SRD", "TTD", "XCD",
+})
+
+_SYMBOL_CURRENCY_CODES: dict[str, str] = {
+    "\u00a3": "GBP",
+    "\u20ac": "EUR",
+    "\u20b9": "INR",
+    "\u00a5": "JPY",
+    "\u20a9": "KRW",
+    "\u20bd": "RUB",
+    "\u20ba": "TRY",
+    "\u20b1": "PHP",
+    "\u0e3f": "THB",
+    "\u20b4": "UAH",
+    "\u20aa": "ILS",
+    "\u20ab": "VND",
+    "\u20a6": "NGN",
+    "\u20a1": "CRC",
+    "\u20ae": "MNT",
+    "\u20b8": "KZT",
+    "\u20bc": "AZN",
+    "\u20be": "GEL",
+    "\u20bf": "BTC",
+}
+
+_NON_CURRENCY_WORDS = frozenset({
+    "NO", "IF", "OR", "TO", "AT", "IN", "ON", "BY", "OF", "UP", "AS", "IS",
+    "IT", "BE", "DO", "GO", "MY", "SO", "WE", "HE", "ME", "AN", "VS",
+    "NOT", "NON", "NOR", "YES", "AND", "FOR", "PER", "MAX", "MIN", "BUT", "YET", "VIA",
+    "OTE", "AVG", "NET", "PAY", "TAX", "FEE", "HRS", "WKS", "MOS", "YRS", "DAY",
+    "ANY", "OFF", "OUT", "OLD", "NEW", "ONE", "TWO", "SIX",
+    "TEN", "EST", "PST", "CST", "MST", "AST", "ETC", "WHO", "WHY", "HOW", "YOU",
+})
+
+_UNICODE_DASHES = str.maketrans({
+    "\u2010": "-",
+    "\u2011": "-",
+    "\u2012": "-",
+    "\u2013": "-",
+    "\u2014": "-",
+    "\u2015": "-",
+    "\u2212": "-",
+    "\ufe63": "-",
+    "\uff0d": "-",
+})
+
+_SC_NON_DOLLAR_CHARS = "".join(
+    chr(cp) for cp in range(0x110000)
+    if unicodedata.category(chr(cp)) == "Sc" and chr(cp) != "$"
+)
+_SC_NON_DOLLAR_CLASS = "[" + re.escape(_SC_NON_DOLLAR_CHARS) + "]"
+
+_ANNUAL_UNIT_PAT = (
+    r"(?:"
+    r"\s*/\s*(?:yr\.?|year|annum)|"
+    r"\s+\b(?:per\s+(?:year|annum)|a\s+year|annually|annual|yearly|p\s*/\s*a|p\.?\s*a\.)"
+    r")"
+)
+_TRAILING_PAREN_CURR_RE = re.compile(r"\(\s*([A-Za-z]{3})\s*\)\s*$")
+_TRAILING_PAREN_ANNUAL_RE = re.compile(
+    r"\(\s*(?:/\s*(?:yr\.?|year|annum)|(?:per\s+(?:year|annum)|a\s+year|annually|annual|yearly|p\s*/\s*a|p\.?\s*a\.))\s*\)\s*$",
     re.IGNORECASE,
 )
-_SALARY_NEGATION_RE = re.compile(r"\b(?:not|other\s+than|except|excluding|neither)\b", re.IGNORECASE)
-_DOT_THOUSANDS_RE = re.compile(r"\d\.\d{3}(?!\d)")
-_CENTS_DECIMAL_RE = re.compile(r"\.\d{2}$")
-_BONUS_SPLIT_RE = re.compile(r"\b(?:bonus|commission|equity|ote|sign[- ]?on)\b", re.IGNORECASE)
-_SALARY_NUM_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(k)?\b", re.IGNORECASE)
-_SALARY_RANGE_RE = re.compile(
-    r"(\d+(?:\.\d+)?)\s*(k)?\s*(?:-|" "\u2013|\u2014" r"|\bto\b)\s*(\d+(?:\.\d+)?)\s*(k)?\b",
-    re.IGNORECASE,
+_TRAILING_ANNUAL_RE = re.compile(rf"{_ANNUAL_UNIT_PAT}\.?\s*$", re.IGNORECASE)
+
+_NUM_PAT = r"(?:[1-9][0-9]{0,2}(?:,[0-9]{3})+|[1-9][0-9]{0,2}(?: [0-9]{3})+|[1-9][0-9]*|0)(?:\.[0-9]{1,2})?"
+
+_CURR_PRE_PAT = (
+    rf"(?:(?:U\.?\s*S\.?|[A-Za-z]{{1,3}})\s*\$"
+    rf"|\$\s*(?=[A-Za-z]{{2,3}}(?:\s|[0-9]|$))[A-Za-z]{{2,3}}"
+    rf"|\$"
+    rf"|{_SC_NON_DOLLAR_CLASS}"
+    rf"|[A-Za-z]{{3}}(?=\s|[0-9]|$))"
 )
-_SALARY_PLUS_RE = re.compile(
-    r"(?:\+|over|above|more\s+than|at\s+least|>=?)\s*(\d+(?:\.\d+)?)\s*(k)?\b"
-    r"|(\d+(?:\.\d+)?)\s*(k)?\s*(?:\+|\band\s+above\b|\bor\s+more\b|\bor\s+above\b|\bor\s+higher\b)",
-    re.IGNORECASE,
-)
-_SALARY_UNDER_RE = re.compile(
-    r"\b(?:up\s+to|under|less\s+than|below|at\s+most|max(?:imum)?)\s*(\d+(?:\.\d+)?)\s*(k)?\b"
-    r"|(?:<=|<)\s*(\d+(?:\.\d+)?)\s*(k)?\b",
-    re.IGNORECASE,
+_CURR_POST_PAT = (
+    rf"(?:(?:U\.?\s*S\.?|[A-Za-z]{{1,3}})\s*\$"
+    rf"|\$\s*(?=[A-Za-z]{{2,3}}(?:\s|$))[A-Za-z]{{2,3}}"
+    rf"|\$"
+    rf"|{_SC_NON_DOLLAR_CLASS}"
+    rf"|[A-Za-z]{{2,3}}(?=\s|$))"
 )
 
-_TZ_NEGATION_RE = re.compile(
-    r"\b(?:not|non|except|outside|other\s+than|excluding|exclude|neither|never)\b",
+
+def _money_pat(prefix: str) -> str:
+    return (
+        rf"(?:(?P<{prefix}cpre>{_CURR_PRE_PAT})\s*)?"
+        rf"(?P<{prefix}num>{_NUM_PAT})"
+        rf"(?:\s*(?P<{prefix}k>[kK])(?![A-Za-z]))?"
+        rf"(?:(?:\s+|(?<=[0-9kK]))(?P<{prefix}cpost>{_CURR_POST_PAT}))?"
+    )
+
+
+_M1 = _money_pat("m1_")
+_M2 = _money_pat("m2_")
+_M0 = _money_pat("m0_")
+
+_RANGE_SEP_PAT = r"(?:(?<!\s)-(?!\s)|(?<!\s)-\s+|\s+-\s+|\s+\bto\b\s+)"
+
+_SALARY_RANGE_RES = (
+    re.compile(rf"{_M1}{_RANGE_SEP_PAT}{_M2}", re.IGNORECASE),
+    re.compile(rf"from\s+{_M1}\s+to\s+{_M2}", re.IGNORECASE),
+    re.compile(rf"between\s+{_M1}\s+and\s+{_M2}", re.IGNORECASE),
+)
+_SALARY_PLUS_INCL_RES = (
+    re.compile(rf"{_M0}\s*\+", re.IGNORECASE),
+    re.compile(rf"\+\s*{_M0}", re.IGNORECASE),
+    re.compile(rf"(?:>=|at\s+least|min(?:imum)?)\s*{_M0}", re.IGNORECASE),
+    re.compile(rf"{_M0}\s+(?:and\s+(?:above|up|over)|or\s+(?:more|above|higher))", re.IGNORECASE),
+)
+_SALARY_PLUS_STRICT_RES = (
+    re.compile(rf"(?:>|(?:over|above|more\s+than)\s+){_M0}", re.IGNORECASE),
+)
+_SALARY_UNDER_INCL_RES = (
+    re.compile(rf"(?:<=|(?:up\s+to|at\s+most|max(?:imum)?)\s+){_M0}", re.IGNORECASE),
+    re.compile(rf"{_M0}\s+or\s+(?:less|below|under|lower)", re.IGNORECASE),
+)
+_SALARY_UNDER_STRICT_RES = (
+    re.compile(rf"(?:<|(?:under|below|less\s+than)\s+){_M0}", re.IGNORECASE),
+)
+_SALARY_SINGLE_RE = re.compile(_M0, re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class _SalaryCurrency:
+    explicit: str | None
+    has_dollar: bool
+    has_non_dollar_symbol: bool
+
+
+@dataclass(frozen=True)
+class _ParsedSalary:
+    low: float
+    high: float
+    low_inclusive: bool
+    high_inclusive: bool
+    currency: _SalaryCurrency
+
+
+_TZ_FAMILY_OFFSETS: dict[str, tuple[int, int]] = {
+    "eastern": (-300, -240),
+    "central": (-360, -300),
+    "mountain": (-420, -360),
+    "pacific": (-480, -420),
+    "atlantic": (-240, -180),
+    "newfoundland": (-210, -150),
+}
+_TZ_STD_OFFSET_TO_FAMILY: dict[int, str] = {
+    std_min: family for family, (std_min, _) in _TZ_FAMILY_OFFSETS.items()
+}
+
+_TZ_NA_IANA_TO_FAMILY: dict[str, str] = {
+    # Eastern (US & Canada)
+    "america/toronto": "eastern",
+    "america/new_york": "eastern",
+    "america/montreal": "eastern",
+    "america/ottawa": "eastern",
+    "america/detroit": "eastern",
+    "america/indianapolis": "eastern",
+    "america/fort_wayne": "eastern",
+    "america/indiana/indianapolis": "eastern",
+    "america/indiana/marengo": "eastern",
+    "america/indiana/vevay": "eastern",
+    "america/indiana/vincennes": "eastern",
+    "america/indiana/winamac": "eastern",
+    "america/indiana/petersburg": "eastern",
+    "america/louisville": "eastern",
+    "america/kentucky/louisville": "eastern",
+    "america/kentucky/monticello": "eastern",
+    "america/iqaluit": "eastern",
+    "america/nipigon": "eastern",
+    "america/pangnirtung": "eastern",
+    "america/thunder_bay": "eastern",
+    "america/atikokan": "eastern",
+    "us/eastern": "eastern",
+    "us/east-indiana": "eastern",
+    "us/michigan": "eastern",
+    "canada/eastern": "eastern",
+    "est5edt": "eastern",
+    # Central (US & Canada)
+    "america/chicago": "central",
+    "america/winnipeg": "central",
+    "america/regina": "central",
+    "america/swift_current": "central",
+    "america/rainy_river": "central",
+    "america/rankin_inlet": "central",
+    "america/resolute": "central",
+    "america/indiana/knox": "central",
+    "america/indiana/tell_city": "central",
+    "america/menominee": "central",
+    "america/north_dakota/center": "central",
+    "america/north_dakota/new_salem": "central",
+    "america/north_dakota/beulah": "central",
+    "us/central": "central",
+    "us/indiana-starke": "central",
+    "canada/central": "central",
+    "canada/saskatchewan": "central",
+    "cst6cdt": "central",
+    # Mountain (US & Canada)
+    "america/denver": "mountain",
+    "america/edmonton": "mountain",
+    "america/calgary": "mountain",
+    "america/phoenix": "mountain",
+    "america/boise": "mountain",
+    "america/yellowknife": "mountain",
+    "america/cambridge_bay": "mountain",
+    "america/inuvik": "mountain",
+    "america/creston": "mountain",
+    "america/dawson_creek": "mountain",
+    "america/fort_nelson": "mountain",
+    "america/whitehorse": "mountain",
+    "america/dawson": "mountain",
+    "us/mountain": "mountain",
+    "us/arizona": "mountain",
+    "canada/mountain": "mountain",
+    "canada/yukon": "mountain",
+    "mst7mdt": "mountain",
+    # Pacific (US & Canada)
+    "america/los_angeles": "pacific",
+    "america/vancouver": "pacific",
+    "america/seattle": "pacific",
+    "america/san_francisco": "pacific",
+    "us/pacific": "pacific",
+    "canada/pacific": "pacific",
+    "pst8pdt": "pacific",
+    # Atlantic (Canada)
+    "america/halifax": "atlantic",
+    "america/moncton": "atlantic",
+    "america/glace_bay": "atlantic",
+    "america/goose_bay": "atlantic",
+    "america/blanc-sablon": "atlantic",
+    "canada/atlantic": "atlantic",
+    # Newfoundland (Canada)
+    "america/st_johns": "newfoundland",
+    "canada/newfoundland": "newfoundland",
+}
+
+_TZ_ABBR_TO_FAMILY: dict[str, tuple[str, str]] = {
+    "est": ("eastern", "std"),
+    "edt": ("eastern", "dst"),
+    "est/edt": ("eastern", "any"),
+    "est5edt": ("eastern", "any"),
+    "cst": ("central", "std"),
+    "cdt": ("central", "dst"),
+    "cst/cdt": ("central", "any"),
+    "cst6cdt": ("central", "any"),
+    "mst": ("mountain", "std"),
+    "mdt": ("mountain", "dst"),
+    "mst/mdt": ("mountain", "any"),
+    "mst7mdt": ("mountain", "any"),
+    "pst": ("pacific", "std"),
+    "pdt": ("pacific", "dst"),
+    "pst/pdt": ("pacific", "any"),
+    "pst8pdt": ("pacific", "any"),
+    "ast": ("atlantic", "std"),
+    "adt": ("atlantic", "dst"),
+    "ast/adt": ("atlantic", "any"),
+    "nst": ("newfoundland", "std"),
+    "ndt": ("newfoundland", "dst"),
+    "nst/ndt": ("newfoundland", "any"),
+}
+_TZ_SHORT_ABBR_TO_FAMILY: dict[str, str] = {
+    "ET": "eastern",
+    "CT": "central",
+    "MT": "mountain",
+    "PT": "pacific",
+    "AT": "atlantic",
+    "NT": "newfoundland",
+}
+
+_TZ_US_CA_SHARED = frozenset({
+    "us & canada", "us and canada", "us/canada",
+    "canada & us", "canada and us", "canada/us",
+    "us", "usa", "u.s.", "u.s.a.", "united states", "canada", "north america",
+})
+_TZ_CA_SHARED = frozenset({
+    "us & canada", "us and canada", "us/canada",
+    "canada & us", "canada and us", "canada/us",
+    "canada", "north america",
+})
+_TZ_FAMILY_QUALIFIERS: dict[str, frozenset[str]] = {
+    "eastern": _TZ_US_CA_SHARED | frozenset({
+        "toronto", "new york", "new york city", "nyc", "montreal", "ottawa",
+        "quebec", "ontario", "detroit", "boston", "miami", "atlanta",
+        "washington", "washington dc", "washington, dc", "philadelphia",
+        "indianapolis", "indiana", "indiana (east)", "east indiana",
+        "louisville", "iqaluit", "thunder bay",
+    }),
+    "central": _TZ_US_CA_SHARED | frozenset({
+        "chicago", "winnipeg", "regina", "saskatchewan", "manitoba",
+        "dallas", "houston", "austin", "minneapolis", "st. louis", "st louis",
+        "kansas city", "new orleans", "nashville",
+    }),
+    "mountain": _TZ_US_CA_SHARED | frozenset({
+        "denver", "edmonton", "calgary", "alberta", "phoenix", "arizona",
+        "salt lake city", "utah", "albuquerque", "boise", "yellowknife",
+        "whitehorse", "yukon",
+    }),
+    "pacific": _TZ_US_CA_SHARED | frozenset({
+        "vancouver", "los angeles", "san francisco", "seattle", "portland",
+        "california", "british columbia", "victoria", "las vegas", "san diego",
+    }),
+    "atlantic": _TZ_CA_SHARED | frozenset({
+        "halifax", "moncton", "nova scotia", "new brunswick",
+        "prince edward island", "pei", "charlottetown", "fredericton",
+        "saint john",
+    }),
+    "newfoundland": _TZ_CA_SHARED | frozenset({
+        "newfoundland", "newfoundland and labrador", "newfoundland & labrador",
+        "labrador", "st. john's", "st john's", "st. johns", "st johns", "st_johns",
+    }),
+}
+
+_TZ_OFFSET_EXPR = r"(?:UTC|GMT)\s*-\s*(?:0?([45678])(?::?(00))?|0?(3):?(30))"
+_TZ_PURE_OFFSET_RE = re.compile(rf"^\(?\s*{_TZ_OFFSET_EXPR}\s*\)?$", re.IGNORECASE)
+_TZ_DUAL_OFFSET_RE = re.compile(
+    rf"^\s*({_TZ_OFFSET_EXPR})(?:\s*/\s*({_TZ_OFFSET_EXPR}))?\s*$",
     re.IGNORECASE,
 )
-_TZ_POSITIVE_OR_UNSIGNED_OFFSET_RE = re.compile(r"\b(?:utc|gmt)\s*(?:\+|\d)", re.IGNORECASE)
-_TZ_NON_NA_RE = re.compile(
-    r"\b(?:australia|australian|asia|asian|siberia|siberian|middle\s+east(?:ern)?|"
-    r"south\s+america(?:n)?|latin\s+america(?:n)?|oceania|pacific\s+islands?|"
-    r"china|chinese|arabia|arabian|auckland|india|indian|cuba|cuban|"
-    r"europe|european|uk|united\s+kingdom|britain|british|london|tokyo|singapore|brazil|brasil|"
-    r"pakistan|beijing|shanghai|hong[ _]?kong|sydney|melbourne|brisbane|perth|adelaide|paris|"
-    r"berlin|moscow|dubai|riyadh|cairo|seoul|jakarta|manila|bangkok|taipei|kolkata|mumbai|"
-    r"delhi|havana|african|africa|"
-    r"eet|cet|wet|bst|ist|jst|kst|sgt|hkt|gst|aest|aedt|acst|acdt|awst|nzst|nzdt|cat|sast|wat|eat|apt)\b"
-    r"|(?:asia|europe|australia|africa|indian|antarctica|pacific|atlantic)/",
+_TZ_LEADING_OFFSET_RE = re.compile(
+    rf"^(?:\(\s*({_TZ_OFFSET_EXPR})\s*\)\s*[:\-\u2013\u2014|]?\s*|({_TZ_OFFSET_EXPR})\s*[:\-\u2013\u2014|\s]\s*)",
     re.IGNORECASE,
 )
-_TZ_NON_TZ_PLACE_RE = re.compile(
-    r"\b(?:mountain\s+view|central\s+park|grand\s+central|pacific\s+palisades|"
-    r"pacific\s+highway|atlantic\s+city|atlantic\s+ocean|pacific\s+ocean|eastern\s+parkway)\b",
+_TZ_TRAILING_OFFSET_RE = re.compile(
+    rf"(?:\s*\(\s*({_TZ_OFFSET_EXPR})(?:\s*/\s*({_TZ_OFFSET_EXPR}))?\s*\)|\s*[-\u2013\u2014]\s*({_TZ_OFFSET_EXPR}))$",
     re.IGNORECASE,
 )
-_TZ_CONTEXT_RE = re.compile(
-    r"\b(?:time|zone|tz|standard|daylight|saving|"
-    r"est|edt|est5edt|cst|cdt|cst6cdt|mst|mdt|mst7mdt|pst|pdt|pst8pdt|"
-    r"ast|adt|nst|ndt|utc|gmt)\b|(?:america|us|canada)/",
+_TZ_ZONE_NAME_RE = re.compile(
+    r"^(Eastern|Central|Mountain|Pacific|Atlantic|Newfoundland)\s+"
+    r"(?:(Standard|Daylight|Standard\s*/\s*Daylight)\s+)?Time$",
     re.IGNORECASE,
 )
 _TZ_BARE_FAMILY_RE = re.compile(
-    r"^(?:eastern|central|mountain|pacific|atlantic|newfoundland)$",
+    r"^(Eastern|Central|Mountain|Pacific|Atlantic|Newfoundland)$",
     re.IGNORECASE,
 )
-_BATCH_TZ_PATTERNS: dict[str, re.Pattern[str]] = {
-    "eastern": re.compile(
-        r"\beastern\b|\best\b|\bedt\b|\best5edt\b|\btoronto\b|\bnew[ _]york\b|\bmontreal\b|\bottawa\b"
-        r"|\b(?:gmt|utc)\s*-\s*0?5(?::?00)?(?![:\d])",
-        re.IGNORECASE,
+
+_YES_EXACT = frozenset({
+    "yes",
+    "oui",
+    "yes / oui",
+    "yes/oui",
+    "oui / yes",
+    "oui/yes",
+    "yes - oui",
+    "oui - yes",
+})
+_YES_SPLIT_RE = re.compile(r"^(?:yes|oui)\s*(?:,|:|;|\s-\s)\s*(.+)$")
+_YES_BILINGUAL_RE = re.compile(
+    r"^(?:yes|oui)\s*(?:,|:|;|\s-\s)\s*"
+    r"(?:(?:i\s+am\s+)?(?:fluent\s+in\s+both(?:\s+(?:french\s+and\s+english|english\s+and\s+french))?|bilingual)|"
+    r"je\s+suis\s+bilingue)$"
+)
+_YES_SAFE_TAILS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"^(?:i\s+am|i'm)\s+(?:legally\s+)?(?:authorized|authorised|eligible)"
+        r"(?:\s+to\s+work(?:\s+in\s+canada)?)?(?:\s+without\s+restriction)?$"
     ),
-    "central": re.compile(
-        r"\bcentral\b|\bcst\b|\bcdt\b|\bcst6cdt\b|\bchicago\b|\bwinnipeg\b"
-        r"|\b(?:gmt|utc)\s*-\s*0?6(?::?00)?(?![:\d])",
-        re.IGNORECASE,
+    re.compile(
+        r"^(?:i\s+am\s+(?:a\s+)?)?(?:canadian\s+citizen(?:\s*(?:/|or)\s*(?:pr|permanent\s+resident))?|"
+        r"permanent\s+resident|citoyen\s+canadien(?:\s+ou\s+r[e\u00e9]sident\s+permanent)?)$"
     ),
-    "mountain": re.compile(
-        r"\bmountain\b|\bmst\b|\bmdt\b|\bmst7mdt\b|\bdenver\b|\bedmonton\b|\bcalgary\b"
-        r"|\b(?:gmt|utc)\s*-\s*0?7(?::?00)?(?![:\d])",
-        re.IGNORECASE,
+    re.compile(r"^(?:i\s+am\s+)?located\s+in\s+canada$"),
+    re.compile(r"^(?:i\s+am\s+)?open\s+to\s+it$"),
+    re.compile(r"^(?:i\s+am\s+)?available(?:\s+(?:as\s+required|for\s+evenings\s+and\s+weekends|immediately))?$"),
+    re.compile(
+        r"^(?:(?:i\s+)?(?:consent|agree|accept|acknowledge|certify)"
+        r"(?:\s+(?:to\s+(?:be\s+recorded|interview\s+recording)|to\s+the\s+(?:terms|disclaimer|agreement)))?|"
+        r"j'accepte(?:\s+(?:les\s+)?conditions)?)$"
     ),
-    "pacific": re.compile(
-        r"\bpacific\b|\bpst\b|\bpdt\b|\bpst8pdt\b|\bvancouver\b|\blos[ _]angeles\b"
-        r"|\b(?:gmt|utc)\s*-\s*0?8(?::?00)?(?![:\d])",
-        re.IGNORECASE,
+    re.compile(r"^expectations\s+aligned(?:\s+with\s+range)?$"),
+    re.compile(
+        r"^(?:(?:i\s+am\s+)?(?:fluent\s+in\s+both(?:\s+(?:french\s+and\s+english|english\s+and\s+french))?|bilingual)|"
+        r"je\s+suis\s+bilingue)$"
     ),
-    "atlantic": re.compile(
-        r"\batlantic\b|\bast\b|\badt\b|\bhalifax\b"
-        r"|\b(?:gmt|utc)\s*-\s*0?4(?::?00)?(?![:\d])",
-        re.IGNORECASE,
+)
+
+_NO_EXACT = frozenset({
+    "no",
+    "non",
+    "no / non",
+    "no/non",
+    "non / no",
+    "non/no",
+    "no - non",
+    "non - no",
+})
+_NO_SPLIT_RE = re.compile(r"^(?:no|non)\s*(?:,|:|;|\s-\s)\s*(.+)$")
+_NO_SAFE_TAILS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^i\s+have\s+never$"),
+    re.compile(
+        r"^i\s+have\s+not\s+(?:previously\s+)?worked\s+(?:for|at)\s+"
+        r"(?!.*\b(?:if|unless|except|but|only|however|without|with|after|before|until|pending|"
+        r"requiring|needing|sponsor|sponsorship|visa|permit|or|and)\b)"
+        r"[a-z0-9&'.-]+(?:\s+[a-z0-9&'.-]+){0,3}(?:\s+in\s+any\s+capacity)?$"
     ),
-    "newfoundland": re.compile(
-        r"\bnewfoundland\b|\bnst\b|\bndt\b|\bst[ ._-]*johns\b"
-        r"|\b(?:gmt|utc)\s*-\s*0?3:?30(?![:\d])",
-        re.IGNORECASE,
+    re.compile(
+        r"^i\s+(?:do\s+not|don't|will\s+not|won't)\s+(?:require|need)\s+(?:any\s+)?"
+        r"(?:current\s+or\s+future\s+)?(?:visa\s+|immigration\s+)?sponsorship"
+        r"(?:\s+(?:now\s+or\s+in\s+the\s+future|in\s+the\s+future|"
+        r"to\s+work(?:\s+in\s+(?:canada|the\s+u\.?s\.?a?|the\s+united\s+states))?))?$"
     ),
+    re.compile(r"^(?:visa\s+|immigration\s+)?sponsorship\s+(?:is\s+)?not\s+required$"),
+    re.compile(
+        r"^i\s+am\s+not\s+(?:bilingual|fluent(?:\s+in\s+both"
+        r"(?:\s+(?:french\s+and\s+english|english\s+and\s+french))?)?)$"
+    ),
+    re.compile(r"^i\s+do\s+not\s+hold\s+either$"),
+    re.compile(r"^i\s+(?:do\s+not|don't)\s+have\s+a\s+disability$"),
+    re.compile(r"^(?:je\s+refuse|i\s+(?:do\s+not|don't)\s+(?:consent|agree))$"),
+    re.compile(
+        r"^i\s+am\s+not\s+(?:legally\s+)?(?:authorized|authorised|eligible)"
+        r"(?:\s+to\s+work(?:\s+in\s+(?:canada|the\s+u\.?s\.?a?|the\s+united\s+states))?)?$"
+    ),
+)
+
+_CEFR_DESCRIPTORS_BY_CODE: dict[str, str] = {
+    "a1": r"no\s+proficiency",
+    "a2": r"(?:elementary|basic)(?:\s+proficiency)?",
+    "b1": r"(?:limited\s+working|intermediate)(?:\s+proficiency)?",
+    "b2": r"(?:professional(?:\s+working)?|upper\s+intermediate)(?:\s+proficiency)?",
+    "c1": r"(?:full\s+professional|advanced|fluent)(?:\s+proficiency)?",
+    "c2": r"(?:bilingual\s*/\s*native|native\s*/\s*bilingual|native|bilingual|fluent)(?:\s+(?:speaker|proficiency))?",
 }
-
-_YES_OPTION_RE = re.compile(r"^yes(?:\s|$|[,;:/().!])")
-_NO_OPTION_RE = re.compile(r"^no(?:\s|$|[,;:/().!])")
-_YES_NO_DISJUNCTION_RE = re.compile(
-    r"\b(?:yes\s*(?:/|\bor\b|-)\s*no|no\s*(?:/|\bor\b|-)\s*yes|maybe|unsure)\b",
-    re.IGNORECASE,
-)
-_YES_NO_CONDITIONAL_RE = re.compile(
-    r"\b(?:only|if|unless|provided|subject\s+to|except|but|however|conditional(?:ly)?|condition|"
-    r"depending|assuming|contingent|bonus|compensation|after|when|preference|comment|opinion|"
-    r"answer|response|with)\b|\$",
-    re.IGNORECASE,
-)
-_YES_CONTRADICTION_RE = re.compile(
-    r"\b(?:not|never|cannot|no|non|neither|nor|none|unable|ineligible|unauthorized|unauthorised|"
-    r"disagree|decline|refuse|require[sd]?|sponsorship|sponsored|visa)\b|n't\b",
-    re.IGNORECASE,
-)
-_NO_NEGATION_RE = re.compile(r"\b(?:not|never|cannot|non|neither)\b|n't\b", re.IGNORECASE)
-_NO_AFFIRMATIVE_RE = re.compile(
-    r"\b(?:i\s+am|i'm|am|are|have|can|will|able|authorized|authorised|eligible|legally)\b",
-    re.IGNORECASE,
-)
-_NO_SPONSORSHIP_COND_RE = re.compile(r"\b(?:require[sd]?|sponsorship|sponsored|visa)\b", re.IGNORECASE)
-_LANG_CEFR_TOKEN_RE = re.compile(r"(?<![a-z0-9])([abc][12])(?![a-z0-9])", re.IGNORECASE)
-_LANG_NEGATION_RE = re.compile(
-    r"\b(?:not|below|under|less\s+than|lower\s+than|except|excluding|non|neither|or)\b|\bno\s+[abc][12]\b",
-    re.IGNORECASE,
+_CEFR_LANG_PREFIX = (
+    r"(?:french|fran[c\u00e7]ais|english|anglais|bilingual|bilingue|"
+    r"english\s*(?:&|and|/)\s*french|french\s*(?:&|and|/)\s*english)"
 )
 
 
-def _extract_salary_currencies(raw: str) -> tuple[set[str], bool]:
-    currencies = {code for code, pattern in _CURRENCY_PATTERNS if pattern.search(raw)}
-    has_generic_dollar = bool(_GENERIC_DOLLAR_RE.search(raw))
-    return currencies, has_generic_dollar
-
-
-def _currencies_compatible(option: str, resolved_str: str) -> bool:
-    opt_currencies, _ = _extract_salary_currencies(option)
-    res_currencies, _ = _extract_salary_currencies(resolved_str)
-    if len(opt_currencies) > 1 or len(res_currencies) > 1:
-        return False
-    if opt_currencies and res_currencies:
-        return opt_currencies == res_currencies
-    if opt_currencies and not (opt_currencies <= _NA_DOLLAR_CURRENCIES):
-        return False
-    return not res_currencies or res_currencies <= _NA_DOLLAR_CURRENCIES
-
-
-def _has_negative_salary_number(cleaned: str) -> bool:
-    without_range_hyphens = re.sub(r"(?<=[\dk])\s*-\s*(?=\d)", " ", cleaned)
-    return bool(re.search(r"-\s*\d", without_range_hyphens))
-
-
-def _clean_salary_text(raw: Any) -> str:
-    text = str(raw or "").strip().lower()
-    text = re.sub(r"(?<=\d),(?=\d{3}\b)", "", text)
-    text = _CURRENCY_PREFIX_RE.sub(" ", text)
-    return " ".join(text.split())
-
-
-def _parse_scalar_salary(raw: Any) -> float | None:
+def _normalize_salary_raw(raw: Any) -> str | None:
     if raw is None or isinstance(raw, bool):
         return None
-    raw_str = str(raw).strip()
-    if (
-        not raw_str
-        or re.search(r"\bn/?a\b", raw_str, re.IGNORECASE)
-        or _SALARY_NEGATION_RE.search(raw_str)
-        or _DOT_THOUSANDS_RE.search(raw_str)
-        or _HOURLY_RATE_RE.search(raw_str)
-        or _PERIOD_RATE_RE.search(raw_str)
-    ):
+    if isinstance(raw, float):
+        if not math.isfinite(raw):
+            return None
+        text = str(int(raw)) if raw.is_integer() else f"{raw:.2f}"
+    else:
+        text = str(raw)
+    if any(unicodedata.category(ch) == "Cf" for ch in text):
         return None
-    cleaned = _clean_salary_text(raw_str)
-    if re.search(r"-\s*\d", cleaned):
+    text = " ".join(text.split())
+    if not text:
         return None
-    tokens = _SALARY_NUM_RE.findall(cleaned)
-    if len(tokens) != 1:
-        return None
-    num_str, k_suffix = tokens[0]
-    val = float(num_str) * (1000.0 if k_suffix else 1.0)
-    return val if val >= 1000.0 else None
+    return text.translate(_UNICODE_DASHES)
 
 
-def _scale_salary_bound(
-    num: float,
-    has_k: bool,
-    peer_has_k: bool,
-    has_cents: bool,
-    is_rate: bool,
-) -> float:
+def _decode_currency_token(tok: str, *, is_post: bool) -> _SalaryCurrency | None:
+    t = " ".join(tok.split())
+    if not t:
+        return None
+    if t == "$":
+        return _SalaryCurrency(explicit=None, has_dollar=True, has_non_dollar_symbol=False)
+    if len(t) == 1 and unicodedata.category(t) == "Sc":
+        return _SalaryCurrency(
+            explicit=_SYMBOL_CURRENCY_CODES.get(t, f"SYM:{t}"),
+            has_dollar=False,
+            has_non_dollar_symbol=True,
+        )
+    if "$" in t:
+        alpha = re.sub(r"[\s$.]", "", t).upper()
+        if not alpha:
+            return _SalaryCurrency(explicit=None, has_dollar=True, has_non_dollar_symbol=False)
+        if alpha in _NON_CURRENCY_WORDS:
+            return None
+        mapped = _COUNTRY_DOLLAR_CODES.get(alpha)
+        if mapped is not None:
+            return _SalaryCurrency(explicit=mapped, has_dollar=True, has_non_dollar_symbol=False)
+        if len(alpha) == 3 and alpha.isalpha():
+            return _SalaryCurrency(explicit=alpha, has_dollar=True, has_non_dollar_symbol=False)
+        return _SalaryCurrency(explicit=f"DOLLAR:{alpha}", has_dollar=True, has_non_dollar_symbol=False)
+    alpha = t.upper()
+    if alpha in _NON_CURRENCY_WORDS:
+        return None
+    if len(alpha) == 3 and alpha.isalpha():
+        return _SalaryCurrency(explicit=alpha, has_dollar=False, has_non_dollar_symbol=False)
+    if is_post and len(alpha) == 2 and alpha in _COUNTRY_DOLLAR_CODES:
+        return _SalaryCurrency(explicit=_COUNTRY_DOLLAR_CODES[alpha], has_dollar=False, has_non_dollar_symbol=False)
+    return None
+
+
+def _combine_salary_currencies(infos: list[_SalaryCurrency]) -> _SalaryCurrency | None:
+    if not infos:
+        return _SalaryCurrency(explicit=None, has_dollar=False, has_non_dollar_symbol=False)
+    explicits = {i.explicit for i in infos if i.explicit is not None}
+    if len(explicits) > 1:
+        return None
+    has_dollar = any(i.has_dollar for i in infos)
+    has_non_dollar_sym = any(i.has_non_dollar_symbol for i in infos)
+    if has_dollar and has_non_dollar_sym:
+        return None
+    explicit = next(iter(explicits)) if explicits else None
+    if explicit is not None and has_dollar and not explicit.startswith("DOLLAR:") and explicit not in _DOLLAR_USING_CURRENCIES:
+        return None
+    return _SalaryCurrency(explicit=explicit, has_dollar=has_dollar, has_non_dollar_symbol=has_non_dollar_sym)
+
+
+def _extract_money_match(gd: dict[str, str | None], prefix: str) -> tuple[float, bool, bool, _SalaryCurrency] | None:
+    num_str = gd[f"{prefix}num"] or ""
+    has_k = bool(gd[f"{prefix}k"])
+    has_decimal = "." in num_str
+    val = float(num_str.replace(",", "").replace(" ", ""))
+    currs: list[_SalaryCurrency] = []
+    for key, is_post in ((f"{prefix}cpre", False), (f"{prefix}cpost", True)):
+        tok = gd.get(key)
+        if tok:
+            ci = _decode_currency_token(tok, is_post=is_post)
+            if ci is None:
+                return None
+            currs.append(ci)
+    post_tok = gd.get(f"{prefix}cpost")
+    if post_tok and len(post_tok.strip()) == 2 and not any(c.has_dollar for c in currs):
+        return None
+    combined = _combine_salary_currencies(currs)
+    if combined is None:
+        return None
+    return val, has_k, has_decimal, combined
+
+
+def _scale_salary_bound(num: float, has_k: bool, peer_has_k: bool, has_decimal: bool) -> float:
     if has_k:
         return num * 1000.0
-    if not is_rate and num < 1000 and peer_has_k and not has_cents:
+    if num < 1000.0 and peer_has_k and not has_decimal:
         return num * 1000.0
     return num
 
 
-def _valid_annual_bracket(low: float, high: float) -> bool:
-    return low >= 0.0 and (low == 0.0 or low >= 1000.0) and high >= 1000.0 and low <= high
+def _strip_annual_and_paren_currency(text: str) -> tuple[str, list[_SalaryCurrency]] | None:
+    extra_currs: list[_SalaryCurrency] = []
+    s = text.strip()
+    m_pc = _TRAILING_PAREN_CURR_RE.search(s)
+    if m_pc:
+        ci = _decode_currency_token(m_pc.group(1), is_post=True)
+        if ci is None:
+            return None
+        extra_currs.append(ci)
+        s = s[:m_pc.start()].strip()
+    m_pa = _TRAILING_PAREN_ANNUAL_RE.search(s)
+    if m_pa:
+        s = s[:m_pa.start()].strip()
+    else:
+        m_a = _TRAILING_ANNUAL_RE.search(s)
+        if m_a:
+            s = s[:m_a.start()].strip()
+    if not m_pc:
+        m_pc2 = _TRAILING_PAREN_CURR_RE.search(s)
+        if m_pc2:
+            ci = _decode_currency_token(m_pc2.group(1), is_post=True)
+            if ci is None:
+                return None
+            extra_currs.append(ci)
+            s = s[:m_pc2.start()].strip()
+    return s, extra_currs
+
+
+def _parse_salary_grammar(raw: Any, *, scalar_only: bool = False) -> _ParsedSalary | None:
+    norm = _normalize_salary_raw(raw)
+    if norm is None:
+        return None
+    stripped = _strip_annual_and_paren_currency(norm)
+    if stripped is None:
+        return None
+    body, extra_currs = stripped
+    if not body:
+        return None
+
+    m = _SALARY_SINGLE_RE.fullmatch(body)
+    if m:
+        parsed = _extract_money_match(m.groupdict(), "m0_")
+        if parsed is None:
+            return None
+        val, has_k, _, ci = parsed
+        combined = _combine_salary_currencies([ci, *extra_currs])
+        if combined is None:
+            return None
+        scaled = val * (1000.0 if has_k else 1.0)
+        if scaled < 1000.0:
+            return None
+        return _ParsedSalary(scaled, scaled, True, True, combined)
+
+    if scalar_only:
+        return None
+
+    for pat in _SALARY_RANGE_RES:
+        m = pat.fullmatch(body)
+        if m:
+            gd = m.groupdict()
+            p1 = _extract_money_match(gd, "m1_")
+            p2 = _extract_money_match(gd, "m2_")
+            if p1 is None or p2 is None:
+                return None
+            v1, k1, dec1, c1 = p1
+            v2, k2, dec2, c2 = p2
+            combined = _combine_salary_currencies([c1, c2, *extra_currs])
+            if combined is None:
+                return None
+            low = _scale_salary_bound(v1, k1, k2, dec1)
+            high = _scale_salary_bound(v2, k2, k1, dec2)
+            if low < 1000.0 or high < 1000.0 or low > high:
+                return None
+            return _ParsedSalary(low, high, True, True, combined)
+
+    for pats, incl in ((_SALARY_PLUS_INCL_RES, True), (_SALARY_PLUS_STRICT_RES, False)):
+        for pat in pats:
+            m = pat.fullmatch(body)
+            if m:
+                parsed = _extract_money_match(m.groupdict(), "m0_")
+                if parsed is None:
+                    return None
+                val, has_k, _, ci = parsed
+                combined = _combine_salary_currencies([ci, *extra_currs])
+                if combined is None:
+                    return None
+                low = val * (1000.0 if has_k else 1.0)
+                if low < 1000.0:
+                    return None
+                return _ParsedSalary(low, float("inf"), incl, False, combined)
+
+    for pats, incl in ((_SALARY_UNDER_INCL_RES, True), (_SALARY_UNDER_STRICT_RES, False)):
+        for pat in pats:
+            m = pat.fullmatch(body)
+            if m:
+                parsed = _extract_money_match(m.groupdict(), "m0_")
+                if parsed is None:
+                    return None
+                val, has_k, _, ci = parsed
+                combined = _combine_salary_currencies([ci, *extra_currs])
+                if combined is None:
+                    return None
+                high = val * (1000.0 if has_k else 1.0)
+                if high < 1000.0:
+                    return None
+                return _ParsedSalary(0.0, high, False, incl, combined)
+
+    return None
+
+
+def _salary_currencies_match(opt_c: _SalaryCurrency, res_c: _SalaryCurrency) -> bool:
+    if opt_c.explicit is not None and res_c.explicit is not None:
+        return opt_c.explicit == res_c.explicit
+    if opt_c.explicit is not None:
+        return opt_c.explicit in _NA_DOLLAR_CURRENCIES
+    if res_c.explicit is not None:
+        return res_c.explicit in _NA_DOLLAR_CURRENCIES
+    return True
+
+
+def _extract_salary_currencies(raw: str) -> tuple[set[str], bool]:
+    parsed = _parse_salary_grammar(raw, scalar_only=False)
+    if parsed is None:
+        return set(), False
+    currs = {parsed.currency.explicit} if parsed.currency.explicit else set()
+    return currs, parsed.currency.has_dollar
+
+
+def _currencies_compatible(option: str, resolved_str: str) -> bool:
+    opt_p = _parse_salary_grammar(option, scalar_only=False)
+    res_p = _parse_salary_grammar(resolved_str, scalar_only=True)
+    if opt_p is None or res_p is None:
+        return False
+    return _salary_currencies_match(opt_p.currency, res_p.currency)
+
+
+def _parse_scalar_salary(raw: Any) -> float | None:
+    parsed = _parse_salary_grammar(raw, scalar_only=True)
+    return parsed.low if parsed is not None else None
 
 
 def _parse_salary_bracket(option: str) -> tuple[float, float] | None:
-    if (
-        re.search(r"\bn/?a\b", option, re.IGNORECASE)
-        or _SALARY_NEGATION_RE.search(option)
-        or _DOT_THOUSANDS_RE.search(option)
-        or _BONUS_SPLIT_RE.search(option)
-    ):
-        return None
-    is_rate = bool(_HOURLY_RATE_RE.search(option) or _PERIOD_RATE_RE.search(option))
-    if is_rate:
-        return None
-    cleaned = _clean_salary_text(option)
-    if not cleaned or _has_negative_salary_number(cleaned) or re.search(r"\d\s*\+\s*\d", cleaned):
-        return None
-    all_nums = _SALARY_NUM_RE.findall(cleaned)
-    if not all_nums:
-        return None
-
-    range_m = _SALARY_RANGE_RE.search(cleaned)
-    if range_m:
-        if len(all_nums) != 2:
-            return None
-        low_str, low_k_str, high_str, high_k_str = range_m.groups()
-        low_num = float(low_str)
-        low_k = bool(low_k_str)
-        high_num = float(high_str)
-        high_k = bool(high_k_str)
-        low = _scale_salary_bound(low_num, low_k, high_k, bool(_CENTS_DECIMAL_RE.search(low_str)), is_rate)
-        high = _scale_salary_bound(high_num, high_k, low_k, bool(_CENTS_DECIMAL_RE.search(high_str)), is_rate)
-        if low <= 0 or not _valid_annual_bracket(low, high):
-            return None
-        return (low, high)
-
-    if len(all_nums) != 1:
-        return None
-
-    plus_m = _SALARY_PLUS_RE.search(cleaned)
-    if plus_m:
-        num_str = plus_m.group(1) or plus_m.group(3)
-        has_k = bool(plus_m.group(2) or plus_m.group(4))
-        low = _scale_salary_bound(float(num_str), has_k, False, bool(_CENTS_DECIMAL_RE.search(num_str)), is_rate)
-        return (low, float("inf")) if low >= 1000.0 else None
-
-    under_m = _SALARY_UNDER_RE.search(cleaned)
-    if under_m:
-        num_str = under_m.group(1) or under_m.group(3)
-        has_k = bool(under_m.group(2) or under_m.group(4))
-        high = _scale_salary_bound(float(num_str), has_k, False, bool(_CENTS_DECIMAL_RE.search(num_str)), is_rate)
-        return (0.0, high) if high >= 1000.0 else None
-
-    num_str, k_suffix = all_nums[0]
-    val = float(num_str) * (1000.0 if k_suffix else 1.0)
-    return (val, val) if val >= 1000.0 else None
+    parsed = _parse_salary_grammar(option, scalar_only=False)
+    return (parsed.low, parsed.high) if parsed is not None else None
 
 
 def _salary_option_contains(option: Any, resolved: Any) -> bool:
     """A bracket option (e.g. "60-70K") derived from the stored figure: the figure lies inside it."""
-    target = _parse_scalar_salary(resolved)
-    if target is None or not isinstance(option, str) or not re.search(r"\d", option):
+    if not isinstance(option, str):
         return False
-    if not _currencies_compatible(option, str(resolved)):
+    res_p = _parse_salary_grammar(resolved, scalar_only=True)
+    if res_p is None:
         return False
-    if _HOURLY_RATE_RE.search(option) or _PERIOD_RATE_RE.search(option):
+    opt_p = _parse_salary_grammar(option, scalar_only=False)
+    if opt_p is None:
         return False
-    bounds = _parse_salary_bracket(option)
-    return bounds is not None and bounds[0] <= target <= bounds[1]
+    if not _salary_currencies_match(opt_p.currency, res_p.currency):
+        return False
+    target = res_p.low
+    low_ok = (target >= opt_p.low) if opt_p.low_inclusive else (target > opt_p.low)
+    high_ok = (target <= opt_p.high) if opt_p.high_inclusive else (target < opt_p.high)
+    return low_ok and high_ok
+
+
+def _parse_tz_offset_minutes(token: str) -> int | None:
+    m = _TZ_PURE_OFFSET_RE.fullmatch(token.strip())
+    if not m:
+        return None
+    h_str = m.group(1) or m.group(3)
+    m_str = m.group(2) or m.group(4) or "00"
+    return -(int(h_str) * 60 + int(m_str))
+
+
+def _parse_tz_offset_group(token: str) -> list[int] | None:
+    m = _TZ_DUAL_OFFSET_RE.fullmatch(token.strip())
+    if not m:
+        return None
+    out: list[int] = []
+    for grp in (1, 6):
+        if m.group(grp):
+            val = _parse_tz_offset_minutes(m.group(grp))
+            if val is None:
+                return None
+            out.append(val)
+    return out
+
+
+def _normalize_iana_tz(raw: str) -> str:
+    parts = [p.strip() for p in raw.strip().split("/")]
+    if len(parts) < 2 or not all(parts):
+        return raw.strip().casefold()
+    norm_parts = []
+    for part in parts:
+        p_clean = "_".join(part.replace("'", "").replace(".", " ").split()).casefold()
+        norm_parts.append(p_clean)
+    return "/".join(norm_parts)
+
+
+def _match_tz_abbr(token: str, *, allow_lower_short: bool = False) -> tuple[str, str] | None:
+    cleaned = re.sub(r"\s*/\s*", "/", token.strip())
+    if cleaned in _TZ_SHORT_ABBR_TO_FAMILY:
+        return (_TZ_SHORT_ABBR_TO_FAMILY[cleaned], "any")
+    if allow_lower_short and cleaned.upper() in _TZ_SHORT_ABBR_TO_FAMILY:
+        return (_TZ_SHORT_ABBR_TO_FAMILY[cleaned.upper()], "any")
+    return _TZ_ABBR_TO_FAMILY.get(cleaned.casefold())
+
+
+def _split_tz_head_qualifier(body: str) -> tuple[str, str] | None:
+    if body.endswith(")") and "(" in body:
+        idx = body.find("(")
+        head = body[:idx].strip()
+        qual = body[idx + 1 : -1].strip()
+        if head and qual and "(" not in qual and ")" not in qual:
+            return head, qual
+    for sep in (" - ", " \u2013 ", " \u2014 "):
+        if sep in body:
+            head, _, qual = body.partition(sep)
+            head, qual = head.strip(), qual.strip()
+            if head and qual:
+                return head, qual
+    return None
+
+
+def _valid_tz_qualifier(inner: str, family: str) -> tuple[bool, str | None]:
+    q = " ".join(inner.strip().split())
+    if not q:
+        return False, None
+    abbr = _match_tz_abbr(q, allow_lower_short=True)
+    if abbr is not None:
+        return (abbr[0] == family, abbr[1])
+    q_cf = q.casefold()
+    allowed = _TZ_FAMILY_QUALIFIERS[family]
+    if q_cf in allowed:
+        return True, None
+    parts = [p.strip() for p in re.split(r"[,;/]", q) if p.strip()]
+    if len(parts) > 1 and all(
+        p.casefold() in allowed
+        or ((a := _match_tz_abbr(p, allow_lower_short=True)) is not None and a[0] == family)
+        for p in parts
+    ):
+        return True, None
+    return False, None
+
+
+def _tz_offsets_match_family(offsets: list[int], family: str, kind: str) -> bool:
+    if not offsets:
+        return True
+    std_min, dst_min = _TZ_FAMILY_OFFSETS[family]
+    if len(offsets) == 2:
+        return set(offsets) == {std_min, dst_min}
+    if len(offsets) != 1:
+        return False
+    off = offsets[0]
+    if kind == "std":
+        return off == std_min
+    if kind == "dst":
+        return off == dst_min
+    return off in (std_min, dst_min)
 
 
 def _classify_time_zone(raw: Any) -> str | None:
     if not isinstance(raw, str):
         return None
-    text = raw.strip()
-    if (
-        not text
-        or _TZ_NEGATION_RE.search(text)
-        or _TZ_POSITIVE_OR_UNSIGNED_OFFSET_RE.search(text)
-        or _TZ_NON_NA_RE.search(text)
-        or _TZ_NON_TZ_PLACE_RE.search(text)
-    ):
+    text = " ".join(raw.replace("\u2212", "-").strip().split())
+    if not text:
         return None
-    if not (_TZ_CONTEXT_RE.search(text) or _TZ_BARE_FAMILY_RE.fullmatch(text)):
+
+    # 1. Pure standalone IANA / legacy identifier
+    if (fam := _TZ_NA_IANA_TO_FAMILY.get(_normalize_iana_tz(text))) is not None:
+        return fam
+
+    # 2. Pure standalone bare family name
+    if _TZ_BARE_FAMILY_RE.fullmatch(text):
+        return text.casefold()
+
+    # 3. Pure standalone negative NA offset
+    if (off := _parse_tz_offset_minutes(text)) is not None:
+        return _TZ_STD_OFFSET_TO_FAMILY.get(off)
+
+    # 4. Pure standalone NA abbreviation
+    if (abbr := _match_tz_abbr(text)) is not None:
+        return abbr[0]
+
+    # 5. Structured composite forms: [leading_offset] body [trailing_offset]
+    offsets: list[int] = []
+    body = text
+
+    lead_m = _TZ_LEADING_OFFSET_RE.match(body)
+    if lead_m:
+        off_tok = lead_m.group(1) or lead_m.group(6)
+        off = _parse_tz_offset_minutes(off_tok)
+        if off is None:
+            return None
+        offsets.append(off)
+        body = body[lead_m.end():].strip()
+
+    trail_m = _TZ_TRAILING_OFFSET_RE.search(body)
+    if trail_m and not offsets:
+        for grp in (1, 6, 11):
+            if trail_m.group(grp):
+                off = _parse_tz_offset_minutes(trail_m.group(grp))
+                if off is None:
+                    return None
+                offsets.append(off)
+        body = body[:trail_m.start()].strip()
+
+    if not body:
         return None
-    matches = [name for name, pattern in _BATCH_TZ_PATTERNS.items() if pattern.search(text)]
-    return matches[0] if len(matches) == 1 else None
+
+    # 5a. Offset-wrapped IANA, abbreviation, bare family, or Rails ActiveSupport regional forms
+    if (fam := _TZ_NA_IANA_TO_FAMILY.get(_normalize_iana_tz(body))) is not None:
+        return fam if _tz_offsets_match_family(offsets, fam, "any") else None
+    if (abbr_info := _match_tz_abbr(body)) is not None:
+        fam_a, kind_a = abbr_info
+        return fam_a if _tz_offsets_match_family(offsets, fam_a, kind_a) else None
+    if offsets and _TZ_BARE_FAMILY_RE.fullmatch(body):
+        fam = body.casefold()
+        return fam if _tz_offsets_match_family(offsets, fam, "any") else None
+
+    body_cf = body.casefold()
+    if body_cf == "indiana (east)":
+        return "eastern" if _tz_offsets_match_family(offsets, "eastern", "any") else None
+    if body_cf in {"arizona", "saskatchewan"} and offsets:
+        fam = "mountain" if body_cf == "arizona" else "central"
+        return fam if _tz_offsets_match_family(offsets, fam, "any") else None
+
+    # 5b/5c. IANA identifier or leading abbreviation + qualifier
+    split_hq = _split_tz_head_qualifier(body)
+    if split_hq is not None:
+        head, qual = split_hq
+        if (fam := _TZ_NA_IANA_TO_FAMILY.get(_normalize_iana_tz(head))) is not None:
+            zm = _TZ_ZONE_NAME_RE.fullmatch(qual)
+            if zm:
+                z_fam = zm.group(1).casefold()
+                z_mod = (zm.group(2) or "").lower()
+                z_kind = "std" if z_mod == "standard" else ("dst" if z_mod == "daylight" else "any")
+                return fam if (z_fam == fam and _tz_offsets_match_family(offsets, fam, z_kind)) else None
+            ok, q_kind = _valid_tz_qualifier(qual, fam)
+            return fam if (ok and _tz_offsets_match_family(offsets, fam, q_kind or "any")) else None
+
+        if (abbr_info := _match_tz_abbr(head)) is not None:
+            fam_a, kind_a = abbr_info
+            zm = _TZ_ZONE_NAME_RE.fullmatch(qual)
+            if zm and zm.group(1).casefold() == fam_a:
+                z_mod = (zm.group(2) or "").lower()
+                kind_z = "std" if z_mod == "standard" else ("dst" if z_mod == "daylight" else "any")
+                if kind_a != "any" and kind_z != "any" and kind_a != kind_z:
+                    return None
+                eff_kind = kind_z if kind_z != "any" else kind_a
+                if _tz_offsets_match_family(offsets, fam_a, eff_kind):
+                    return fam_a
+            return None
+
+    # 5d. Zone Name + optional parenthetical(s) + optional trailing dash qualifier
+    zone_part = body
+    trailing_quals: list[str] = []
+
+    for sep in (" - ", " \u2013 ", " \u2014 "):
+        if sep in zone_part:
+            left, _, right = zone_part.partition(sep)
+            zone_part = left.strip()
+            trailing_quals.append(right.strip())
+            break
+
+    while zone_part.endswith(")") and "(" in zone_part:
+        idx = zone_part.rfind("(")
+        inner = zone_part[idx + 1 : -1].strip()
+        if not inner or "(" in inner or ")" in inner:
+            return None
+        trailing_quals.append(inner)
+        zone_part = zone_part[:idx].strip()
+
+    zm = _TZ_ZONE_NAME_RE.fullmatch(zone_part)
+    if not zm:
+        return None
+
+    family = zm.group(1).casefold()
+    mod = (zm.group(2) or "").lower()
+    kind = "std" if mod == "standard" else ("dst" if mod == "daylight" else "any")
+
+    for qual in trailing_quals:
+        if not offsets and (parsed_offs := _parse_tz_offset_group(qual)) is not None:
+            offsets.extend(parsed_offs)
+            continue
+        ok, q_kind = _valid_tz_qualifier(qual, family)
+        if not ok:
+            return None
+        if q_kind and q_kind != "any":
+            if kind != "any" and kind != q_kind:
+                return None
+            kind = q_kind
+
+    if not _tz_offsets_match_family(offsets, family, kind):
+        return None
+    return family
 
 
 def _same_time_zone(option: Any, resolved: Any) -> bool:
@@ -545,25 +1199,42 @@ def _same_time_zone(option: Any, resolved: Any) -> bool:
     return stored is not None and opt_zone == stored
 
 
+def _clean_yn_text(norm_val: str) -> str:
+    cleaned = norm_val.replace("\u2019", "'").replace("\u2018", "'").strip()
+    return re.sub(r"\s*[.!]+\s*$", "", cleaned)
+
+
 def _yes_option_matches(norm_val: str) -> bool:
-    return (
-        bool(_YES_OPTION_RE.match(norm_val))
-        and not _YES_NO_DISJUNCTION_RE.search(norm_val)
-        and not _YES_NO_CONDITIONAL_RE.search(norm_val)
-        and not _YES_CONTRADICTION_RE.search(norm_val)
-    )
+    cleaned = _clean_yn_text(norm_val)
+    if cleaned in _YES_EXACT:
+        return True
+    match = _YES_SPLIT_RE.match(cleaned)
+    if not match:
+        return False
+    tail = match.group(1).strip()
+    return any(pattern.fullmatch(tail) for pattern in _YES_SAFE_TAILS)
 
 
 def _no_option_matches(norm_val: str) -> bool:
-    if (
-        not _NO_OPTION_RE.match(norm_val)
-        or _YES_NO_DISJUNCTION_RE.search(norm_val)
-        or _YES_NO_CONDITIONAL_RE.search(norm_val)
-    ):
-        return False
-    if _NO_NEGATION_RE.search(norm_val):
+    cleaned = _clean_yn_text(norm_val)
+    if cleaned in _NO_EXACT:
         return True
-    return not (_NO_SPONSORSHIP_COND_RE.search(norm_val) or _NO_AFFIRMATIVE_RE.search(norm_val))
+    match = _NO_SPLIT_RE.match(cleaned)
+    if not match:
+        return False
+    tail = match.group(1).strip()
+    return any(pattern.fullmatch(tail) for pattern in _NO_SAFE_TAILS)
+
+
+def _cefr_option_matches(norm_val: str, weaker: str) -> bool:
+    desc = _CEFR_DESCRIPTORS_BY_CODE.get(weaker)
+    if not desc:
+        return False
+    cleaned = re.sub(r"\s*[.!]+\s*$", "", norm_val.strip())
+    core = rf"{re.escape(weaker)}(?:(?:\s*[:\-\u2013\u2014/]\s*|\s+){desc}|\s*\(\s*{desc}\s*\))?"
+    p_direct = re.compile(rf"^{core}$")
+    p_prefixed = re.compile(rf"^{_CEFR_LANG_PREFIX}\s*(?:\(\s*{core}\s*\)|[:\-\u2013\u2014]\s*{core})$")
+    return bool(p_direct.fullmatch(cleaned) or p_prefixed.fullmatch(cleaned))
 
 
 def _value_matches_resolved(item: dict[str, Any]) -> bool:
@@ -590,10 +1261,13 @@ def _value_matches_resolved(item: dict[str, Any]) -> bool:
         with contextlib.suppress(KeyError, ValueError, AttributeError):
             levels = parse_languages(resolved)
             if levels and "english" in levels and "french" in levels:
-                weaker = min(levels["english"], levels["french"], key=_CEFR_ORDER.index).lower()
-                if not _LANG_NEGATION_RE.search(norm_val):
-                    tokens = [tok.lower() for tok in _LANG_CEFR_TOKEN_RE.findall(norm_val)]
-                    if tokens and set(tokens) == {weaker}:
+                weaker_upper = min(levels["english"], levels["french"], key=_CEFR_ORDER.index)
+                weaker = weaker_upper.lower()
+                if _cefr_option_matches(norm_val, weaker):
+                    return True
+                if _CEFR_ORDER.index(weaker_upper) >= _CEFR_ORDER.index("B2"):
+                    cleaned_yn = _clean_yn_text(norm_val)
+                    if cleaned_yn in _YES_EXACT or _YES_BILINGUAL_RE.fullmatch(cleaned_yn):
                         return True
     return False
 
