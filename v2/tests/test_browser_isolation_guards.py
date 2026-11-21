@@ -59,7 +59,7 @@ class _RecordingHandler(http.server.BaseHTTPRequestHandler):
             self.rfile.read(length)
         self._handle("POST")
 
-    def log_message(self, format: str, *args: Any) -> None:
+    def log_message(self, *_args: Any, **_kwargs: Any) -> None:
         pass
 
 
