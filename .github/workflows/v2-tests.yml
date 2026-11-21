@@ -78,11 +78,11 @@ jobs:
           fi
           CHANGED_FILES=()
           if [ -n "$BASE_REF" ] && git cat-file -e "${BASE_REF}^{commit}" 2>/dev/null; then
-            while IFS= read -r f; do
+            while IFS= read -r -d '' f; do
               if [ -n "$f" ] && [ -f "$f" ]; then
                 CHANGED_FILES+=("$f")
               fi
-            done < <(git diff --relative --name-only --diff-filter=ACMRT "${BASE_REF}...HEAD" -- '*.py')
+            done < <(git -c core.quotePath=false diff --relative --name-only -z --diff-filter=ACMRT "${BASE_REF}...HEAD" -- '*.py')
           fi
           TARGETS=()
           for f in "${CORE_CI_FILES[@]}" "${CHANGED_FILES[@]}"; do

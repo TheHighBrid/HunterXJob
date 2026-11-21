@@ -233,28 +233,200 @@ def check_inspector_has_no_input_apis(data: dict[str, Any]) -> tuple[bool, dict[
     return not found, evidence
 
 
+_HOURLY_RATE_RE = re.compile(r"(?:/\s*(?:hr|hour|h)\b|\b(?:hourly|per\s+hour|per\s+hr)\b)", re.IGNORECASE)
+_PERIOD_RATE_RE = re.compile(
+    r"(?:/\s*(?:wk|week|mo|month|day|diem)\b|\b(?:weekly|monthly|daily|per\s+(?:week|month|day))\b)",
+    re.IGNORECASE,
+)
+_CURRENCY_PREFIX_RE = re.compile(r"\b(?:cad|usd|aud|eur|gbp)(?=\d|\b)|ca\$|us\$|[$€£]", re.IGNORECASE)
+_BONUS_SPLIT_RE = re.compile(r"\b(?:bonus|commission|equity|ote|sign[- ]?on)\b", re.IGNORECASE)
+_SALARY_NUM_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(k)?\b", re.IGNORECASE)
+_SALARY_RANGE_RE = re.compile(
+    r"(\d+(?:\.\d+)?)\s*(k)?\s*(?:-|" "\u2013|\u2014" r"|\bto\b)\s*(\d+(?:\.\d+)?)\s*(k)?\b",
+    re.IGNORECASE,
+)
+_SALARY_PLUS_RE = re.compile(
+    r"(?:\+|over|above|more\s+than|at\s+least|>=?)\s*(\d+(?:\.\d+)?)\s*(k)?\b"
+    r"|(\d+(?:\.\d+)?)\s*(k)?\s*(?:\+|\band\s+above\b|\bor\s+more\b|\bor\s+above\b|\bor\s+higher\b)",
+    re.IGNORECASE,
+)
+_SALARY_UNDER_RE = re.compile(
+    r"\b(?:up\s+to|under|less\s+than|below|at\s+most|max(?:imum)?)\s*(\d+(?:\.\d+)?)\s*(k)?\b"
+    r"|(?:<=|<)\s*(\d+(?:\.\d+)?)\s*(k)?\b",
+    re.IGNORECASE,
+)
+
+_TZ_NEGATION_RE = re.compile(r"\bnot\b", re.IGNORECASE)
+_TZ_POSITIVE_OR_UNSIGNED_OFFSET_RE = re.compile(r"\b(?:utc|gmt)\s*(?:\+|\d)", re.IGNORECASE)
+_TZ_NON_NA_RE = re.compile(
+    r"\b(?:australia|australian|china|chinese|arabia|arabian|auckland|india|indian|cuba|cuban|"
+    r"europe|european|uk|united\s+kingdom|britain|british|london|tokyo|singapore|brazil|brasil|"
+    r"pakistan|beijing|shanghai|hong[ _]?kong|sydney|melbourne|brisbane|perth|adelaide|paris|"
+    r"berlin|moscow|dubai|riyadh|cairo|seoul|jakarta|manila|bangkok|taipei|kolkata|mumbai|"
+    r"delhi|havana|african|africa|"
+    r"eet|cet|wet|bst|ist|jst|kst|sgt|hkt|gst|aest|aedt|acst|acdt|awst|nzst|nzdt|cat|sast|wat|eat|apt)\b"
+    r"|(?:asia|europe|australia|africa|indian|antarctica)/"
+    r"|pacific/(?:auckland|fiji|guam|honolulu|tahiti|samoa|midway|chatham|tongatapu|port_moresby|noumea|wake)"
+    r"|atlantic/(?:azores|canary|cape_verde|faroe|faeroe|jan_mayen|madeira|reykjavik|south_georgia|st_helena|stanley)",
+    re.IGNORECASE,
+)
+_BATCH_TZ_PATTERNS: dict[str, re.Pattern[str]] = {
+    "eastern": re.compile(
+        r"\beastern\b|\best\b|\bedt\b|\best5edt\b|\btoronto\b|\bnew[ _]york\b|\bmontreal\b|\bottawa\b"
+        r"|\b(?:gmt|utc)\s*-\s*0?5(?::?00)?(?![:\d])",
+        re.IGNORECASE,
+    ),
+    "central": re.compile(
+        r"\bcentral\b|\bcst\b|\bcdt\b|\bcst6cdt\b|\bchicago\b|\bwinnipeg\b"
+        r"|\b(?:gmt|utc)\s*-\s*0?6(?::?00)?(?![:\d])",
+        re.IGNORECASE,
+    ),
+    "mountain": re.compile(
+        r"\bmountain\b|\bmst\b|\bmdt\b|\bmst7mdt\b|\bdenver\b|\bedmonton\b|\bcalgary\b"
+        r"|\b(?:gmt|utc)\s*-\s*0?7(?::?00)?(?![:\d])",
+        re.IGNORECASE,
+    ),
+    "pacific": re.compile(
+        r"\bpacific\b|\bpst\b|\bpdt\b|\bpst8pdt\b|\bvancouver\b|\blos[ _]angeles\b"
+        r"|\b(?:gmt|utc)\s*-\s*0?8(?::?00)?(?![:\d])",
+        re.IGNORECASE,
+    ),
+    "atlantic": re.compile(
+        r"\batlantic\b|\bast\b|\badt\b|\bhalifax\b"
+        r"|\b(?:gmt|utc)\s*-\s*0?4(?::?00)?(?![:\d])",
+        re.IGNORECASE,
+    ),
+    "newfoundland": re.compile(
+        r"\bnewfoundland\b|\bnst\b|\bndt\b|\bst[ ._-]*johns\b"
+        r"|\b(?:gmt|utc)\s*-\s*0?3:?30(?![:\d])",
+        re.IGNORECASE,
+    ),
+}
+
+_YES_OPTION_RE = re.compile(r"^yes(?:\s|$|[,;:/().!])")
+_NO_OPTION_RE = re.compile(r"^no(?:\s|$|[,;:/().!])")
+_YES_NO_CONDITIONAL_RE = re.compile(
+    r"\b(?:only|if|unless|provided|subject\s+to|except|but|however|conditional(?:ly)?|"
+    r"depending|assuming|contingent|bonus|compensation)\b|"
+    r"(?:^yes|^no)\s*[,;:\-" "\u2013\u2014" r"(/]+\s*with\b|\$",
+    re.IGNORECASE,
+)
+
+
+def _clean_salary_text(raw: Any) -> str:
+    text = str(raw or "").strip().lower()
+    text = re.sub(r"(?<=\d),(?=\d{3}\b)", "", text)
+    text = _CURRENCY_PREFIX_RE.sub(" ", text)
+    return " ".join(text.split())
+
+
+def _parse_scalar_salary(raw: Any) -> float | None:
+    if raw is None or isinstance(raw, bool):
+        return None
+    raw_str = str(raw).strip()
+    if not raw_str or re.search(r"\bn/?a\b", raw_str, re.IGNORECASE):
+        return None
+    if _HOURLY_RATE_RE.search(raw_str) or _PERIOD_RATE_RE.search(raw_str):
+        return None
+    cleaned = _clean_salary_text(raw_str)
+    if re.search(r"^\s*-\s*\d", cleaned):
+        return None
+    tokens = _SALARY_NUM_RE.findall(cleaned)
+    if len(tokens) != 1:
+        return None
+    num_str, k_suffix = tokens[0]
+    val = float(num_str) * (1000.0 if k_suffix else 1.0)
+    return val if val > 0 else None
+
+
+def _scale_salary_bound(num: float, has_k: bool, peer_has_k: bool, peer_num: float | None, is_rate: bool) -> float:
+    if has_k:
+        return num * 1000.0 if num < 1000 else num
+    if not is_rate and num < 1000 and (peer_has_k or peer_num is None or peer_num < 1000):
+        return num * 1000.0
+    return num
+
+
+def _parse_salary_bracket(option: str) -> tuple[float, float] | None:
+    if re.search(r"\bn/?a\b", option, re.IGNORECASE) or _BONUS_SPLIT_RE.search(option):
+        return None
+    is_rate = bool(_HOURLY_RATE_RE.search(option) or _PERIOD_RATE_RE.search(option))
+    cleaned = _clean_salary_text(option)
+    if not cleaned or re.search(r"^\s*-\s*\d", cleaned) or re.search(r"\d\s*\+\s*\d", cleaned):
+        return None
+    all_nums = _SALARY_NUM_RE.findall(cleaned)
+    if not all_nums:
+        return None
+
+    range_m = _SALARY_RANGE_RE.search(cleaned)
+    if range_m:
+        if len(all_nums) != 2:
+            return None
+        low_num = float(range_m.group(1))
+        low_k = bool(range_m.group(2))
+        high_num = float(range_m.group(3))
+        high_k = bool(range_m.group(4))
+        low = _scale_salary_bound(low_num, low_k, high_k, high_num, is_rate)
+        high = _scale_salary_bound(high_num, high_k, low_k, low_num, is_rate)
+        if low <= 0 or high <= 0 or low > high:
+            return None
+        return (low, high)
+
+    if len(all_nums) != 1:
+        return None
+
+    plus_m = _SALARY_PLUS_RE.search(cleaned)
+    if plus_m:
+        num = float(plus_m.group(1) or plus_m.group(3))
+        has_k = bool(plus_m.group(2) or plus_m.group(4))
+        low = _scale_salary_bound(num, has_k, False, None, is_rate)
+        return (low, float("inf")) if low > 0 else None
+
+    under_m = _SALARY_UNDER_RE.search(cleaned)
+    if under_m:
+        num = float(under_m.group(1) or under_m.group(3))
+        has_k = bool(under_m.group(2) or under_m.group(4))
+        high = _scale_salary_bound(num, has_k, False, None, is_rate)
+        return (0.0, high) if high > 0 else None
+
+    num_str, k_suffix = all_nums[0]
+    val = float(num_str) * (1000.0 if k_suffix and float(num_str) < 1000 else 1.0)
+    return (val, val) if val > 0 else None
+
+
 def _salary_option_contains(option: Any, resolved: Any) -> bool:
     """A bracket option (e.g. "60-70K") derived from the stored figure: the figure lies inside it."""
-    from app.option_derivation import _parse_salary_bounds, _parse_salary_number
-
-    target = _parse_salary_number(resolved)
+    target = _parse_scalar_salary(resolved)
     if target is None or not isinstance(option, str) or not re.search(r"\d", option):
         return False
-    bounds = _parse_salary_bounds(option)
+    if (_HOURLY_RATE_RE.search(option) or _PERIOD_RATE_RE.search(option)) and target >= 1000:
+        return False
+    bounds = _parse_salary_bracket(option)
     return bounds is not None and bounds[0] <= target <= bounds[1]
 
 
-def _same_time_zone(option: Any, resolved: Any) -> bool:
-    """An option derived from the stored time zone: both name the same zone family, nothing excluded."""
-    from app.option_derivation import _TZ_EXCLUSIONS, _TZ_PATTERNS
+def _classify_time_zone(raw: Any) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    text = raw.strip()
+    if (
+        not text
+        or _TZ_NEGATION_RE.search(text)
+        or _TZ_POSITIVE_OR_UNSIGNED_OFFSET_RE.search(text)
+        or _TZ_NON_NA_RE.search(text)
+    ):
+        return None
+    matches = [name for name, pattern in _BATCH_TZ_PATTERNS.items() if pattern.search(text)]
+    return matches[0] if len(matches) == 1 else None
 
-    if not isinstance(option, str):
+
+def _same_time_zone(option: Any, resolved: Any) -> bool:
+    """An option derived from the stored time zone: both name one identical North American zone family."""
+    if not isinstance(option, str) or not isinstance(resolved, str):
         return False
-    stored = next((name for name, pattern in _TZ_PATTERNS.items() if pattern.search(str(resolved or ""))), None)
-    if stored is None or not _TZ_PATTERNS[stored].search(option):
-        return False
-    exclusion = _TZ_EXCLUSIONS.get(stored)
-    return exclusion is None or not exclusion.search(option)
+    stored = _classify_time_zone(resolved)
+    opt_zone = _classify_time_zone(option)
+    return stored is not None and opt_zone == stored
 
 
 def _value_matches_resolved(item: dict[str, Any]) -> bool:
@@ -267,9 +439,9 @@ def _value_matches_resolved(item: dict[str, Any]) -> bool:
         return True
     norm_res = normalize(resolved)
     norm_val = normalize(val_str)
-    if norm_res in {"yes", "y", "true"} and norm_val.startswith("yes"):
+    if norm_res in {"yes", "y", "true"} and _YES_OPTION_RE.match(norm_val) and not _YES_NO_CONDITIONAL_RE.search(norm_val):
         return True
-    if norm_res in {"no", "n", "false"} and norm_val.startswith("no"):
+    if norm_res in {"no", "n", "false"} and _NO_OPTION_RE.match(norm_val) and not _YES_NO_CONDITIONAL_RE.search(norm_val):
         return True
     if item.get("resolved_key") == "salary_expectation" and _salary_option_contains(val_str, resolved):
         return True
@@ -336,9 +508,17 @@ def _policy_backed(topic: str, item: dict[str, Any], owner_norm: dict[str, set[s
     if key not in POLICY_TOPIC_KEYS.get(topic, frozenset()) or key not in owner_norm:
         return False
     resolved = normalize(item.get("resolved_value"))
-    # The planned value is the stored answer itself or an option derived from exactly that answer
-    # (e.g. the salary bracket containing the stored figure).
-    return resolved in owner_norm[key] and (normalize(item.get("value")) == resolved or _value_matches_resolved(item))
+    if resolved not in owner_norm[key]:
+        return False
+    val = item.get("value")
+    if normalize(val) == resolved:
+        return True
+    # Only salary_expectation may derive a bracket option containing the stored figure;
+    # all non-salary policy topics require an exact match against the owner's stored answer.
+    if key == "salary_expectation":
+        val_str = val[0] if isinstance(val, (list, tuple)) and len(val) == 1 else val
+        return _salary_option_contains(val_str, item.get("resolved_value"))
+    return False
 
 
 def owner_answer_map(pairs: Any) -> dict[str, list[Any]]:
