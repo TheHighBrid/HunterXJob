@@ -12,7 +12,7 @@ from app.adapter_runtime import ADAPTER_CATALOG, AdapterInfo, platform_for_job
 from app.ai import AI_FAILURES, LocalAI
 from app.answer_vault import AnswerVault
 from app.config import Settings
-from app.decisioning import Decision, DecisionContext, JobFacts, evaluate_job
+from app.decisioning import Decision, DecisionContext, JobFacts, evaluate_job, targeting_policy
 from app.dedup import RELEASING_STAGES, duplicate_guard, release_duplicates
 from app.evidence import record_evidence
 from app.flags import is_enabled, kill_switch_engaged
@@ -57,6 +57,7 @@ def deterministic_gate(job: Job, settings: Settings) -> EligibilityResult:
             excluded_titles=tuple(settings.excluded_title_list),
             blacklisted_companies=tuple(settings.blacklisted_company_list),
             shortlist_threshold=float(settings.min_match_score),
+            policy=targeting_policy(settings.targeting_preset, **settings.targeting_overrides),
         ),
     )
     report_payload: dict[str, object] = {
