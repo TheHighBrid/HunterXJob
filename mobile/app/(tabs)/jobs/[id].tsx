@@ -231,6 +231,20 @@ function ExecutionCommandCard({
     }
   }
 
+  async function handleArchiveJob() {
+    setBusyAction("archive");
+    setExecBanner(null);
+    try {
+      await api.archiveJob(job.id);
+      notify("Job Removed", `${job.title} at ${job.company} has been archived.`);
+      router.back();
+    } catch (err) {
+      setExecBanner({ tone: "danger", text: describeError(err) });
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
   const accent = isSubmitted
     ? theme.success
     : isUncertain
@@ -341,6 +355,20 @@ function ExecutionCommandCard({
         variant="secondary"
         onPress={() => void Linking.openURL(job.url)}
       />
+
+      {job.stage !== "closed" && job.stage !== "withdrawn" && job.stage !== "submitted" && job.stage !== "confirmed" ? (
+        <PrimaryButton
+          title={
+            job.liveness === "suspect" || job.liveness === "gone" || job.liveness === "closed"
+              ? "🗑 Remove Expired Job"
+              : "🗑 Remove / Archive Job"
+          }
+          variant="danger"
+          loading={busyAction === "archive"}
+          disabled={!!busyAction}
+          onPress={() => void handleArchiveJob()}
+        />
+      ) : null}
     </Card>
   );
 }
