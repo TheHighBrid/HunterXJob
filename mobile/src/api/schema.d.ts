@@ -3238,7 +3238,7 @@ export interface operations {
         parameters: {
             query?: {
                 live?: boolean | null;
-                headed?: boolean;
+                headed?: boolean | null;
             };
             header?: never;
             path?: never;
@@ -3946,7 +3946,7 @@ export interface operations {
         parameters: {
             query?: {
                 dry_run?: boolean;
-                headed?: boolean;
+                headed?: boolean | null;
             };
             header?: never;
             path: {
