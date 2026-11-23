@@ -4979,9 +4979,15 @@
             "name": "headed",
             "required": false,
             "schema": {
-              "default": false,
-              "title": "Headed",
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Headed"
             }
           }
         ],
@@ -5984,9 +5990,15 @@
             "name": "headed",
             "required": false,
             "schema": {
-              "default": false,
-              "title": "Headed",
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Headed"
             }
           }
         ],
