@@ -4979,15 +4979,9 @@
             "name": "headed",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Headed"
+              "default": false,
+              "title": "Headed",
+              "type": "boolean"
             }
           }
         ],
