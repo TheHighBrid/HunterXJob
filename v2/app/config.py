@@ -84,6 +84,18 @@ class Settings(BaseSettings):
     recruitee_companies: str = ""
     generic_feed_urls: str = ""
 
+    # Optional paid-credit public job-page fallback. Off until key and budget are configured.
+    # CONTEXT_DEV_API_KEY is the canonical secret; CONTEXT_API_KEY is a legacy alias.
+    context_dev_enabled: bool = False
+    context_dev_api_key: str = Field(default="", repr=False)
+    context_api_key: str = Field(default="", repr=False)
+    context_dev_cache_hours: float = Field(default=6.0, ge=0, le=8760)
+    context_dev_timeout_seconds: float = Field(default=20.0, ge=1, le=300)
+    context_dev_budget_seconds: float = Field(default=25.0, ge=1, le=300)
+    context_dev_max_calls_per_run: int = Field(default=2, ge=0, le=20)
+    context_dev_zdr: bool = False
+    context_dev_audit_path: str = "./data/context_dev_retrievals.jsonl"
+
     # Real-form dry-runs (read-only). The public Greenhouse API is primary;
     # the browser is optional verification/fallback and needs the [browser] extra.
     greenhouse_form_timeout: float = 20.0
