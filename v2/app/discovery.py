@@ -280,6 +280,30 @@ def discover_run(settings: Settings) -> DiscoveryRun:
             continue
         run.records.extend(found)
         run.complete_boards.append((source, board.lower()))
+    # Preserve ATS APIs as the primary data source. The optional Context fallback
+    # only fills missing descriptions/fields and never influences submission locks.
+    if settings.context_dev_enabled and settings.context_dev_max_calls_per_run:
+        from app.context_dev import ContextDevError, append_audit, enrich_record
+
+        key = settings.context_dev_api_key or settings.context_api_key
+        if not key:
+            run.errors.append("context_dev: enabled but CONTEXT_DEV_API_KEY is not configured")
+        else:
+            count = 0
+            for record in run.records:
+                if count >= settings.context_dev_max_calls_per_run:
+                    break
+                if not record.url or (record.title and record.company and record.location and len(record.description.strip()) >= 120):
+                    continue
+                count += 1
+                try:
+                    result = enrich_record(record, api_key=key, settings=settings)
+                    append_audit(result, settings.context_dev_audit_path)
+                except (ContextDevError, ValueError, OSError) as exc:
+                    # Transport, policy and account errors are NOT evidence a posting closed.
+                    message = f"context_dev:{record.source}:{record.external_id}: {type(exc).__name__}"
+                    logger.warning("fallback unavailable for %s (%s)", record.url, type(exc).__name__)
+                    run.errors.append(message)
     return run
 
 
