@@ -261,6 +261,20 @@ async def _read_selected_phone_country(page: Any) -> str | None:
     return None
 
 
+def location_readback_matches(expected: str, read_back: str) -> bool:
+    """True only when the read-back encodes the same city, province/state, and country.
+
+    ``Ottawa, KS, USA`` does not match a profile of ``Ottawa, ON, Canada``. Province
+    abbreviations (ON, QC, ...) are treated as aliases of the full name. Ambiguous
+    or partial read-backs fail closed.
+    """
+    actual = str(read_back or "").strip()
+    wanted = str(expected or "").strip()
+    if not actual or not wanted:
+        return False
+    return choose_location_option(wanted, [actual]) is not None
+
+
 def _id_locator(page: Any, element_id: str) -> Any:
     """Locator for an exact DOM id, via a CSS-escaped ``[id="..."]`` selector."""
     return page.locator(id_attribute_selector(element_id))
@@ -1069,17 +1083,7 @@ async def _fill_input_by_heuristics(
                 or str(value).strip().lower() in str(read_back).strip().lower()
             )
         elif is_location_field:
-            norm_val = normalize_text(val_str)
-            norm_rb = normalize_text(read_back)
-            # Location read-back matching: Ottawa, Ontario, Canada aliases
-            if (
-                "ottawa" in norm_rb
-                or ("canada" in norm_rb and "ontario" in norm_rb)
-                or norm_val in norm_rb
-                or norm_rb in norm_val
-                or (str(read_back).strip() and not any(us in norm_rb for us in ("california", "united states", "usa")))
-            ):
-                matched = True
+            matched = location_readback_matches(val_str, str(read_back or ""))
         elif key.lower() in ("phone_country", "country_code"):
             matched = phone_dial_code_readback_is_valid(
                 read_back=str(read_back or ""),

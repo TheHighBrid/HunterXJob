@@ -18,6 +18,7 @@ from app.browser_filler import (
     css_escape,
     css_id_selector,
     id_attribute_selector,
+    location_readback_matches,
     phone_dial_code_readback_is_valid,
     split_idrefs,
 )
@@ -69,6 +70,36 @@ def test_choose_location_option_fails_closed_on_us_lookalike():
     options = ["Ottawa, KS, USA", "Nottawa, ON, Canada", "Ottawa, ON, Canada"]
     assert choose_location_option("Ottawa, Ontario, Canada", options) == "Ottawa, ON, Canada"
     assert choose_location_option("Ottawa, Ontario, Canada", ["Ottawa, KS, USA", "Nottawa, ON, Canada"]) is None
+
+
+def _legacy_location_matched(read_back: str, val_str: str) -> bool:
+    """The pre-fix location matcher: any read-back containing 'ottawa' counted as success."""
+    norm_val = val_str.lower()
+    norm_rb = (read_back or "").lower()
+    return bool(
+        "ottawa" in norm_rb
+        or ("canada" in norm_rb and "ontario" in norm_rb)
+        or norm_val in norm_rb
+        or norm_rb in norm_val
+        or (str(read_back).strip() and not any(us in norm_rb for us in ("california", "united states", "usa")))
+    )
+
+
+def test_legacy_location_readback_accepts_ottawa_ks_new_helper_rejects():
+    expected = "Ottawa, ON, Canada"
+    assert _legacy_location_matched("Ottawa, KS, USA", expected) is True
+    assert location_readback_matches(expected, "Ottawa, KS, USA") is False
+    assert location_readback_matches("Ottawa, Ontario, Canada", "Ottawa, KS, USA") is False
+
+
+def test_location_readback_accepts_ottawa_on_canada_variants():
+    expected = "Ottawa, ON, Canada"
+    assert location_readback_matches(expected, "Ottawa, ON, Canada") is True
+    assert location_readback_matches(expected, "Ottawa, Ontario, Canada") is True
+    assert location_readback_matches("Ottawa, Ontario, Canada", "Ottawa, ON, Canada") is True
+    assert location_readback_matches(expected, "") is False
+    assert location_readback_matches(expected, "Ottawa") is False
+    assert location_readback_matches(expected, "Nottawa, ON, Canada") is False
 
 
 def test_legacy_phone_country_matcher_accepts_wrong_dial_code_new_helper_rejects():
@@ -280,3 +311,56 @@ def test_phone_number_readback_fails_when_country_is_us_but_expected_is_canada()
             await pw.stop()
 
     _run(_inner())
+
+
+def test_location_fill_readback_rejects_ottawa_ks_and_accepts_on_canada():
+    locked_ks = """
+    <form>
+      <input id="location" name="location" value="Ottawa, KS, USA" />
+      <script>
+        const el = document.getElementById("location");
+        const lock = () => { el.value = "Ottawa, KS, USA"; };
+        el.addEventListener("input", lock);
+        el.addEventListener("change", lock);
+      </script>
+    </form>
+    """
+    canada = """
+    <form>
+      <input id="location" role="combobox" class="autocomplete" aria-controls=":lb1:" />
+      <div id=":lb1:" role="listbox">
+        <div role="option" onclick="document.getElementById('location').value = this.textContent.trim()">Ottawa, KS, USA</div>
+        <div role="option" onclick="document.getElementById('location').value = this.textContent.trim()">Ottawa, ON, Canada</div>
+      </div>
+    </form>
+    """
+
+    async def _inner():
+        pw, browser, page = await _with_page(locked_ks)
+        try:
+            report = await _fill_input_by_heuristics(
+                page, "location", "Ottawa, Ontario, Canada", label="Location",
+            )
+            assert report.read_back_value == "Ottawa, KS, USA"
+            assert report.matched is False
+            assert _legacy_location_matched(str(report.read_back_value), "Ottawa, Ontario, Canada") is True
+        finally:
+            await browser.close()
+            await pw.stop()
+
+        pw, browser, page = await _with_page(canada)
+        try:
+            report = await _fill_input_by_heuristics(
+                page, "location", "Ottawa, Ontario, Canada", label="Location",
+            )
+            assert report.matched is True
+            assert "KS" not in (report.read_back_value or "")
+            assert location_readback_matches(
+                "Ottawa, Ontario, Canada", str(report.read_back_value or ""),
+            )
+        finally:
+            await browser.close()
+            await pw.stop()
+
+    _run(_inner())
+
