@@ -17,7 +17,7 @@ import { confirmAsync, notify } from "@/lib/confirm";
 import { useSubscription, MAX_DAILY_FREE_APPLICATIONS } from "@/store/subscription";
 import { matchScoreColor, stageColor, useTheme } from "@/theme";
 import { formatDateTime, formatScore, humanize } from "@/utils/format";
-import { JOB_TIMELINE_TITLE } from "@/uiCopy";
+import { DRY_RUN_VERIFIED_TITLE, dryRunVerifiedBody, JOB_TIMELINE_TITLE } from "@/uiCopy";
 
 const FORM_STATE_COPY: Record<FormStatus["state"], string> = {
   no_application: "Not shortlisted yet, so no form has been checked.",
@@ -167,7 +167,7 @@ function ExecutionCommandCard({
           tone: "info",
           text: `✓ Browser dry-run verified all fields cleanly on ${res.platform}. Stage: ${humanize(res.stage || "ready_to_apply")}.`,
         });
-        notify("Dry-Run Verified ✓", `All fields on ${job.company} filled and verified cleanly.`);
+        notify(DRY_RUN_VERIFIED_TITLE, dryRunVerifiedBody(job.company));
       } else {
         setExecBanner({
           tone: "warning",
