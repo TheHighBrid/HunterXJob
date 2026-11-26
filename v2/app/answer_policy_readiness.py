@@ -22,17 +22,29 @@ outside this module; the function is the handoff.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from typing import Any
 from urllib.parse import urlparse
 
-from app.answer_vault import (
-    AnswerRecord,
-    AnswerSource,
-    AnswerVault,
-    FieldRequest,
-    ResolutionStatus,
+from app.answer_policy_country import (
+    _AFFIRMATIVE,
+    _EXPLICIT_SOURCES,
+    _blocker,
+    _country_policy_status,
+    _nonempty,
 )
+from app.answer_policy_country import (
+    BLOCKER_MESSAGES as BLOCKER_MESSAGES,
+)
+from app.answer_policy_country import (
+    COUNTRY_READINESS_PROFILES as COUNTRY_READINESS_PROFILES,
+)
+from app.answer_policy_country import (
+    US_ONLY_POLICY_KEYS as US_ONLY_POLICY_KEYS,
+)
+from app.answer_policy_country import normalize_country_code as normalize_country_code
+from app.answer_policy_country import us_targeting_is_enabled as us_targeting_is_enabled
+from app.answer_vault import AnswerVault, FieldRequest, ResolutionStatus
 from app.profile import VerifiedProfile
 
 PROFILE_FIELD_REQUIREMENTS = [
@@ -41,24 +53,6 @@ PROFILE_FIELD_REQUIREMENTS = [
     ("phone", "Applicant phone number"),
     ("location", "Applicant location or mailing address"),
 ]
-
-# Country policy keys required when that country is an active target.
-COUNTRY_READINESS_PROFILES = {
-    "CA": ["work_authorization", "sponsorship_required"],
-    "US": ["work_authorization", "sponsorship_required"],
-}
-
-# US-only vault / policy keys that must not be required while US targeting is off.
-US_ONLY_POLICY_KEYS = frozenset({
-    "us_work_authorization",
-    "work_authorization_US",
-    "work_authorization_us",
-    "sponsorship_required_US",
-    "sponsorship_US",
-    "sponsorship_us",
-    "us_citizen",
-    "immigration_status_US",
-})
 
 PLATFORM_READINESS_PROFILES = {
     "greenhouse": {
@@ -99,33 +93,6 @@ CONSENT_KEYS = frozenset({
     "general_consent",
 })
 
-_AFFIRMATIVE = frozenset({
-    "yes", "true", "1", "y", "authorized", "eligible", "i agree", "i consent",
-    "agreed", "consent",
-})
-_NEGATIVE = frozenset({
-    "no", "false", "0", "n", "not authorized", "unauthorized", "ineligible",
-})
-
-_EXPLICIT_SOURCES = frozenset({AnswerSource.USER, AnswerSource.POLICY})
-
-BLOCKER_MESSAGES = {
-    "profile_field_missing": "A required applicant profile field is missing.",
-    "policy_missing": "No matching answer policy exists.",
-    "policy_conflict": "Conflicting answers exist for the same required policy.",
-    "policy_answer_missing": "The policy has no usable answer value.",
-    "policy_provenance_unknown": "The answer provenance is unknown or is not user/policy.",
-    "policy_confidence_low": "The answer confidence is below the automatic-use threshold.",
-    "policy_consent_missing": "Mandatory ATS consent has not been recorded.",
-    "policy_consent_inferred": "Consent inferred from profile defaults is not an explicit record.",
-    "policy_consent_not_affirmative": "Recorded consent is missing or is not an affirmative agreement.",
-    "us_targeting_disabled": "US targeting is off; US applications are not ready for browser launch.",
-    "country_unsupported": "The requested country is unknown or is not an enabled target.",
-    "work_authorization_inconsistent": "Work-authorization answers conflict with the verified profile.",
-    "sponsorship_inconsistent": "Sponsorship answers conflict with the verified profile.",
-    "sponsorship_unknown": "Sponsorship requirement is unknown and cannot be inferred.",
-}
-
 GUARANTEES = [
     "No missing legal, sensitive, consent, or custom answer is inferred.",
     "Unknown, conflicting, or low-provenance answers stop browser launch.",
@@ -133,16 +100,6 @@ GUARANTEES = [
     "Mandatory ATS consent must be explicitly recorded before browser launch.",
     "Country and platform profiles are minimum autonomy coverage, not claims about every employer form.",
 ]
-
-
-def normalize_country_code(value: str | None) -> str:
-    """Return CA, US, or UNKNOWN. An omitted value defaults to CA."""
-    if value is None or str(value).strip() == "":
-        return "CA"
-    code = str(value).strip().upper()
-    if code in COUNTRY_READINESS_PROFILES:
-        return code
-    return "UNKNOWN"
 
 
 def detect_platform(target_url: str = "", requested_platform: str = "") -> str:
@@ -156,28 +113,6 @@ def detect_platform(target_url: str = "", requested_platform: str = "") -> str:
         if any(domain == item or domain.endswith("." + item) for item in profile["domains"]):
             return name
     return "generic"
-
-
-def us_targeting_is_enabled(
-    policy: Any | None = None,
-    *,
-    us_targeting_enabled: bool | None = None,
-) -> bool:
-    """US targeting is OFF unless an explicit opt-in or enabled-country list says otherwise."""
-    if us_targeting_enabled is not None:
-        return bool(us_targeting_enabled)
-    targeting = _targeting_map(policy)
-    if not targeting:
-        return False
-    enabled = {_country_token(item) for item in targeting.get("enabled_countries") or []}
-    disabled = {_country_token(item) for item in targeting.get("disabled_countries") or []}
-    if "US" in disabled:
-        return False
-    if targeting.get("us_authorized_but_search_disabled"):
-        return False
-    if enabled:
-        return "US" in enabled
-    return False
 
 
 def required_policy_keys(
@@ -221,19 +156,48 @@ def build_answer_policy_readiness(
     us_enabled = us_targeting_is_enabled(policy, us_targeting_enabled=us_targeting_enabled)
     vault = vault or AnswerVault()
 
-    blockers: list[dict[str, Any]] = []
-    conflicts: list[dict[str, Any]] = []
-    satisfied = 0
-
-    if country == "UNKNOWN":
-        blockers.append(_blocker("country_unsupported", field=str(country_code or "").strip() or None))
-    elif country == "US" and not us_enabled:
-        blockers.append(_blocker("us_targeting_disabled", field="US"))
-
+    blockers = _country_gate_blockers(country, country_code, us_enabled)
     profile_statuses, profile_complete, profile_blockers = _profile_statuses(profile, vault)
     blockers.extend(profile_blockers)
-    satisfied += profile_complete
 
+    policy_country, required_keys = _required_keys_for_report(country, detected_platform, us_enabled)
+    policy_statuses, policy_blockers, conflicts, policies_ready = _collect_required_policies(
+        profile, vault, policy_country, required_keys,
+    )
+    blockers.extend(policy_blockers)
+
+    us_blockers, us_conflicts = _cross_check_us_answers(profile, vault, us_enabled)
+    blockers.extend(us_blockers)
+    conflicts.extend(us_conflicts)
+
+    return _assemble_readiness_report(
+        country=country,
+        platform=detected_platform,
+        target_url=target_url,
+        company=company,
+        us_enabled=us_enabled,
+        profile_statuses=profile_statuses,
+        policy_statuses=policy_statuses,
+        required_keys=required_keys,
+        blockers=blockers,
+        conflicts=conflicts,
+        satisfied=profile_complete + policies_ready,
+    )
+
+
+def _country_gate_blockers(country: str, country_code: str, us_enabled: bool) -> list[dict[str, Any]]:
+    if country == "UNKNOWN":
+        return [_blocker("country_unsupported", field=str(country_code or "").strip() or None)]
+    if country == "US" and not us_enabled:
+        return [_blocker("us_targeting_disabled", field="US")]
+    return []
+
+
+def _required_keys_for_report(
+    country: str,
+    platform: str,
+    us_enabled: bool,
+) -> tuple[str, list[str]]:
     # Unknown country or US-with-targeting-off still require recorded ATS
     # consents, but not country work-authorization / sponsorship answers.
     # The country_unsupported / us_targeting_disabled blockers already fail
@@ -244,52 +208,93 @@ def build_answer_policy_readiness(
     policy_country = country if require_country_policies else "CA"
     required_keys = required_policy_keys(
         policy_country if require_country_policies else "CA",
-        detected_platform,
+        platform,
         us_targeting_enabled=us_enabled and country == "US",
     )
     if not require_country_policies:
         required_keys = list(
-            (PLATFORM_READINESS_PROFILES.get(detected_platform) or PLATFORM_READINESS_PROFILES["generic"])["required"]
+            (PLATFORM_READINESS_PROFILES.get(platform) or PLATFORM_READINESS_PROFILES["generic"])["required"]
         )
+    return policy_country, required_keys
 
+
+def _evaluate_required_policy(
+    profile: VerifiedProfile | None,
+    vault: AnswerVault,
+    policy_country: str,
+    key: str,
+) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any] | None]:
+    if key in CONSENT_KEYS or key.endswith("_consent"):
+        status, item_blockers = _consent_status(vault, key)
+        return status, item_blockers, None
+    if key == "work_authorization":
+        return _country_policy_status(profile, vault, policy_country, kind="work_authorization")
+    return _country_policy_status(profile, vault, policy_country, kind="sponsorship")
+
+
+def _collect_required_policies(
+    profile: VerifiedProfile | None,
+    vault: AnswerVault,
+    policy_country: str,
+    required_keys: list[str],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], int]:
     policy_statuses: list[dict[str, Any]] = []
+    blockers: list[dict[str, Any]] = []
+    conflicts: list[dict[str, Any]] = []
+    satisfied = 0
     for key in required_keys:
-        if key in CONSENT_KEYS or key.endswith("_consent"):
-            status, item_blockers = _consent_status(vault, key)
-            conflict = None
-        elif key == "work_authorization":
-            status, item_blockers, conflict = _country_policy_status(
-                profile, vault, policy_country, kind="work_authorization",
-            )
-        else:
-            status, item_blockers, conflict = _country_policy_status(
-                profile, vault, policy_country, kind="sponsorship",
-            )
+        status, item_blockers, conflict = _evaluate_required_policy(profile, vault, policy_country, key)
         if conflict:
             conflicts.append(conflict)
         if status["satisfied"]:
             satisfied += 1
         blockers.extend(item_blockers)
         policy_statuses.append(status)
+    return policy_statuses, blockers, conflicts, satisfied
 
+
+def _cross_check_us_answers(
+    profile: VerifiedProfile | None,
+    vault: AnswerVault,
+    us_enabled: bool,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     # Cross-check any present US answers for consistency even when not required.
-    if not us_enabled:
-        for kind in ("work_authorization", "sponsorship"):
-            _, us_blockers, us_conflict = _country_policy_status(
-                profile, vault, "US", kind=kind, required=False,
-            )
-            if us_conflict:
-                conflicts.append(us_conflict)
-                blockers.extend(us_blockers)
-            elif us_blockers and any(item["code"].endswith("_inconsistent") for item in us_blockers):
-                blockers.extend(us_blockers)
+    blockers: list[dict[str, Any]] = []
+    conflicts: list[dict[str, Any]] = []
+    if us_enabled:
+        return blockers, conflicts
+    for kind in ("work_authorization", "sponsorship"):
+        _, us_blockers, us_conflict = _country_policy_status(
+            profile, vault, "US", kind=kind, required=False,
+        )
+        if us_conflict:
+            conflicts.append(us_conflict)
+            blockers.extend(us_blockers)
+        elif us_blockers and any(item["code"].endswith("_inconsistent") for item in us_blockers):
+            blockers.extend(us_blockers)
+    return blockers, conflicts
 
+
+def _assemble_readiness_report(
+    *,
+    country: str,
+    platform: str,
+    target_url: str,
+    company: str,
+    us_enabled: bool,
+    profile_statuses: list[dict[str, Any]],
+    policy_statuses: list[dict[str, Any]],
+    required_keys: list[str],
+    blockers: list[dict[str, Any]],
+    conflicts: list[dict[str, Any]],
+    satisfied: int,
+) -> dict[str, Any]:
     deduped = _dedupe_blockers(blockers)
     total = len(PROFILE_FIELD_REQUIREMENTS) + len(required_keys)
     ready = not deduped
     return {
         "country_code": country,
-        "platform": detected_platform,
+        "platform": platform,
         "target_url": target_url or "",
         "company": company or "",
         "us_targeting_enabled": us_enabled,
@@ -312,35 +317,6 @@ def build_answer_policy_readiness(
     }
 
 
-def _targeting_map(policy: Any | None) -> dict[str, Any]:
-    if policy is None:
-        return {}
-    targeting = getattr(policy, "targeting", None)
-    if targeting is None and isinstance(policy, Mapping):
-        targeting = policy.get("targeting")
-    return dict(targeting or {})
-
-
-def _country_token(value: Any) -> str:
-    return str(value or "").strip().upper()
-
-
-def _blocker(
-    code: str,
-    *,
-    field: str | None = None,
-    canonical_key: str | None = None,
-    policy_ids: list[str] | None = None,
-) -> dict[str, Any]:
-    return {
-        "code": code,
-        "message": BLOCKER_MESSAGES[code],
-        "field": field,
-        "canonical_key": canonical_key,
-        "policy_ids": policy_ids or [],
-    }
-
-
 def _dedupe_blockers(blockers: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     deduped: list[dict[str, Any]] = []
     seen: set[tuple[Any, ...]] = set()
@@ -355,14 +331,6 @@ def _dedupe_blockers(blockers: Iterable[dict[str, Any]]) -> list[dict[str, Any]]
             seen.add(identity)
             deduped.append(item)
     return deduped
-
-
-def _nonempty(value: Any) -> bool:
-    if value is None:
-        return False
-    if isinstance(value, str):
-        return bool(value.strip())
-    return True
 
 
 def _profile_contact(profile: VerifiedProfile | None) -> dict[str, str]:
@@ -419,26 +387,6 @@ def _profile_statuses(
     return statuses, complete, blockers
 
 
-def _polarity(value: Any) -> bool | None:
-    """Return True/False for a yes/no answer, or None when the value is unknown."""
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return value
-    text = str(value).strip().lower()
-    if not text:
-        return None
-    if text in _AFFIRMATIVE:
-        return True
-    if text in _NEGATIVE:
-        return False
-    if text.startswith("yes"):
-        return True
-    if text.startswith("no"):
-        return False
-    return None
-
-
 def _is_affirmative_consent(value: Any) -> bool:
     if value is None:
         return False
@@ -450,131 +398,6 @@ def _is_affirmative_consent(value: Any) -> bool:
     if text in _AFFIRMATIVE:
         return True
     return text.startswith("yes") or text.startswith("i agree") or text.startswith("i consent")
-
-
-def _record_blockers(record: AnswerRecord | None, *, canonical_key: str, required: bool) -> list[str]:
-    if record is None:
-        return ["policy_missing"] if required else []
-    if not _nonempty(record.value):
-        return ["policy_answer_missing"]
-    if record.source not in _EXPLICIT_SOURCES:
-        return ["policy_provenance_unknown"]
-    if record.confidence < 1.0:
-        return ["policy_confidence_low"]
-    return []
-
-
-def _vault_record(vault: AnswerVault, keys: Iterable[str]) -> tuple[str | None, AnswerRecord | None]:
-    for key in keys:
-        record = vault.get(key)
-        if record is not None:
-            return key, record
-    return None, None
-
-
-def _work_auth_keys(country: str) -> list[str]:
-    country = country.upper()
-    keys = [f"work_authorization_{country}", f"work_authorization_{country.lower()}"]
-    if country == "CA":
-        keys.extend(["canadian_work_authorization", "work_authorization_ca", "work_authorization"])
-    elif country == "US":
-        keys.extend(["us_work_authorization"])
-    return keys
-
-
-def _sponsorship_keys(country: str) -> list[str]:
-    country = country.upper()
-    keys = [
-        f"sponsorship_required_{country}",
-        f"sponsorship_{country}",
-        f"sponsorship_{country.lower()}",
-    ]
-    if country == "CA":
-        keys.extend(["sponsorship_required", "sponsorship"])
-    return keys
-
-
-def _profile_country_fact(profile: VerifiedProfile | None, country: str) -> dict[str, Any] | None:
-    if profile is None:
-        return None
-    for fact in profile.of("work_authorization"):
-        if _country_token(fact.data.get("country")) == country.upper():
-            return dict(fact.data)
-    return None
-
-
-def _country_policy_status(
-    profile: VerifiedProfile | None,
-    vault: AnswerVault,
-    country: str,
-    *,
-    kind: str,
-    required: bool = True,
-) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any] | None]:
-    canonical = "work_authorization" if kind == "work_authorization" else "sponsorship_required"
-    keys = _work_auth_keys(country) if kind == "work_authorization" else _sponsorship_keys(country)
-    matched_key, record = _vault_record(vault, keys)
-    fact = _profile_country_fact(profile, country)
-
-    profile_polarity: bool | None = None
-    if fact is not None:
-        if kind == "work_authorization":
-            authorized = fact.get("authorized")
-            profile_polarity = authorized if isinstance(authorized, bool) else _polarity(authorized)
-        else:
-            sponsorship = fact.get("requires_sponsorship")
-            if sponsorship is None:
-                profile_polarity = None
-            elif isinstance(sponsorship, bool):
-                profile_polarity = sponsorship
-            else:
-                profile_polarity = _polarity(sponsorship)
-
-    vault_codes = _record_blockers(record, canonical_key=canonical, required=False)
-    vault_polarity = _polarity(record.value) if record is not None and not vault_codes else None
-    if record is not None and not vault_codes and vault_polarity is None:
-        vault_codes = ["policy_answer_missing"]
-
-    conflict: dict[str, Any] | None = None
-    codes: list[str] = []
-    if profile_polarity is not None and vault_polarity is not None and profile_polarity != vault_polarity:
-        conflict_code = (
-            "work_authorization_inconsistent" if kind == "work_authorization" else "sponsorship_inconsistent"
-        )
-        codes = [conflict_code, "policy_conflict"]
-        conflict = {
-            "canonical_key": canonical,
-            "country": country,
-            "policy_ids": [matched_key] if matched_key else [],
-        }
-    elif required and profile_polarity is None and vault_polarity is None:
-        codes = ["sponsorship_unknown", "policy_missing"] if kind == "sponsorship" else ["policy_missing"]
-        if record is not None:
-            codes = list(dict.fromkeys([*vault_codes, *codes]))
-    elif record is not None and vault_codes:
-        # A stored vault answer that cannot be used still blocks when required,
-        # even if the profile already has a usable fact — fail closed on conflict
-        # between a bad vault record and a good profile fact.
-        if required or any(code.endswith("_inconsistent") for code in vault_codes):
-            codes = vault_codes
-
-    satisfied = required and not codes and (profile_polarity is not None or vault_polarity is not None)
-    if not required:
-        satisfied = False
-
-    status = {
-        "canonical_key": canonical,
-        "country": country,
-        "label": canonical,
-        "satisfied": satisfied,
-        "selected_policy": matched_key,
-        "blocker_codes": codes,
-    }
-    item_blockers = [
-        _blocker(code, canonical_key=canonical, policy_ids=[matched_key] if matched_key else [])
-        for code in codes
-    ]
-    return status, item_blockers, conflict
 
 
 def _consent_status(
