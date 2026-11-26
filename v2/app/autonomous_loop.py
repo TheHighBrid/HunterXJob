@@ -28,19 +28,16 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.answer_vault import AnswerVault
 from app.browser_filler import (
-    _fill_single_field,
-    _find_file_input,
     fill_application_form,
     launch_playwright_browser,
 )
-from app.captcha_bridge import MockCaptchaSolver, detect_captcha, inject_captcha_token
+from app.captcha_bridge import MockCaptchaSolver
 from app.config import Settings, get_settings
 from app.dedup import duplicate_guard
 from app.flags import is_enabled, kill_switch_engaged
 from app.follow_up import schedule_follow_up
-from app.job_liveness import CheckContext, ensure_live
+from app.job_liveness import ensure_live
 from app.knowledge_book import KnowledgeBook
 from app.materials import JobContext, build_cover_letter, build_resume, cover_letter_text
 from app.models import (
@@ -51,12 +48,9 @@ from app.models import (
     iso_utc,
 )
 from app.pipeline import score_pending_jobs
-from app.profile import verified_profile
 from app.real_forms import LiveFormProvider
 from app.render import render_pdf_bytes
-from app.submission_engine import execute_live_submission
 from app.submission_engine import (
-    SubmissionResult,
     execute_live_submission,
 )
 from app.truth_guard import check_cover_letter, check_resume
@@ -75,6 +69,118 @@ class AutonomousConfig:
     headed_pause_ms: int = 4000
     output_dir: Path | None = None
     profile_data: dict[str, Any] | None = None
+    # A live attempt older than this with no recorded outcome is treated as interrupted.
+    interrupted_submission_stale_seconds: float = 900.0
+
+
+LIVE_SUBMIT_STARTED_MARKER = "live_submit_started"
+_INTERRUPTED_REASON = "submission_confirmation_uncertain"
+
+
+def _mark_live_submission_started(db: Session, job: Job) -> None:
+    """Durably record that a live submit is about to run, before any browser action.
+
+    If the process dies between the click and the outcome being written, the job is
+    left in ``applying`` with this marker as its latest event, so recovery can find it.
+    """
+    prev_stage = job.stage
+    job.stage = PipelineStage.applying.value
+    db.add(
+        PipelineEvent(
+            job_id=job.id,
+            from_stage=prev_stage,
+            to_stage=PipelineStage.applying.value,
+            message="Live submission attempt started",
+            payload_json=json.dumps({"marker": LIVE_SUBMIT_STARTED_MARKER, "started_at": iso_utc(datetime.now(UTC))}),
+        )
+    )
+    db.commit()
+
+
+def _latest_event(db: Session, job_id: str) -> PipelineEvent | None:
+    return db.execute(
+        select(PipelineEvent)
+        .where(PipelineEvent.job_id == job_id)
+        .order_by(PipelineEvent.created_at.desc())
+    ).scalars().first()
+
+
+def _is_live_start_marker(event: PipelineEvent | None) -> bool:
+    if event is None or event.to_stage != PipelineStage.applying.value or not event.payload_json:
+        return False
+    try:
+        return json.loads(event.payload_json).get("marker") == LIVE_SUBMIT_STARTED_MARKER
+    except (ValueError, AttributeError):
+        return False
+
+
+def _event_age_seconds(event: PipelineEvent, now: datetime) -> float:
+    created = event.created_at
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=UTC)
+    return (now - created).total_seconds()
+
+
+def _hold_interrupted_job(db: Session, job: Job) -> None:
+    from app.models import ReviewTask
+    from app.review_queue import open_task
+
+    application = db.execute(select(Application).where(Application.job_id == job.id)).scalar_one_or_none()
+    job.stage = PipelineStage.submission_uncertain.value
+    if application is not None:
+        application.stage = PipelineStage.submission_uncertain.value
+        application.last_error = "Live submission interrupted before its outcome was recorded"
+    db.add(
+        PipelineEvent(
+            job_id=job.id,
+            from_stage=PipelineStage.applying.value,
+            to_stage=PipelineStage.submission_uncertain.value,
+            message="Recovered interrupted live submission: outcome unknown, held for human review (no automatic retry)",
+            payload_json=json.dumps({"recovered_marker": LIVE_SUBMIT_STARTED_MARKER}),
+        )
+    )
+    existing_open = db.execute(
+        select(ReviewTask).where(ReviewTask.job_id == job.id, ReviewTask.status == "open")
+    ).scalars().first()
+    if existing_open is None:
+        open_task(
+            db,
+            reason_code=_INTERRUPTED_REASON,
+            title=f"Interrupted submission for {job.title} at {job.company}",
+            detail=(
+                "The process stopped during a live submission, before its outcome was recorded. "
+                "The application may or may not have been sent. Check the employer portal or your "
+                "inbox before retrying, to avoid a duplicate application."
+            ),
+            application=application,
+            job=job,
+            url=job.url,
+            hold=False,
+        )
+
+
+def recover_interrupted_live_submissions(db: Session, *, stale_after_seconds: float = 900.0) -> list[str]:
+    """Move live attempts that never recorded an outcome to ``submission_uncertain``.
+
+    Native HunterXJob crash recovery. It never retries: ``submission_uncertain`` is not a
+    candidate stage for the runner, and each recovered job gets an open review task for a
+    human. Only jobs whose latest event is the live-start marker are touched, and only
+    once that marker is older than ``stale_after_seconds`` so an in-flight run elsewhere
+    is left alone. Returns the recovered job ids.
+    """
+    now = datetime.now(UTC)
+    recovered: list[str] = []
+    stuck = db.execute(select(Job).where(Job.stage == PipelineStage.applying.value)).scalars().all()
+    for job in stuck:
+        event = _latest_event(db, job.id)
+        if not _is_live_start_marker(event) or _event_age_seconds(event, now) < stale_after_seconds:
+            continue
+        _hold_interrupted_job(db, job)
+        recovered.append(job.id)
+    if recovered:
+        db.commit()
+        logger.warning("Recovered %d interrupted live submission(s) for human review", len(recovered))
+    return recovered
 
 
 @dataclass(slots=True)
@@ -106,6 +212,7 @@ class AutonomousRunSummary:
     skipped_duplicates: int = 0
     errors: int = 0
     records: list[AutonomousApplicationRecord] = field(default_factory=list)
+    recovered_interrupted: list[str] = field(default_factory=list)
 
 
 class AutonomousRunner:
@@ -146,12 +253,17 @@ class AutonomousRunner:
                 raise RuntimeError(f"Cannot process job: company '{job.company}' is blacklisted")
 
         book = KnowledgeBook.from_database(self.db, profile_override=self.config.profile_data)
-        out_dir = self.config.output_dir or Path(getattr(self.settings, "artifact_dir", None) or "/tmp/hunterx_autonomous")
+        out_dir = self.config.output_dir or Path(getattr(self.settings, "artifact_dir", None) or "/tmp/hunterx_autonomous")  # noqa: S108 - fallback only when artifact_dir is unset # nosec B108
         out_dir.mkdir(parents=True, exist_ok=True)
         return await self._process_job(job, book, out_dir)
 
     async def run_async(self) -> AutonomousRunSummary:
         summary = AutonomousRunSummary(started_at=datetime.now(UTC).isoformat())
+
+        # 0. Crash recovery: interrupted live attempts go to human review, never a retry.
+        summary.recovered_interrupted = recover_interrupted_live_submissions(
+            self.db, stale_after_seconds=self.config.interrupted_submission_stale_seconds
+        )
 
         # 1. Kill-Switch & safety check
         if kill_switch_engaged(self.db):
@@ -197,7 +309,7 @@ class AutonomousRunner:
         )
 
         summary.candidates_considered = len(candidates)
-        out_dir = self.config.output_dir or Path(getattr(self.settings, "artifact_dir", None) or "/tmp/hunterx_autonomous")
+        out_dir = self.config.output_dir or Path(getattr(self.settings, "artifact_dir", None) or "/tmp/hunterx_autonomous")  # noqa: S108 - fallback only when artifact_dir is unset # nosec B108
         out_dir.mkdir(parents=True, exist_ok=True)
         submitted_companies_in_cycle: set[str] = set()
 
@@ -275,9 +387,9 @@ class AutonomousRunner:
                     sys.stdout.flush()
             finally:
                 if self._shared_browser is not None:
-                    try:
+                    try:  # noqa: SIM105 - await inside; suppress() reads worse here
                         await self._shared_browser.close()
-                    except Exception:
+                    except Exception:  # noqa: BLE001, S110 - best-effort browser teardown # nosec B110
                         pass
                 self._shared_browser = None
                 self._shared_playwright = None
@@ -303,7 +415,7 @@ class AutonomousRunner:
                 self._shared_playwright, headless=self.config.headless
             )
             return self._shared_browser
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - launch failure falls back to per-job browsers
             logger.warning("Shared browser launch skipped (%s); falling back to per-job launch", exc)
             self._shared_browser = None
             return None
@@ -346,12 +458,12 @@ class AutonomousRunner:
             try:
                 resume_bytes = render_pdf_bytes(resume_doc)
                 resume_pdf.write_bytes(resume_bytes)
-            except Exception:
+            except Exception:  # noqa: BLE001 - PDF renderer optional; fallback keeps the run going
                 # Fallback for minimal text test environment
                 resume_pdf.write_bytes(b"%PDF-1.4 Minimal Resume")
 
             letter_doc = build_cover_letter(book.profile, job_ctx, resume_doc)
-            letter_str = cover_letter_text(letter_doc)
+            cover_letter_text(letter_doc)  # renders the letter; raises on a malformed doc
 
             # Validate truth guard
             resume_violations = check_resume(resume_doc, book.profile)
@@ -382,7 +494,7 @@ class AutonomousRunner:
             # 2. Fetch Real Form
             try:
                 real_form = self.form_provider.fetch(job)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - any fetch error is recorded as WORKFLOW_FORM_FETCH_FAILED
                 run_ctx.fail_run("WORKFLOW_FORM_FETCH_FAILED", str(exc))
                 return AutonomousApplicationRecord(
                     job_id=job.id,
@@ -421,6 +533,9 @@ class AutonomousRunner:
             # 4. Execute Browser Form Fill & Optional Live Submission (Single Browser Session)
             sc_path = job_dir / "pre_submit.png"
             post_sc_path = job_dir / "post_submit.png"
+
+            if can_submit_live:
+                _mark_live_submission_started(self.db, job)
 
             shared_browser = await self._acquire_shared_browser()
             fill_kwargs: dict[str, Any] = {
@@ -474,8 +589,8 @@ class AutonomousRunner:
 
             if required_unmatched or fill_res.fields_attempted == 0:
                 from app.evidence import record_evidence
-                from app.review_queue import open_task
                 from app.models import ReviewTask
+                from app.review_queue import open_task
 
                 err = fill_res.error or (f"Unmatched required fields: {required_unmatched}" if required_unmatched else "No form fields detected or attempted on page")
                 prev_stage = job.stage
@@ -521,7 +636,7 @@ class AutonomousRunner:
                         self.db,
                         reason_code="ambiguous_question" if fill_res.unmatched_fields else "form_fetch_failed",
                         title=f"Missing or unmatched fields on {job.title}",
-                        detail=f"Blockers: ambiguous_question\n" + ("\n".join(detail_lines) if detail_lines else err),
+                        detail="Blockers: ambiguous_question\n" + ("\n".join(detail_lines) if detail_lines else err),
                         application=application,
                         job=job,
                         url=job.url,
@@ -562,8 +677,8 @@ class AutonomousRunner:
             form_summary = real_form.summary() if hasattr(real_form, "summary") else {"source": real_form.source, "url": real_form.url, "fields_total": len(real_form.controls)}
             if can_submit_live:
                 from app.evidence import record_evidence
-                from app.review_queue import open_task
                 from app.models import ReviewTask
+                from app.review_queue import open_task
 
                 application.attempts = (application.attempts or 0) + 1
                 application.mode = "autonomous"
