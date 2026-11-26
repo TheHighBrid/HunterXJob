@@ -8,7 +8,10 @@ and generates polite, personalized check-in messages grounded in verified profil
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -16,9 +19,9 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.materials import JobContext, skill_names
 from app.models import Application, Job, PipelineEvent, PipelineStage, ReviewTask, SubmissionEvidence
 from app.profile import VerifiedProfile
+from app.recruiter_crm import is_valid_email
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +130,7 @@ def get_due_follow_ups(
         sub_evidence = db.execute(select(SubmissionEvidence).where(
             SubmissionEvidence.application_id == app.id,
             SubmissionEvidence.kind == "submission",
-            SubmissionEvidence.sufficient == True,
+            SubmissionEvidence.sufficient.is_(True),
         ).order_by(SubmissionEvidence.created_at.desc())).first()
 
         if not sub_evidence or not sub_evidence[0].created_at:
@@ -241,3 +244,161 @@ def dispatch_follow_up_email(
     ))
     db.commit()
     return {"status": status, "task_id": task_id, "subject": subject, "recipient": recipient}
+
+
+# ---------------------------------------------------------------------------
+# Supervised follow-up approval with a payload-hash drift guard (Wave 3).
+#
+# This path never sends email and never opens a network connection. Approving
+# binds the sha256 of the canonical draft payload; any later change to the
+# subject, body, recipient or step is drift and blocks the send step. The send
+# step only records an intent in an in-memory ledger, is disabled unless the
+# caller passes ``enabled=True`` explicitly, and is keyed by a deterministic
+# ``send_key`` so the same follow-up can never be recorded twice. Persistence
+# is deferred until a schema design is approved.
+# ---------------------------------------------------------------------------
+
+APPROVAL_UNAPPROVED = "unapproved"
+APPROVAL_ACTIVE = "approved"
+APPROVAL_REVOKED = "revoked"
+FOLLOW_UP_APPROVAL_TTL = timedelta(hours=72)
+_SEND_KEY_VERSION = "hunterx-followup-v1"
+_SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+
+
+class SupervisedFollowUpError(ValueError):
+    """A supervised follow-up was refused; the message names the blocker."""
+
+
+def canonical_follow_up_payload(draft: FollowUpDraft, recipient: str) -> str:
+    """Canonical JSON of every field an approval binds (sorted keys, no spaces)."""
+    payload = {
+        "application_id": draft.application_id,
+        "body": draft.body,
+        "follow_up_number": draft.follow_up_number,
+        "job_id": draft.job_id,
+        "recipient": (recipient or "").strip().lower(),
+        "subject": draft.subject,
+    }
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def follow_up_payload_hash(draft: FollowUpDraft, recipient: str) -> str:
+    return hashlib.sha256(canonical_follow_up_payload(draft, recipient).encode("utf-8")).hexdigest()
+
+
+def follow_up_send_key(application_id: str, follow_up_number: int, payload_hash: str) -> str:
+    """Deterministic idempotency key for one follow-up step of one application."""
+    if not application_id:
+        raise SupervisedFollowUpError("application_id is required for a send key")
+    if follow_up_number < 1:
+        raise SupervisedFollowUpError("follow_up_number must be 1 or more")
+    if not _SHA256_HEX.match(payload_hash or ""):
+        raise SupervisedFollowUpError("payload_hash must be a sha256 hex digest")
+    material = f"{_SEND_KEY_VERSION}|{application_id}|{follow_up_number}|{payload_hash}"
+    return f"fu{follow_up_number}-" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:32]
+
+
+@dataclass
+class SupervisedFollowUp:
+    draft: FollowUpDraft
+    recipient: str
+    approval_status: str = APPROVAL_UNAPPROVED
+    approved_payload_hash: str | None = None
+    approved_by: str | None = None
+    approved_at: datetime | None = None
+
+    def expected_acknowledgment(self) -> str:
+        return f"APPROVE FOLLOW-UP {self.draft.application_id} #{self.draft.follow_up_number}"
+
+    def current_payload_hash(self) -> str:
+        return follow_up_payload_hash(self.draft, self.recipient)
+
+    def content_blockers(self) -> list[str]:
+        blockers: list[str] = []
+        if not is_valid_email((self.recipient or "").strip().lower()):
+            blockers.append("follow_up_recipient_invalid")
+        if not self.draft.subject.strip() or not self.draft.body.strip():
+            blockers.append("follow_up_empty")
+        return blockers
+
+    def approve(self, approver: str, acknowledgment: str, now: datetime | None = None) -> str:
+        """Bind approval to the current payload hash. Returns that hash."""
+        if not (approver or "").strip():
+            raise SupervisedFollowUpError("an approver is required")
+        if acknowledgment != self.expected_acknowledgment():
+            raise SupervisedFollowUpError("acknowledgment does not match the expected text")
+        blockers = self.content_blockers()
+        if blockers:
+            raise SupervisedFollowUpError("approval blocked: " + ", ".join(blockers))
+        self.approved_payload_hash = self.current_payload_hash()
+        self.approved_by = approver.strip()
+        self.approved_at = now or datetime.now(UTC)
+        self.approval_status = APPROVAL_ACTIVE
+        return self.approved_payload_hash
+
+    def revoke(self) -> None:
+        self.approval_status = APPROVAL_REVOKED
+
+    def preflight(self, now: datetime | None = None) -> list[str]:
+        """Every reason this follow-up may not be recorded as sent; empty means clear."""
+        if self.approval_status != APPROVAL_ACTIVE or not self.approved_payload_hash or not self.approved_at:
+            return ["follow_up_not_approved"]
+        blockers = self.content_blockers()
+        if self.approved_payload_hash != self.current_payload_hash():
+            blockers.append("follow_up_payload_drifted")
+        if (now or datetime.now(UTC)) >= self.approved_at + FOLLOW_UP_APPROVAL_TTL:
+            blockers.append("follow_up_approval_expired")
+        return blockers
+
+
+@dataclass(frozen=True)
+class FollowUpSendRecord:
+    send_key: str
+    application_id: str
+    follow_up_number: int
+    payload_hash: str
+    approved_by: str
+    recorded_at: datetime
+    status: str = "send_intent_recorded"
+    delivered: bool = False
+
+
+class FollowUpSendLedger:
+    """In-memory, idempotent record of approved follow-up send intents. Never delivers."""
+
+    def __init__(self) -> None:
+        self._records: dict[str, FollowUpSendRecord] = {}
+
+    def has(self, send_key: str) -> bool:
+        return send_key in self._records
+
+    def records(self) -> list[FollowUpSendRecord]:
+        return list(self._records.values())
+
+    def record_send_intent(
+        self,
+        followup: SupervisedFollowUp,
+        *,
+        enabled: bool = False,
+        now: datetime | None = None,
+    ) -> FollowUpSendRecord:
+        if not enabled:
+            raise SupervisedFollowUpError("follow_up_send_disabled")
+        blockers = followup.preflight(now=now)
+        if blockers:
+            raise SupervisedFollowUpError("send refused: " + ", ".join(blockers))
+        payload_hash = followup.approved_payload_hash or ""
+        key = follow_up_send_key(followup.draft.application_id, followup.draft.follow_up_number, payload_hash)
+        if key in self._records:
+            raise SupervisedFollowUpError(f"follow_up_already_recorded: {key}")
+        record = FollowUpSendRecord(
+            send_key=key,
+            application_id=followup.draft.application_id,
+            follow_up_number=followup.draft.follow_up_number,
+            payload_hash=payload_hash,
+            approved_by=followup.approved_by or "",
+            recorded_at=now or datetime.now(UTC),
+        )
+        self._records[key] = record
+        return record
