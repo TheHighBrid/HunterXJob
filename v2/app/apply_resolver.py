@@ -78,7 +78,9 @@ NON_JOB_HOSTS: tuple[str, ...] = (
 )
 
 # Query keys that wrap another URL: following them would hand control to a redirector.
-REDIRECT_KEYS = frozenset({"url", "u", "redirect", "redirect_uri", "redirect_url", "dest", "destination", "target", "next", "goto", "out"})
+REDIRECT_KEYS = frozenset(
+    {"url", "u", "redirect", "redirect_uri", "redirect_url", "dest", "destination", "target", "next", "goto", "out"}
+)
 
 APPLY_WORDS = ("apply", "application", "careers", "career", "jobs", "postuler", "candidature", "emploi")
 NOISE_WORDS = ("privacy", "terms", "cookie", "login", "sign-in", "signin", "unsubscribe", "share", "report")
@@ -125,13 +127,43 @@ def is_ats_url(url: str) -> bool:
     return unsafe_reason(url) is None and host_matches(_host(url), ATS_HOSTS)
 
 
-def unsafe_reason(url: str) -> str | None:
-    """Return why ``url`` is unsafe to follow, or ``None`` when it is acceptable."""
-    raw = (url or "").strip()
+def _host_reason(host: str) -> str | None:
+    if not host or "." not in host:
+        return "missing or bare host"
+    if host == "localhost" or host.endswith((".localhost", ".local")):
+        return "local host"
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    else:
+        return "raw IP address host"
+    if host.startswith("xn--") or ".xn--" in host:
+        return "punycode host"
+    return None
+
+
+def _redirect_reason(query: str) -> str | None:
+    for key, values in parse_qs(query).items():
+        if key.lower() in REDIRECT_KEYS and any(v.lower().startswith(("http:", "https:", "//")) for v in values):
+            return f"redirect wrapper via {key!r}"
+    return None
+
+
+def _shape_reason(raw: str) -> str | None:
     if not raw:
         return "empty URL"
     if any(ch.isspace() or ord(ch) < 32 for ch in raw):
         return "URL contains whitespace or control characters"
+    return None
+
+
+def unsafe_reason(url: str) -> str | None:
+    """Return why ``url`` is unsafe to follow, or ``None`` when it is acceptable."""
+    raw = (url or "").strip()
+    shape = _shape_reason(raw)
+    if shape:
+        return shape
     try:
         parts = urlsplit(raw)
         port = parts.port
@@ -141,25 +173,9 @@ def unsafe_reason(url: str) -> str | None:
         return f"scheme {parts.scheme or 'missing'!r} is not https"
     if parts.username or parts.password or "@" in parts.netloc:
         return "credentials embedded in URL"
-    host = (parts.hostname or "").rstrip(".")
-    if not host or "." not in host:
-        return "missing or bare host"
-    if host == "localhost" or host.endswith(".localhost") or host.endswith(".local"):
-        return "local host"
-    try:
-        ipaddress.ip_address(host)
-        return "raw IP address host"
-    except ValueError:
-        pass
-    if host.startswith("xn--") or ".xn--" in host:
-        return "punycode host"
     if port not in (None, 443):
         return f"non-standard port {port}"
-    query = parse_qs(parts.query)
-    for key, values in query.items():
-        if key.lower() in REDIRECT_KEYS and any(v.lower().startswith(("http:", "https:", "//")) for v in values):
-            return f"redirect wrapper via {key!r}"
-    return None
+    return _host_reason((parts.hostname or "").rstrip(".")) or _redirect_reason(parts.query)
 
 
 class _LinkCollector(HTMLParser):
@@ -212,73 +228,104 @@ def _score(url: str, label: str) -> int:
     return score
 
 
-def resolve_apply_target(listing_url: str, html: str | None = None) -> ApplyResolution:
-    """Classify ``listing_url`` (and optional fetched ``html``) into an apply target."""
+def _precheck(listing_url: str, html: str | None) -> ApplyResolution | None:
     reason = unsafe_reason(listing_url)
     if reason:
         return ApplyResolution("rejected", listing_url, reason=reason)
     host = _host(listing_url)
     if host_matches(host, ATS_HOSTS):
-        return ApplyResolution("ats", listing_url, apply_url=listing_url, reason="listing is already on a known ATS host")
+        return ApplyResolution(
+            "ats", listing_url, apply_url=listing_url, reason="listing is already on a known ATS host"
+        )
     if host_matches(host, UNSUPPORTED_HOSTS):
         return ApplyResolution("unsupported", listing_url, reason="aggregator listing is not an application target")
     if html is None:
         return ApplyResolution("manual", listing_url, reason="no listing HTML supplied to resolve")
     if len(html) > MAX_HTML_BYTES:
         return ApplyResolution("manual", listing_url, reason="listing HTML too large to parse safely")
+    return None
 
-    parser = _LinkCollector()
-    parser.feed(html)
-    parser.close()
 
+def _mailto(href: str) -> str | None:
+    addr = href.split(":", 1)[1].split("?", 1)[0].strip()
+    return addr if EMAIL_RE.fullmatch(addr) else None
+
+
+def _candidate_link(listing_url: str, href: str) -> str | None:
+    """Absolute off-site link worth scoring, or None for traps and noise."""
+    absolute = urljoin(listing_url, href)
+    if unsafe_reason(absolute):
+        return None
+    link_host = _host(absolute)
+    if link_host == _host(listing_url) or host_matches(link_host, AGGREGATOR_HOSTS + NON_JOB_HOSTS):
+        return None
+    if is_ats_lookalike(link_host):
+        return None
+    return absolute
+
+
+def _collect(
+    listing_url: str, parser: _LinkCollector
+) -> tuple[list[tuple[int, str]], list[tuple[int, str]], list[str]]:
     ats: list[tuple[int, str]] = []
     careers: list[tuple[int, str]] = []
     emails: list[str] = []
     for href, label in parser.links:
         if href.lower().startswith("mailto:"):
-            addr = href.split(":", 1)[1].split("?", 1)[0].strip()
-            if EMAIL_RE.fullmatch(addr):
+            addr = _mailto(href)
+            if addr:
                 emails.append(addr)
             continue
-        absolute = urljoin(listing_url, href)
-        if unsafe_reason(absolute):
-            continue
-        link_host = _host(absolute)
-        if host_matches(link_host, AGGREGATOR_HOSTS + NON_JOB_HOSTS) or link_host == host:
-            continue
-        if is_ats_lookalike(link_host):
+        absolute = _candidate_link(listing_url, href)
+        if absolute is None:
             continue
         score = _score(absolute, label)
-        if host_matches(link_host, ATS_HOSTS):
+        if host_matches(_host(absolute), ATS_HOSTS):
             if score >= 100:
                 ats.append((score, absolute))
         elif score >= 40:
             careers.append((score, absolute))
-
     emails += EMAIL_RE.findall(" ".join(parser.text))
-    clean_emails = sorted({e.lower() for e in emails if not e.lower().startswith(NO_REPLY_PREFIXES)})
+    clean = sorted({e.lower() for e in emails if not e.lower().startswith(NO_REPLY_PREFIXES)})
+    return ats, careers, clean
 
-    def _rank(items: list[tuple[int, str]]) -> list[str]:
-        seen: dict[str, int] = {}
-        for score, url in items:
-            seen[url] = max(score, seen.get(url, score))
-        return [u for u, _ in sorted(seen.items(), key=lambda kv: (-kv[1], kv[0]))]
 
-    ats_ranked = _rank(ats)
+def _rank(items: list[tuple[int, str]]) -> list[str]:
+    seen: dict[str, int] = {}
+    for score, url in items:
+        seen[url] = max(score, seen.get(url, score))
+    return [u for u, _ in sorted(seen.items(), key=lambda kv: (-kv[1], kv[0]))]
+
+
+def _decide(listing_url: str, ats_ranked: list[str], careers_ranked: list[str], emails: list[str]) -> ApplyResolution:
     if ats_ranked:
-        distinct_hosts = {_host(u) for u in ats_ranked}
-        if len(distinct_hosts) > 1:
+        top = tuple(ats_ranked[:5])
+        if len({_host(u) for u in ats_ranked}) > 1:
             return ApplyResolution(
-                "review", listing_url, reason="listing links to more than one ATS host", candidates=tuple(ats_ranked[:5])
+                "review", listing_url, reason="listing links to more than one ATS host", candidates=top
             )
         return ApplyResolution(
-            "ats", listing_url, apply_url=ats_ranked[0], reason="direct ATS link found on listing", candidates=tuple(ats_ranked[:5])
+            "ats", listing_url, apply_url=ats_ranked[0], reason="direct ATS link found on listing", candidates=top
         )
-    careers_ranked = _rank(careers)
     if careers_ranked:
         return ApplyResolution(
-            "review", listing_url, reason="employer careers link is not a known ATS host", candidates=tuple(careers_ranked[:5])
+            "review",
+            listing_url,
+            reason="employer careers link is not a known ATS host",
+            candidates=tuple(careers_ranked[:5]),
         )
-    if clean_emails:
-        return ApplyResolution("email", listing_url, apply_email=clean_emails[0], reason="application email found on listing")
+    if emails:
+        return ApplyResolution("email", listing_url, apply_email=emails[0], reason="application email found on listing")
     return ApplyResolution("manual", listing_url, reason="no safe ATS link or application email found")
+
+
+def resolve_apply_target(listing_url: str, html: str | None = None) -> ApplyResolution:
+    """Classify ``listing_url`` (and optional fetched ``html``) into an apply target."""
+    early = _precheck(listing_url, html)
+    if early is not None:
+        return early
+    parser = _LinkCollector()
+    parser.feed(html or "")
+    parser.close()
+    ats, careers, emails = _collect(listing_url, parser)
+    return _decide(listing_url, _rank(ats), _rank(careers), emails)
