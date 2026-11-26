@@ -533,3 +533,25 @@ def test_profile_is_snapshotted_at_load(tmp_path):
     profile.write_text("verified: true\nfull_name: CHANGED\n", encoding="utf-8")
     assert "Avery" in inputs["profile_text"] and "CHANGED" not in inputs["profile_text"]
     assert inputs["profile_sha256"] == __import__("hashlib").sha256(inputs["profile_text"].encode()).hexdigest()
+
+
+def test_rate_limited_open_check_is_its_own_status_not_closed():
+    client, calls = _client(httpx.Response(429, headers={"Retry-After": "60"}), httpx.Response(200))
+    limited = batch.fetch_open_posting(GH, client=client, sleep=lambda _s: None)
+    assert not limited["open"] and limited["rate_limited"] and not limited.get("probe_error")
+    assert "429" in limited["reason"] and "closed" not in limited["reason"]
+    assert limited["retry_after"] == "60" and len(calls) == 1
+
+
+def test_rate_limited_board_api_stops_the_batch_instead_of_skipping_closed(tmp_path):
+    def fetch(target):
+        if target is LV:
+            return {**target, "open": False, "rate_limited": True, "retry_after": None,
+                    "reason": "board API rate-limited (HTTP 429)"}
+        return {**target, "open": True, "title": "T", "url": "u", "location": ""}
+
+    reports, stopped, calls, _ = _run(tmp_path, [_result()], fetch=fetch)
+    assert len(calls) == 1 and reports[1]["outcome"] == "rate_limited"
+    assert "rate-limited" in stopped and "closed posting" in stopped
+    summary = checks.summarize([checks.run_row(report) for report in reports])
+    assert summary["skipped_closed"] == 0 and summary["rate_limited"] == 1 and summary["runs"] == 1

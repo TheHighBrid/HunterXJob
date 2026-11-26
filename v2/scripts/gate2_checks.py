@@ -94,6 +94,24 @@ def request_counts(evidence: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def unexcused_submits(evidence: dict[str, Any]) -> list[Any]:
+    """Submit attempts that count against a read-only session.
+
+    The page hook refuses every submit. A refused one is excused only when it came from a known
+    third-party widget (the LinkedIn "Apply with LinkedIn" iframe, the same list the browser
+    engine uses) and no request to its action URL left the browser. Any other submit still counts.
+    """
+    from app.greenhouse_browser import _BENIGN_WIDGET_SUBMIT_PREFIXES as widget_prefixes
+
+    sent = tuple(str(item.get("url") or "") for item in evidence.get("requests") or [])
+    return [event for event in evidence.get("submit_events") or []
+            if not _refused_widget_submit(str((event or {}).get("action") or ""), tuple(widget_prefixes), sent)]
+
+
+def _refused_widget_submit(action: str, widget_prefixes: tuple[str, ...], sent: tuple[str, ...]) -> bool:
+    return action.startswith(widget_prefixes) and not any(url.startswith(action) for url in sent)
+
+
 def evaluate_read_only(evidence: dict[str, Any], http_log: list[dict[str, Any]], api_host: str | Collection[str],
                        *, allow_rewrites: bool = False) -> list[str]:
     """Why the session cannot count as zero-submit / zero-non-GET-sent on a real page.
@@ -121,8 +139,9 @@ def evaluate_read_only(evidence: dict[str, Any], http_log: list[dict[str, Any]],
                         + (f" and {rewritten} rewritten to GET" if allow_rewrites else ""))
     if evidence.get("rewritten_to_get") and not allow_rewrites:
         problems.append(f"{evidence['rewritten_to_get']} request(s) were rewritten (no rewrite is allowed for Greenhouse)")
-    if evidence.get("submit_events"):
-        problems.append(f"page attempted {len(evidence['submit_events'])} form submission(s)")
+    submits = unexcused_submits(evidence)
+    if submits:
+        problems.append(f"page attempted {len(submits)} form submission(s)")
     # Exactly one document load. A real page's client-side router may update the URL in place
     # (history API), which fires framenavigated without loading a document; that is allowed only
     # while the main frame stays on the form's own origin and path.

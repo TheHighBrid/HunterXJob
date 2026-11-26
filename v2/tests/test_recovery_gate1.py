@@ -213,6 +213,20 @@ def _snapshot(evidence):
                                        "role": "", "label": "First Name", "required": True, "options": []}]})
 
 
+def _full_snapshot(evidence):
+    """A page that renders every D2L API field, as the real embed form does.
+
+    The dry run holds any planned value for a field the page never rendered, so a
+    dry run expected to complete must see the whole form, not just ``first_name``.
+    """
+    form = parse_greenhouse_payload(load_fixture_json("d2l_7696196.json"), D2L)
+    fields = [{"tag": "input", "type": "text", "id": control.key, "name": control.key, "role": "",
+               "label": control.label, "required": control.required, "options": list(control.options or [])}
+              for control in form.controls]
+    return DomSnapshot.from_dict({"url": "http://127.0.0.1:1/embed/job_app", "title": "t", "form_count": 1,
+                                  "captcha": False, "body_text": "", "evidence": evidence, "fields": fields})
+
+
 def test_reconcile_keeps_network_evidence_and_dom_fields():
     form = reconcile(parse_greenhouse_payload(load_fixture_json("d2l_7696196.json"), D2L), _snapshot(_evidence()))
     evidence = form.metadata["browser_evidence"]
@@ -406,7 +420,7 @@ def _dry_run(db, application, form):
 
 def test_dry_run_ledger_binds_the_browser_trace_hash():
     db, application = _seeded_dry_run()
-    form = reconcile(parse_greenhouse_payload(load_fixture_json("d2l_7696196.json"), D2L), _snapshot(_evidence()))
+    form = reconcile(parse_greenhouse_payload(load_fixture_json("d2l_7696196.json"), D2L), _full_snapshot(_evidence()))
     result = _dry_run(db, application, form)
     assert result["status"] == "dry_run_complete"
     row = db.execute(select(SubmissionEvidence)).scalars().one()
@@ -426,7 +440,7 @@ def test_aborted_analytics_beacon_does_not_stop_a_production_dry_run():
     beacon = {"method": "POST", "url": "https://www.google-analytics.com/g/collect", "resource_type": "ping",
               "action": "aborted"}
     evidence = _evidence(non_get_attempts=1, aborted=1, request_count=2, requests=[*_evidence()["requests"], beacon])
-    form = reconcile(parse_greenhouse_payload(load_fixture_json("d2l_7696196.json"), D2L), _snapshot(evidence))
+    form = reconcile(parse_greenhouse_payload(load_fixture_json("d2l_7696196.json"), D2L), _full_snapshot(evidence))
     result = _dry_run(db, application, form)
     assert result["status"] == "dry_run_complete" and result["submitted"] is False
     assert any("all were aborted" in warning for warning in result["form"]["warnings"])
@@ -564,7 +578,7 @@ def test_child_environment_is_dry_run_only_and_ignores_the_developer_shell(monke
 
 
 def test_gate_uses_existing_fixtures_and_fake_identity_only():
-    assert gate.FORM_FIXTURE == FIXTURES / "sample_form.html" and gate.FORM_FIXTURE.is_file()
+    assert gate.FORM_FIXTURE == FIXTURES / "gate1" / "d2l_embed_form.html" and gate.FORM_FIXTURE.is_file()
     assert gate.API_FIXTURE == FIXTURES / "greenhouse" / "d2l_7696196.json" and gate.API_FIXTURE.is_file()
     assert gate.FAKE_ANSWERS["email"].endswith("@example.test")
     for snippet in filter(None, gate.VARIANTS.values()):

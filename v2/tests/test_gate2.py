@@ -373,3 +373,25 @@ def test_recheck_keeps_after_exit_failures(monkeypatch, tmp_path):
     (run_dir / "observations.json").write_text("{}")
     monkeypatch.setattr(runner, "evaluate", lambda data: {"outcome": "pass", "checks": {}, "challenge": None})
     assert runner.recheck(tmp_path)["outcome"] == "fail"
+
+
+# --------------------------------------------------------------------------- refused widget submits
+
+LINKEDIN_WIDGET = "https://www.linkedin.com/talentwidgets/v1/apply"
+
+
+def test_refused_linkedin_widget_submit_that_sent_nothing_is_not_a_form_submission():
+    evidence = _clean(submit_events=[{"via": "form.submit()", "action": LINKEDIN_WIDGET, "method": "post"}])
+    assert checks.evaluate_read_only(evidence, API_LOG, "boards-api.greenhouse.io") == []
+
+
+@pytest.mark.parametrize("event, extra", [
+    ({"via": "form.submit()", "action": FORM, "method": "post"}, {}),
+    ({"via": "submit_event", "action": "https://job-boards.greenhouse.io/acme/jobs/1/apply", "method": "post"}, {}),
+    ({"via": "form.submit()", "action": "https://evil.example/talentwidgets/" + LINKEDIN_WIDGET, "method": "post"}, {}),
+    ({"via": "form.submit()", "action": LINKEDIN_WIDGET, "method": "get"},
+     {"requests": [_get(FORM), _get(LINKEDIN_WIDGET + "?apply=1")], "request_count": 2}),
+])
+def test_real_or_leaking_submits_are_still_flagged(event, extra):
+    problems = checks.evaluate_read_only(_clean(submit_events=[event], **extra), API_LOG, "boards-api.greenhouse.io")
+    assert any("form submission" in problem for problem in problems)

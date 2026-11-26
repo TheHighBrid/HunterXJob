@@ -19,7 +19,7 @@ from typing import Any
 
 V2_ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = V2_ROOT / "tests" / "fixtures"
-FORM_FIXTURE = FIXTURES / "sample_form.html"
+FORM_FIXTURE = FIXTURES / "gate1" / "d2l_embed_form.html"
 API_FIXTURE = FIXTURES / "greenhouse" / "d2l_7696196.json"
 NEGATIVE_DIR = FIXTURES / "gate1"
 BOARD, JOB_ID = "d2l", "7696196"

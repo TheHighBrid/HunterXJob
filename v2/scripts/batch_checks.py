@@ -1519,7 +1519,8 @@ def run_row(report: dict[str, Any]) -> dict[str, Any]:
 
 
 def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    ran = [row for row in rows if row.get("verdict") != "skipped_closed"]
+    every_verdict = Counter(row.get("verdict") for row in rows)
+    ran = [row for row in rows if row.get("verdict") not in {"skipped_closed", "rate_limited"}]
     pcts = [row["planned_pct"] for row in ran if row.get("planned_pct") is not None]
     buckets: Counter[str] = Counter()
     postings_with: Counter[str] = Counter()
@@ -1528,7 +1529,8 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         postings_with.update((row.get("review_buckets") or {}).keys())
     return {
         "runs": len(ran),
-        "skipped_closed": len(rows) - len(ran),
+        "skipped_closed": every_verdict["skipped_closed"],
+        "rate_limited": every_verdict["rate_limited"],
         "verdicts": dict(Counter(row.get("verdict") for row in ran)),
         "safety_pass": sum(1 for row in ran if row.get("safety_ok")),
         "safety_pass_rate": round(sum(1 for row in ran if row.get("safety_ok")) / len(ran), 3) if ran else None,
