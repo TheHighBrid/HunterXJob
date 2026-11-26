@@ -20,6 +20,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from typing import Any
 
 from app.profile import Fact, VerifiedProfile
 
@@ -283,7 +284,7 @@ def check_resume(doc: dict, profile: VerifiedProfile) -> list[str]:
 def _strip_target(text: str, job_title: str, company: str) -> str:
     """Remove the exact job title / company name (allowed as names, never as claims)."""
     for name in sorted({job_title.strip(), company.strip()} - {""}, key=len, reverse=True):
-        text = re.sub(re.escape(name), " ", text, flags=re.IGNORECASE)
+        text = re.sub(re.escape(name), " ", text, flags=re.I)
     return text
 
 
@@ -440,3 +441,16 @@ def enforce_answer_truthfulness(
                     )
 
     return sanitized, corrections
+
+
+def preflight_answer_policy(**kwargs):
+    """Fail-closed answer-policy readiness hook for browser-launch callers.
+
+    Returns the structured report from ``build_answer_policy_readiness``.
+    Callers must not open a browser when ``ready_for_browser_launch`` is
+    false. Wiring into ``browser_filler`` / ``greenhouse_browser`` /
+    submission paths is a handoff: those files are outside this claim.
+    """
+    from app.answer_policy_readiness import build_answer_policy_readiness
+
+    return build_answer_policy_readiness(**kwargs)
