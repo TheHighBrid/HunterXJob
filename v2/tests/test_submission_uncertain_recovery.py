@@ -8,9 +8,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
-import improvement_kernel.storage.models  # noqa: F401
 import pytest
-from improvement_kernel.storage.models import AgentVersion
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
@@ -35,6 +33,9 @@ class SimulatedCrash(BaseException):
 
 @pytest.fixture
 def session_factory(tmp_path):
+    # Local import: ruff/Codacy disagree on whether improvement_kernel is first-party.
+    from improvement_kernel.storage.models import AgentVersion
+
     engine = create_engine(f"sqlite:///{tmp_path / 'recovery.db'}")
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
