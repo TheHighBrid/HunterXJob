@@ -31,7 +31,7 @@ const STAGE_LABELS: Record<string, string> = {
   shortlisted: "Shortlisted",
   approved: "Approved",
   validated: "Form Verified",
-  form_filled: "Form Filled",
+  form_filled: "Form Planned",
 };
 
 /** "materials_generated" -> "Materials generated" */
