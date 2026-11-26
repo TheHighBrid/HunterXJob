@@ -5,7 +5,6 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from starlette.testclient import TestClient
 
-import improvement_kernel.storage.models  # noqa: F401
 from app.autonomous_loop import (
     AutonomousConfig,
     AutonomousRunner,
