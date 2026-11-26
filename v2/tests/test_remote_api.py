@@ -121,7 +121,11 @@ def _concrete(path):
     return path.replace("{key}", "global_kill_switch").replace("{fmt}", "pdf")
 
 
-def test_every_api_route_requires_the_key(env):
+def test_every_api_route_requires_the_key(env, monkeypatch):
+    # This walk sends ~2 unauthenticated requests per route from one client;
+    # turn off the failed-auth lockout so every route is checked for its own 401.
+    # The lockout itself is covered in test_rate_limit.py.
+    monkeypatch.setenv("HUNTERX_API_AUTH_FAILURE_LIMIT", "0")
     client = env["client"]
     routes = list(_api_routes())
     assert len(routes) >= 30

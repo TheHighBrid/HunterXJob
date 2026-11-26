@@ -12,6 +12,8 @@ Safety invariants (covered by tests/test_remote_api.py):
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Literal
@@ -19,6 +21,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app import __version__
@@ -59,6 +62,7 @@ from app.job_liveness import CheckContext, check_job
 from app.job_views import job_detail, list_jobs
 from app.models import Application, FeatureFlag, Job, PipelineStage, ReviewTask, iso_utc
 from app.pipeline import preview_form
+from app.rate_limit import enforce_client_limits
 from app.real_forms import LiveFormProvider
 from app.reports import summary
 from app.review_actions import (
@@ -74,7 +78,9 @@ from app.runtime import get_runner
 from app.runtime_settings import SettingsPatch, overridden_keys, save_patch, settings_view
 from app.security import auth_posture, require_api_key
 
-router = APIRouter(dependencies=[Depends(require_api_key)])
+logger = logging.getLogger(__name__)
+
+router = APIRouter(dependencies=[Depends(enforce_client_limits), Depends(require_api_key)])
 
 DbSession = Annotated[Session, Depends(get_db)]
 CurrentSettings = Annotated[Settings, Depends(get_settings)]
@@ -83,6 +89,29 @@ Runner = Annotated[CycleRunner, Depends(get_runner)]
 
 def _refused(exc: FlagChangeRefused | ReviewActionError) -> HTTPException:
     return HTTPException(exc.status_code, exc.detail)
+
+
+def _run_batch(db: Session, task_ids: list[str], action: Callable[[str], object]) -> dict[str, object]:
+    """Apply ``action`` to each task; one failing task never aborts the rest.
+
+    Known per-task failures are reported in the results. A database error rolls
+    back that task's changes so the session stays usable for the next one, and
+    its message is not echoed to the client. Anything else is a bug and raises.
+    """
+    results: list[dict[str, object]] = []
+    for tid in task_ids:
+        try:
+            results.append({"task_id": tid, "ok": True, "result": action(tid)})
+        except ReviewActionError as exc:
+            results.append({"task_id": tid, "ok": False, "error": exc.detail, "status_code": exc.status_code})
+        except (LookupError, ValueError) as exc:
+            results.append({"task_id": tid, "ok": False, "error": str(exc), "status_code": 400})
+        except SQLAlchemyError:
+            db.rollback()
+            logger.exception("batch review action failed for task %s", tid)
+            results.append({"task_id": tid, "ok": False, "error": "database error", "status_code": 500})
+    succeeded = sum(1 for r in results if r["ok"])
+    return {"total": len(task_ids), "succeeded": succeeded, "failed": len(results) - succeeded, "results": results}
 
 
 # ------------------------------------------------------------------ auth/settings
@@ -300,28 +329,7 @@ def batch_approve_reviews(
 ) -> dict[str, object]:
     """Batch approve review tasks. Never applies or submits."""
     task_ids = (payload.task_ids if payload else []) or []
-    results: list[dict[str, object]] = []
-    succeeded = 0
-    failed = 0
-
-    for tid in task_ids:
-        try:
-            res = approve_task(db, current, tid)
-            results.append({"task_id": tid, "ok": True, "result": res})
-            succeeded += 1
-        except ReviewActionError as exc:
-            results.append({"task_id": tid, "ok": False, "error": exc.detail, "status_code": exc.status_code})
-            failed += 1
-        except Exception as exc:
-            results.append({"task_id": tid, "ok": False, "error": str(exc), "status_code": 400})
-            failed += 1
-
-    return {
-        "total": len(task_ids),
-        "succeeded": succeeded,
-        "failed": failed,
-        "results": results,
-    }
+    return _run_batch(db, task_ids, lambda task_id: approve_task(db, current, task_id))
 
 
 @router.post("/api/review-tasks/batch-resolve", response_model=BatchReviewResultOut, tags=["remote"])
@@ -331,28 +339,7 @@ def batch_resolve_reviews(
 ) -> dict[str, object]:
     """Batch resolve review tasks."""
     task_ids = (payload.task_ids if payload else []) or []
-    results: list[dict[str, object]] = []
-    succeeded = 0
-    failed = 0
-
-    for tid in task_ids:
-        try:
-            res = resolve_task(db, tid, "resolved")
-            results.append({"task_id": tid, "ok": True, "result": res})
-            succeeded += 1
-        except ReviewActionError as exc:
-            results.append({"task_id": tid, "ok": False, "error": exc.detail, "status_code": exc.status_code})
-            failed += 1
-        except Exception as exc:
-            results.append({"task_id": tid, "ok": False, "error": str(exc), "status_code": 400})
-            failed += 1
-
-    return {
-        "total": len(task_ids),
-        "succeeded": succeeded,
-        "failed": failed,
-        "results": results,
-    }
+    return _run_batch(db, task_ids, lambda task_id: resolve_task(db, task_id, "resolved"))
 
 
 @router.post("/api/review-tasks/batch-reject", response_model=BatchReviewResultOut, tags=["remote"])
@@ -362,28 +349,7 @@ def batch_reject_reviews(
 ) -> dict[str, object]:
     """Batch reject review tasks."""
     task_ids = (payload.task_ids if payload else []) or []
-    results: list[dict[str, object]] = []
-    succeeded = 0
-    failed = 0
-
-    for tid in task_ids:
-        try:
-            res = reject_task(db, tid)
-            results.append({"task_id": tid, "ok": True, "result": res})
-            succeeded += 1
-        except ReviewActionError as exc:
-            results.append({"task_id": tid, "ok": False, "error": exc.detail, "status_code": exc.status_code})
-            failed += 1
-        except Exception as exc:
-            results.append({"task_id": tid, "ok": False, "error": str(exc), "status_code": 400})
-            failed += 1
-
-    return {
-        "total": len(task_ids),
-        "succeeded": succeeded,
-        "failed": failed,
-        "results": results,
-    }
+    return _run_batch(db, task_ids, lambda task_id: reject_task(db, task_id))
 
 
 @router.post("/api/review-tasks/revalidate", response_model=RevalidateReviewResultOut, tags=["remote"])
@@ -412,8 +378,9 @@ def get_job_claims_verification(
     if job is None:
         raise HTTPException(404, "Job not found")
 
-    artifact_dir = getattr(current, "artifact_dir", None) or "/tmp/hunterx_autonomous"
-    return verify_job_materials_claims(db, job, artifact_dir=artifact_dir)
+    if current.artifact_dir:
+        return verify_job_materials_claims(db, job, artifact_dir=current.artifact_dir)
+    return verify_job_materials_claims(db, job)
 
 
 # --------------------------------------------------------------------- scheduler
