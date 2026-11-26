@@ -14,8 +14,6 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-logger = logging.getLogger(__name__)
-
 from app import __version__
 from app.adapter_runtime import ADAPTER_CATALOG
 from app.ai import LocalAI
@@ -36,8 +34,12 @@ from app.resume_facts import RESUME_FACTS_PATH, read_resume_facts
 from app.runtime import runner, settings
 from app.runtime_settings import apply_stored_overrides
 from app.scheduler import can_run_unattended, day_start_utc, submissions_today
-from app.security import API_KEY_HEADER, auth_posture, is_authorized, require_api_key
+from app.security import auth_posture, is_authorized, require_api_key
 from app.vault_store import upsert_answer
+
+logger = logging.getLogger(__name__)
+# Same default as Settings.artifact_dir; read from the model so the path lives in one place.
+_DEFAULT_ARTIFACT_DIR: str = Settings.model_fields["artifact_dir"].default
 
 DbSession = Annotated[Session, Depends(get_db)]
 CurrentSettings = Annotated[Settings, Depends(get_settings)]
@@ -73,7 +75,7 @@ async def lifespan(_: FastAPI):
 def _deterministic_unique_id(route: APIRoute) -> str:
     """Sort route methods so OpenAPI operation IDs never depend on PYTHONHASHSEED."""
     operation_id = re.sub(r"\W", "_", f"{route.name}{route.path_format}")
-    method = sorted(route.methods)[0].lower() if route.methods else "get"
+    method = min(route.methods).lower() if route.methods else "get"
     return f"{operation_id}_{method}"
 
 
@@ -165,8 +167,9 @@ def get_agent_champion(
     project: str = "allo",
 ) -> dict[str, object]:
     """Retrieve the current active champion agent configuration."""
-    from improvement_kernel.storage.db import get_current_champion
     import json
+
+    from improvement_kernel.storage.db import get_current_champion
 
     champion = get_current_champion(db, project=project)
     config_dict = {}
@@ -174,6 +177,7 @@ def get_agent_champion(
         try:
             config_dict = json.loads(champion.harness_config_json)
         except Exception:
+            logger.warning("Champion harness config for %s is not valid JSON", project, exc_info=True)
             config_dict = {}
 
     if project == "allo":
@@ -289,7 +293,7 @@ async def record_telemetry_trace(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.warning("Error evaluating incoming telemetry trace for %s: %s", project, exc)
+        logger.warning("Error evaluating incoming telemetry trace for %s: %s", project, exc, exc_info=True)
         return {"status": "error", "project": project, "message": str(exc)}
 
 
@@ -554,13 +558,14 @@ def autonomous_status(db: DbSession) -> dict[str, object]:
 @api.get("/api/certification/dossier")
 def get_certification_dossier() -> dict[str, object]:
     import json
+
     from app.certification_system import DEFAULT_DOSSIER_PATH, build_certification_dossier
 
     if DEFAULT_DOSSIER_PATH.exists():
         try:
             return json.loads(DEFAULT_DOSSIER_PATH.read_text(encoding="utf-8"))
         except Exception:
-            pass
+            logger.warning("Stored certification dossier unreadable; rebuilding", exc_info=True)
     return build_certification_dossier()
 
 
@@ -632,6 +637,7 @@ def run_job_autonomous(
 @api.post("/api/inbox/match")
 def match_inbox_email(payload: InboxEmailIn, db: DbSession) -> dict[str, object]:
     from datetime import UTC, datetime
+
     from app.inbox_matcher import EmailMessage, process_inbox_email
 
     dt = None
@@ -639,6 +645,7 @@ def match_inbox_email(payload: InboxEmailIn, db: DbSession) -> dict[str, object]
         try:
             dt = datetime.fromisoformat(payload.received_at)
         except Exception:
+            logger.warning("Unparseable inbox received_at; using now", exc_info=True)
             dt = datetime.now(UTC)
 
     email = EmailMessage(
@@ -690,7 +697,8 @@ def run_due_follow_ups(db: DbSession) -> dict[str, object]:
 
 class FollowUpDispatchIn(BaseModel):
     recipient_email: str | None = None
-    dry_run: bool = False
+    # Fail closed: a real send needs an explicit "dry_run": false.
+    dry_run: bool = True
 
 
 @api.post("/api/follow-ups/{task_id}/dispatch")
@@ -713,14 +721,16 @@ def dispatch_follow_up(
             recipient_email=payload.recipient_email,
             dry_run=payload.dry_run,
         )
-        return res
     except ValueError as exc:
-        raise HTTPException(404, str(exc))
+        raise HTTPException(404, str(exc)) from exc
+    if res["status"] == "refused":
+        raise HTTPException(res["http_status"], {"reason": res["reason"], "task_id": task_id, "sent": False})
+    return res
 
 
 @api.get("/api/jobs/{job_id}/artifacts")
 def list_job_artifacts(job_id: str, current: CurrentSettings) -> dict[str, object]:
-    out_dir = Path(getattr(current, "artifact_dir", None) or "/tmp/hunterx_autonomous")
+    out_dir = Path(getattr(current, "artifact_dir", None) or _DEFAULT_ARTIFACT_DIR)
     job_dir = out_dir / f"job_{job_id}"
     files = []
     if job_dir.is_dir():
@@ -742,7 +752,7 @@ def get_job_artifact(job_id: str, artifact_name: str, current: CurrentSettings):
     if artifact_name not in allowed:
         raise HTTPException(400, "Invalid artifact name requested")
 
-    out_dir = Path(getattr(current, "artifact_dir", None) or "/tmp/hunterx_autonomous")
+    out_dir = Path(getattr(current, "artifact_dir", None) or _DEFAULT_ARTIFACT_DIR)
     file_path = out_dir / f"job_{job_id}" / artifact_name
     if not file_path.is_file():
         raise HTTPException(404, f"Artifact '{artifact_name}' not found for job {job_id}")
@@ -758,9 +768,10 @@ def get_job_artifact(job_id: str, artifact_name: str, current: CurrentSettings):
 @api.get("/api/diagnostics/export")
 def export_system_diagnostics(db: DbSession, current: CurrentSettings) -> dict[str, object]:
     """Compiles a complete offline diagnostic snapshot of the autonomous engine."""
-    from datetime import UTC, datetime
     import platform
     import sys
+    from datetime import UTC, datetime
+
     from app.certification_system import build_certification_dossier
     from app.flags import snapshot as flags_snapshot
     from app.models import Job, ReviewTask
@@ -794,6 +805,7 @@ def export_system_diagnostics(db: DbSession, current: CurrentSettings) -> dict[s
             "milestones": {k: v.get("passed") for k, v in (dossier.get("milestones") or {}).items()},
         }
     except Exception as exc:
+        logger.warning("Diagnostics dossier unavailable", exc_info=True)
         dossier_summary = {"status": "unavailable", "error": str(exc)}
 
     return {

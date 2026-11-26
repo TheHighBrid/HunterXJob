@@ -1734,7 +1734,7 @@ export interface components {
         FollowUpDispatchIn: {
             /**
              * Dry Run
-             * @default false
+             * @default true
              */
             dry_run: boolean;
             /** Recipient Email */
