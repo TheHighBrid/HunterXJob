@@ -597,7 +597,7 @@ def run_job_autonomous(
     db: DbSession,
     current: CurrentSettings,
     dry_run: bool = False,
-    headed: bool = False,
+    headed: bool | None = None,
 ) -> dict[str, object]:
     from app.autonomous_loop import AutonomousConfig, AutonomousRunner
     from app.flags import is_enabled
@@ -609,10 +609,11 @@ def run_job_autonomous(
 
     try:
         live = bool(not dry_run and current.allow_live_submission and is_enabled(db, "allow_live_submission"))
+        use_headed = live if headed is None else headed
         runner = AutonomousRunner(
             db,
             current,
-            AutonomousConfig(allow_live_submission=live, headless=not headed),
+            AutonomousConfig(allow_live_submission=live, headless=not use_headed),
         )
         record = runner.run_job(job)
         return {
