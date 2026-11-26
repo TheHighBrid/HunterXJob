@@ -12,20 +12,27 @@ from __future__ import annotations
 
 import inspect
 import smtplib
+from typing import ClassVar
 
 import pytest
+from test_follow_up_dispatch import follow_up_env as _shared_follow_up_env  # noqa: F401  (registers the shared fixture)
 
 from app.follow_up import dispatch_follow_up_email
 from app.main import FollowUpDispatchIn
 from app.models import ReviewTask
-from test_follow_up_dispatch import follow_up_env  # noqa: F401  (fixture re-use)
 
 TASK = "task_follow_up_1"
 PLACEHOLDERS = (None, "", "hiring-team@employer.com")
 
 
+@pytest.fixture
+def follow_up_env(request):
+    """Same fixture as test_follow_up_dispatch.follow_up_env, re-exposed under its original name."""
+    return request.getfixturevalue("_shared_follow_up_env")
+
+
 class _RecordingSMTP:
-    connections: list[tuple] = []
+    connections: ClassVar[list[tuple]] = []
 
     def __init__(self, *args, **kwargs):
         _RecordingSMTP.connections.append(args)
@@ -77,7 +84,7 @@ def test_placeholder_recipient_never_sends(follow_up_env, smtp_spy, recipient):
         res = _call(db, recipient_email=recipient, dry_run=False)
         assert smtp_spy.connections == [], f"SMTP opened for recipient {recipient!r}"
         assert res["status"] != "dispatched"
-        assert res.get("recipient") not in ("hiring-team@employer.com",)
+        assert res.get("recipient") != "hiring-team@employer.com"
         assert db.get(ReviewTask, TASK).status != "resolved"
 
 
