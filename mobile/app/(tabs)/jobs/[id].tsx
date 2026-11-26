@@ -17,6 +17,7 @@ import { confirmAsync, notify } from "@/lib/confirm";
 import { useSubscription, MAX_DAILY_FREE_APPLICATIONS } from "@/store/subscription";
 import { matchScoreColor, stageColor, useTheme } from "@/theme";
 import { formatDateTime, formatScore, humanize } from "@/utils/format";
+import { DRY_RUN_VERIFIED_TITLE, dryRunVerifiedBody, JOB_TIMELINE_TITLE } from "@/uiCopy";
 
 const FORM_STATE_COPY: Record<FormStatus["state"], string> = {
   no_application: "Not shortlisted yet, so no form has been checked.",
@@ -166,7 +167,7 @@ function ExecutionCommandCard({
           tone: "info",
           text: `✓ Browser dry-run verified all fields cleanly on ${res.platform}. Stage: ${humanize(res.stage || "ready_to_apply")}.`,
         });
-        notify("Dry-Run Verified ✓", `All fields on ${job.company} filled and verified cleanly.`);
+        notify(DRY_RUN_VERIFIED_TITLE, dryRunVerifiedBody(job.company));
       } else {
         setExecBanner({
           tone: "warning",
@@ -470,7 +471,7 @@ function ApplicationCard({ application, jobId }: { application: JobDetail["appli
 function TimelineCard({ events }: { events: JobDetail["events"] }) {
   const theme = useTheme();
   return (
-    <Card title="Timeline">
+    <Card title={JOB_TIMELINE_TITLE}>
       {events.length === 0 ? <Muted>No events.</Muted> : null}
       {events.slice(0, 15).map((event) => (
         <View key={`${event.created_at}-${event.from_stage ?? ""}-${event.to_stage}`} style={styles.event}>
