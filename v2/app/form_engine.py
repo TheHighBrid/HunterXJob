@@ -291,13 +291,78 @@ def _decline_option(control: FormControl) -> str | None:
     return candidates[0] if len(candidates) == 1 else None
 
 
+# Generic terms/privacy fallback is an allowlist, not a "consent/agree" keyword match.
+# Marketing opt-ins and other non-terms legal questions must use their own vault key.
+_GENERIC_CONSENT_FALLBACK_KEYS = ("terms_consent", "agreement_consent", "general_consent")
+_MARKETING_CONSENT_KEY = "marketing_consent"
+_CONSENT_FALLBACK_ALLOWLIST = (
+    "terms",
+    "condition",
+    "privacy",
+    "policy",
+    "data processing",
+    "data-processing",
+    "data_processing",
+    "processing of",
+    "gdpr",
+    "disclaimer",
+)
+_CONSENT_FALLBACK_EXCLUDE = (
+    "marketing",
+    "promotional",
+    "newsletter",
+    "communication",
+    "future job opportunities",
+    "future opportunities",
+    "talent community",
+    "sms",
+    "text message",
+    "text-message",
+    "email updates",
+    "email-updates",
+    "background check",
+    "background-check",
+    "criminal check",
+    "criminal-check",
+    "identity verification",
+    "arbitration",
+)
+_CERTIFY_ACCURATE_MARKERS = ("true", "accurate", "complete", "correct")
+
+
+def _control_text(*parts: str) -> str:
+    return " ".join(part for part in parts if part).lower()
+
+
+def _marketing_key_blocks_consent_fallback(control: FormControl) -> bool:
+    return "marketing" in _control_text(control.key, control.name)
+
+
+def _allow_generic_consent_fallback(control: FormControl) -> bool:
+    """True only for terms, privacy, data-processing, policy, or certify-accurate text.
+
+    A key or name containing "marketing" never receives the generic fallback,
+    even when the label also mentions privacy or policy.
+    """
+    if _marketing_key_blocks_consent_fallback(control):
+        return False
+    blob = _control_text(control.key, control.name, control.label)
+    if any(marker in blob for marker in _CONSENT_FALLBACK_EXCLUDE):
+        return False
+    if any(marker in blob for marker in _CONSENT_FALLBACK_ALLOWLIST):
+        return True
+    return "certify" in blob and any(marker in blob for marker in _CERTIFY_ACCURATE_MARKERS)
+
+
 def _resolve_control(control: FormControl, vault: AnswerVault, request_sensitive: bool):
     keys = [*control.vault_keys, control.key]
+    if _marketing_key_blocks_consent_fallback(control) or "marketing" in _control_text(control.label):
+        keys.append(_MARKETING_CONSENT_KEY)
 
     # Exhaustive fallback keys derived from control properties and semantic patterns
     lbl = (control.label or "").lower()
-    if control.legal or any(w in lbl for w in ("disclaimer", "consent", "agree", "certify", "acknowledge")):
-        keys.extend(["terms_consent", "agreement_consent", "general_consent"])
+    if _allow_generic_consent_fallback(control):
+        keys.extend(_GENERIC_CONSENT_FALLBACK_KEYS)
     if "salary" in lbl or "compensation" in lbl or "pay" in lbl:
         keys.extend(["salary_expectation", "desired_salary", "compensation_expectation"])
     if "time zone" in lbl or "timezone" in lbl:
@@ -388,7 +453,12 @@ def plan_fill(controls: list[FormControl], vault: AnswerVault) -> FillPlan:
         if decline_opt is not None:
             items.append(FillPlanItem(control, "fill", value=decline_opt, reason="explicit decline-to-self-identify policy"))
             continue
-        if control.legal and control.options and len(control.options) == 1:
+        if (
+            control.legal
+            and control.options
+            and len(control.options) == 1
+            and _allow_generic_consent_fallback(control)
+        ):
             derived_legal = derive_option(control, "Yes", "terms_consent")
             if derived_legal is not None:
                 items.append(FillPlanItem(control, "fill", value=derived_legal, reason="universal affirmative applicant consent"))
