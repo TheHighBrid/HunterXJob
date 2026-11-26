@@ -550,7 +550,7 @@ def test_api_autonomous_run_respects_live_and_headed_query_params(monkeypatch, t
         assert captured_configs[-1].allow_live_submission is False
         assert captured_configs[-1].headless is False
 
-        # 2. Unlock locally -> ?live=false forces dry-run; omitted defaults to live=True
+        # 2. Unlock locally -> ?live=false forces dry-run; omitted is also a dry run; only live=true is live
         settings.allow_live_submission = True
         with Session() as s:
             set_flag(s, "allow_live_submission", True)
@@ -561,6 +561,11 @@ def test_api_autonomous_run_respects_live_and_headed_query_params(monkeypatch, t
         assert captured_configs[-1].headless is True
 
         resp = client.post("/api/autonomous/run", headers={"X-API-Key": KEY})
+        assert resp.status_code == 200
+        assert captured_configs[-1].allow_live_submission is False
+        assert captured_configs[-1].headless is True
+
+        resp = client.post("/api/autonomous/run?live=true", headers={"X-API-Key": KEY})
         assert resp.status_code == 200
         assert captured_configs[-1].allow_live_submission is True
         assert captured_configs[-1].headless is True

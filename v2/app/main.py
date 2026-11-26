@@ -512,7 +512,7 @@ def trigger_autonomous_run(
     from app.flags import is_enabled
 
     try:
-        want_live = True if live is None else bool(live)
+        want_live = live is True  # a missing `live` is a dry run; live only when explicitly true
         can_live = bool(
             want_live
             and current.allow_live_submission
