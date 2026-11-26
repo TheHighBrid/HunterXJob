@@ -232,10 +232,9 @@ def _country_policy_codes(
     vault_polarity: bool | None,
     vault_codes: list[str],
     record: AnswerRecord | None,
-    canonical: str,
-    country: str,
-    matched_key: str | None,
+    target: tuple[str, str, str | None],
 ) -> tuple[list[str], dict[str, Any] | None]:
+    canonical, country, matched_key = target
     if profile_polarity is not None and vault_polarity is not None and profile_polarity != vault_polarity:
         conflict_code = (
             "work_authorization_inconsistent" if kind == "work_authorization" else "sponsorship_inconsistent"
@@ -281,9 +280,7 @@ def _country_policy_status(
         vault_polarity=vault_polarity,
         vault_codes=vault_codes,
         record=record,
-        canonical=canonical,
-        country=country,
-        matched_key=matched_key,
+        target=(canonical, country, matched_key),
     )
     satisfied = required and not codes and (profile_polarity is not None or vault_polarity is not None)
     if not required:

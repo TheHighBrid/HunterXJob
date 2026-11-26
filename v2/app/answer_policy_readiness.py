@@ -171,11 +171,13 @@ def build_answer_policy_readiness(
     conflicts.extend(us_conflicts)
 
     return _assemble_readiness_report(
-        country=country,
-        platform=detected_platform,
-        target_url=target_url,
-        company=company,
-        us_enabled=us_enabled,
+        header={
+            "country": country,
+            "platform": detected_platform,
+            "target_url": target_url,
+            "company": company,
+            "us_enabled": us_enabled,
+        },
         profile_statuses=profile_statuses,
         policy_statuses=policy_statuses,
         required_keys=required_keys,
@@ -277,11 +279,7 @@ def _cross_check_us_answers(
 
 def _assemble_readiness_report(
     *,
-    country: str,
-    platform: str,
-    target_url: str,
-    company: str,
-    us_enabled: bool,
+    header: dict[str, Any],
     profile_statuses: list[dict[str, Any]],
     policy_statuses: list[dict[str, Any]],
     required_keys: list[str],
@@ -293,11 +291,11 @@ def _assemble_readiness_report(
     total = len(PROFILE_FIELD_REQUIREMENTS) + len(required_keys)
     ready = not deduped
     return {
-        "country_code": country,
-        "platform": platform,
-        "target_url": target_url or "",
-        "company": company or "",
-        "us_targeting_enabled": us_enabled,
+        "country_code": header["country"],
+        "platform": header["platform"],
+        "target_url": header["target_url"] or "",
+        "company": header["company"] or "",
+        "us_targeting_enabled": header["us_enabled"],
         "ready_for_browser_launch": ready,
         "ready_for_unattended": ready,
         "completeness_score": round((satisfied / total) * 100, 1) if total else 100.0,
