@@ -16,6 +16,7 @@ import hashlib
 import logging
 import re
 import sys
+import unicodedata
 from collections.abc import Collection
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -52,19 +53,11 @@ except ImportError:  # pragma: no cover - optional [browser] extra
 # helpers and location option choice on app.greenhouse_form. This branch is
 # based on #58, so those symbols are imported when present and otherwise
 # mirrored locally until #66 merges.
-try:
-    from app.greenhouse_form import (  # type: ignore[attr-defined]
-        choose_location_option,
-        css_escape,
-        css_id_selector,
-        id_attribute_selector,
-        resolve_element_by_id,
-        split_idrefs,
-    )
-except ImportError:  # pragma: no cover - exercised on bases that predate #66
-    import unicodedata
+_ELEMENT_BY_ID_JS = "(id) => document.getElementById(id)"
 
-    ELEMENT_BY_ID_JS = "(id) => document.getElementById(id)"
+
+def _fallback_css_helpers() -> tuple[Any, Any, Any]:
+    """CSSOM-compatible id helpers used when PR #66 is not on this base."""
 
     def _css_escape_char(char: str, index: int, value: str) -> str:
         code = ord(char)
@@ -84,11 +77,6 @@ except ImportError:  # pragma: no cover - exercised on bases that predate #66
             return "\\-"
         return "".join(_css_escape_char(char, index, value) for index, char in enumerate(value))
 
-    def css_id_selector(element_id: str) -> str:
-        if not element_id:
-            raise ValueError("an element id is required")
-        return "#" + css_escape(element_id)
-
     def id_attribute_selector(element_id: str) -> str:
         escaped = element_id.replace("\\", "\\\\").replace('"', '\\"')
         return f'[id="{escaped}"]'
@@ -96,16 +84,21 @@ except ImportError:  # pragma: no cover - exercised on bases that predate #66
     def split_idrefs(value: str | None) -> list[str]:
         return (value or "").split()
 
-    async def resolve_element_by_id(page: Any, element_id: str) -> Any | None:
-        if not element_id:
-            return None
-        try:
-            handle = await page.evaluate_handle(ELEMENT_BY_ID_JS, element_id)
-            return handle.as_element()
-        except (PlaywrightError, ValueError, TypeError, AttributeError):
-            return None
+    return css_escape, id_attribute_selector, split_idrefs
 
-    _PROVINCES = {
+
+async def _fallback_resolve_element_by_id(page: Any, element_id: str) -> Any | None:
+    if not element_id:
+        return None
+    try:
+        handle = await page.evaluate_handle(_ELEMENT_BY_ID_JS, element_id)
+        return handle.as_element()
+    except (PlaywrightError, ValueError, TypeError, AttributeError):
+        return None
+
+
+def _fallback_choose_location_option(answer: str, options: list[str]) -> str | None:
+    provinces = {
         "on": "ontario", "qc": "quebec", "bc": "british columbia", "ab": "alberta",
         "mb": "manitoba", "sk": "saskatchewan", "ns": "nova scotia",
         "nb": "new brunswick", "nl": "newfoundland and labrador",
@@ -118,24 +111,44 @@ except ImportError:  # pragma: no cover - exercised on bases that predate #66
         tokens: list[str] = []
         for raw in re.split(r"[^a-z0-9]+", folded):
             if raw:
-                tokens.extend(_PROVINCES.get(raw, raw).split())
+                tokens.extend(provinces.get(raw, raw).split())
         return tokens
 
-    def choose_location_option(answer: str, options: list[str]) -> str | None:
-        wanted = _location_tokens(answer)
-        if not wanted:
-            return None
-        ranked: list[tuple[int, str]] = []
-        for option in options:
-            tokens = _location_tokens(option)
-            if tokens == wanted:
-                return option
-            if all(token in tokens for token in wanted):
-                ranked.append((len(tokens) - len(wanted), option))
-        ranked.sort(key=lambda item: item[0])
-        if not ranked or (len(ranked) > 1 and ranked[0][0] == ranked[1][0]):
-            return None
-        return ranked[0][1]
+    wanted = _location_tokens(answer)
+    if not wanted:
+        return None
+    ranked: list[tuple[int, str]] = []
+    for option in options:
+        tokens = _location_tokens(option)
+        if tokens == wanted:
+            return option
+        if all(token in tokens for token in wanted):
+            ranked.append((len(tokens) - len(wanted), option))
+    ranked.sort(key=lambda item: item[0])
+    if not ranked or (len(ranked) > 1 and ranked[0][0] == ranked[1][0]):
+        return None
+    return ranked[0][1]
+
+
+try:
+    from app.greenhouse_form import (  # type: ignore[attr-defined]
+        choose_location_option,
+        css_escape,
+        id_attribute_selector,
+        resolve_element_by_id,
+        split_idrefs,
+    )
+except ImportError:  # pragma: no cover - exercised on bases that predate #66
+    css_escape, id_attribute_selector, split_idrefs = _fallback_css_helpers()
+    resolve_element_by_id = _fallback_resolve_element_by_id
+    choose_location_option = _fallback_choose_location_option
+
+
+def css_id_selector(element_id: str) -> str:
+    """CSS ``#id`` selector using the same CSSOM escape as ``css_escape``."""
+    if not element_id:
+        raise ValueError("an element id is required")
+    return "#" + css_escape(element_id)
 
 
 _DIAL_CODE_RE = re.compile(r"\+(\d{1,4})")
