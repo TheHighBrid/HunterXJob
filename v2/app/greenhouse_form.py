@@ -18,8 +18,11 @@ Safety contract:
 """
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import re
-from collections.abc import Iterable
+import unicodedata
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -332,7 +335,8 @@ _LANGUAGE_RE = re.compile(
     r"bilingual(?:ism)?|"
     r"(?:canadian )?french.{0,60}english|english.{0,60}(?:canadian )?french|"
     r"level of language skill|spoken languages?|language proficiency|"
-    r"fluen(?:t|cy) in (?:french|english|fran[cç]ais)|"
+    r"(?:fluen(?:t|cy)|proficien(?:t|cy)) in (?:french|english|fran[cç]ais)|"
+    r"speak (?:french|english|fran[cç]ais) fluently|"
     r"english and french|french and english"
 )
 _PROGRAMMING_LANG_RE = re.compile(
@@ -340,6 +344,12 @@ _PROGRAMMING_LANG_RE = re.compile(
     r"\bjava\b|c\+\+|\bruby\b|golang|\bsql\b|llm ecosystem"
 )
 _CITIZENSHIP_RE = re.compile(r"\bcitizen(?:ship)?\b")
+# "Who referred you / employee's name" asks for a person, not a source.
+_REFERRER_NAME_RE = re.compile(
+    r"referr(?:er|al)'?s? (?:full )?name|name of (?:the |your )?(?:referr\w*|employee)|"
+    r"employee'?s? (?:full )?name|who referred you|referred by|"
+    r"referred you.{0,80}\b(?:their |full )?name\b"
+)
 
 
 def _rule_key(text: str) -> str | None:
@@ -369,6 +379,8 @@ def classify_question(label: str, job_location: str = "") -> str | None:
     if _CITIZENSHIP_RE.search(text):
         return _country_scoped("citizenship", text, job_location)
     if _PRIOR_EMPLOYMENT_RE.search(text):
+        return None
+    if _REFERRER_NAME_RE.search(text):
         return None
     if _LANGUAGE_RE.search(text) and not _PROGRAMMING_LANG_RE.search(text):
         return "language_proficiency"
@@ -433,6 +445,8 @@ def _is_sensitive_key(key: str | None) -> bool:
 
 _TYPE_MAP = {
     "input_text": ControlType.TEXT,
+    "input_date": ControlType.DATE,
+    "date": ControlType.DATE,
     "textarea": ControlType.TEXTAREA,
     "input_file": ControlType.FILE,
     "input_hidden": ControlType.HIDDEN,
@@ -683,6 +697,216 @@ def fetch_greenhouse_payload(ref: GreenhouseJobRef, *, client: httpx.Client | No
 
 def fetch_greenhouse_form(ref: GreenhouseJobRef, *, client: httpx.Client | None = None, timeout: float = 20.0) -> RealForm:
     return parse_greenhouse_payload(fetch_greenhouse_payload(ref, client=client, timeout=timeout), ref)
+
+
+# --- browser-side DOM widget helpers (no network, no submission) --------------------------------
+#
+# Greenhouse's React controls use ids such as ``question_123[]`` or React ``useId`` values like
+# ``:r1:``. A raw ``#id`` selector built from those raises a DOMException in the browser, so ids
+# are either escaped exactly like CSSOM ``CSS.escape`` or resolved with ``getElementById``.
+
+#: Page function that resolves an element by exact DOM id, with no selector parsing at all.
+ELEMENT_BY_ID_JS = "(id) => document.getElementById(id)"
+
+
+def _css_escape_char(char: str, index: int, value: str) -> str:
+    code = ord(char)
+    if code == 0:
+        return "\ufffd"
+    if 0x01 <= code <= 0x1F or code == 0x7F:
+        return f"\\{code:x} "
+    if char.isdigit() and char.isascii() and (index == 0 or (index == 1 and value[0] == "-")):
+        return f"\\{code:x} "
+    if code >= 0x80 or char in "-_" or (char.isascii() and char.isalnum()):
+        return char
+    return "\\" + char
+
+
+def css_escape(value: str) -> str:
+    """Python mirror of CSSOM ``CSS.escape`` (https://drafts.csswg.org/cssom/#serialize-an-identifier)."""
+    if value == "-":
+        return "\\-"
+    return "".join(_css_escape_char(char, index, value) for index, char in enumerate(value))
+
+
+def css_id_selector(element_id: str) -> str:
+    """``#id`` selector that is valid for any DOM id, including ``question_1[]`` and ``:r1:``."""
+    if not element_id:
+        raise ValueError("an element id is required")
+    return "#" + css_escape(element_id)
+
+
+def id_attribute_selector(element_id: str) -> str:
+    """``[id="..."]`` selector with the string value escaped (quotes and backslashes)."""
+    escaped = element_id.replace("\\", "\\\\").replace('"', '\\"')
+    return f'[id="{escaped}"]'
+
+
+def split_idrefs(value: str | None) -> list[str]:
+    """IDREF list from ``aria-labelledby`` / ``aria-describedby`` / ``aria-controls``."""
+    return (value or "").split()
+
+
+async def resolve_element_by_id(page: Any, element_id: str) -> Any | None:
+    """Element with exactly this id via ``document.getElementById``, or None. Never raises."""
+    if not element_id:
+        return None
+    try:
+        handle = await page.evaluate_handle(ELEMENT_BY_ID_JS, element_id)
+        return handle.as_element()
+    except Exception:  # noqa: BLE001 - a detached page or a bad id must fail closed, not crash
+        return None
+
+
+# --- Greenhouse delayed location autocomplete ---------------------------------------------------
+
+_PROVINCES = {
+    "on": "ontario", "qc": "quebec", "bc": "british columbia", "ab": "alberta", "mb": "manitoba",
+    "sk": "saskatchewan", "ns": "nova scotia", "nb": "new brunswick", "nl": "newfoundland and labrador",
+    "pe": "prince edward island", "pei": "prince edward island", "yt": "yukon",
+    "nt": "northwest territories", "nu": "nunavut",
+}
+_LOCATION_READBACK_JS = """(el) => {
+  const own = (el.value || '').trim();
+  if (own) return own;
+  const shell = el.closest('.select__control, .select-shell, .select__container, [class*="container"]');
+  const single = shell && shell.querySelector('[class*="single-value"]');
+  return ((single || el).textContent || '').trim();
+}"""
+
+
+def _location_tokens(text: str) -> list[str]:
+    folded = unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode().casefold()
+    tokens: list[str] = []
+    for raw in re.split(r"[^a-z0-9]+", folded):
+        if raw:
+            tokens.extend(_PROVINCES.get(raw, raw).split())
+    return tokens
+
+
+def choose_location_option(answer: str, options: list[str]) -> str | None:
+    """The single option that confidently matches ``answer``, else None (fail closed).
+
+    Every answer token must appear as a whole token in the option ("Nottawa" never matches
+    "Ottawa"; "Ottawa, KS, USA" never matches "Ottawa, Ontario, Canada"). Among matches the one
+    with the fewest extra tokens wins; a tie is ambiguous and returns None.
+    """
+    wanted = _location_tokens(answer)
+    if not wanted:
+        return None
+    ranked: list[tuple[int, str]] = []
+    for option in options:
+        tokens = _location_tokens(option)
+        if tokens == wanted:
+            return option
+        if all(token in tokens for token in wanted):
+            ranked.append((len(tokens) - len(wanted), option))
+    ranked.sort(key=lambda item: item[0])
+    if not ranked or (len(ranked) > 1 and ranked[0][0] == ranked[1][0]):
+        return None
+    return ranked[0][1]
+
+
+@dataclass(slots=True)
+class LocationFillResult:
+    status: str  # "filled" or "review"
+    reason: str | None = None
+    query: str = ""
+    selected: str | None = None
+    readback: str = ""
+    options: list[str] = field(default_factory=list)
+
+
+async def _type_location_query(combobox: Any, query: str, key_delay_ms: int) -> None:
+    # Focus is best effort; typing below still targets the element.
+    with contextlib.suppress(Exception):
+        await combobox.click()
+    await combobox.fill("")
+    typer = getattr(combobox, "press_sequentially", None) or combobox.type
+    await typer(query, delay=key_delay_ms)
+
+
+async def _location_listbox(page: Any, combobox: Any) -> Any | None:
+    for attr in ("aria-controls", "aria-owns"):
+        for element_id in split_idrefs(await combobox.get_attribute(attr)):
+            listbox = await resolve_element_by_id(page, element_id)
+            if listbox is not None:
+                return listbox
+    for candidate in await page.query_selector_all('[role="listbox"]'):
+        if await candidate.is_visible():
+            return candidate
+    return None
+
+
+async def _location_options(page: Any, combobox: Any) -> list[tuple[str, Any]]:
+    listbox = await _location_listbox(page, combobox)
+    if listbox is None:
+        return []
+    options: list[tuple[str, Any]] = []
+    for handle in await listbox.query_selector_all('[role="option"]'):
+        if (await handle.get_attribute("aria-disabled") or "").lower() == "true":
+            continue
+        label = " ".join((await handle.inner_text() or "").split())
+        if label:
+            options.append((label, handle))
+    return options
+
+
+async def _poll_location_options(page: Any, combobox: Any, interval_s: float, attempts: int,
+                                 sleep: Callable[[float], Awaitable[Any]]) -> list[tuple[str, Any]]:
+    options = await _location_options(page, combobox)
+    for _ in range(attempts):
+        if options:
+            break
+        await sleep(interval_s)
+        options = await _location_options(page, combobox)
+    return options
+
+
+async def fill_greenhouse_location(
+    page: Any,
+    combobox: Any,
+    answer: str,
+    *,
+    key_delay_ms: int = 25,
+    poll_interval_ms: int = 250,
+    poll_attempts: int = 12,
+    sleep: Callable[[float], Awaitable[Any]] = asyncio.sleep,
+) -> LocationFillResult:
+    """Type into a delayed Greenhouse location autocomplete, pick a real option, verify readback.
+
+    Keys are typed one by one (``key_delay_ms``) so the debounced geocoder fires, then the
+    listbox named by ``aria-controls`` is polled at most ``poll_attempts`` times. If the full
+    answer yields nothing, the city prefix is tried once. No option is ever synthesized: no
+    options, an ambiguous list, or a readback that differs from the chosen option all return
+    ``status="review"`` with the half-typed query cleared.
+    """
+    if poll_attempts < 1 or poll_interval_ms < 0 or key_delay_ms < 0:
+        raise ValueError("poll_attempts must be >= 1 and delays must be >= 0")
+    answer = " ".join(str(answer or "").split())
+    if not answer:
+        return LocationFillResult("review", "location_no_answer")
+    city = answer.split(",")[0].strip()
+    queries = [answer] + ([city] if city and city != answer else [])
+    options: list[tuple[str, Any]] = []
+    query = answer
+    for query in queries:
+        await _type_location_query(combobox, query, key_delay_ms)
+        options = await _poll_location_options(page, combobox, poll_interval_ms / 1000, poll_attempts, sleep)
+        if options:
+            break
+    labels = [label for label, _ in options]
+    choice = choose_location_option(answer, labels)
+    if choice is None:
+        await combobox.fill("")
+        reason = "location_no_options" if not labels else "location_no_confident_match"
+        return LocationFillResult("review", reason, query=query, options=labels)
+    await options[labels.index(choice)][1].click()
+    readback = " ".join(str(await combobox.evaluate(_LOCATION_READBACK_JS) or "").split())
+    if _location_tokens(readback) != _location_tokens(choice):
+        return LocationFillResult("review", "location_readback_mismatch", query=query, selected=choice,
+                                  readback=readback, options=labels)
+    return LocationFillResult("filled", query=query, selected=choice, readback=readback, options=labels)
 
 
 # Shared with the Lever and Ashby extractors so every platform classifies questions the same way.

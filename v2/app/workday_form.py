@@ -10,7 +10,7 @@ resume attachment, cover letter, work authorization questions, and terms agreeme
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urlparse
@@ -21,6 +21,9 @@ from app.form_engine import AUTH_PATTERNS, LEGAL_PATTERNS, ControlType, FormCont
 from app.greenhouse_form import (
     FormFetchError,
     RealForm,
+    is_sensitive_field,
+    looks_like,
+    shared_answer_key,
 )
 
 WORKDAY_DOMAINS = ("myworkdayjobs.com",)
@@ -65,7 +68,7 @@ def parse_workday_ref(url: str) -> WorkdayJobRef | None:
     # Tenant from host: e.g. company.wd3.myworkdayjobs.com -> tenant is company
     host_parts = host.split(".")
     tenant = host_parts[0]
-    
+
     # Path parsing: /en-US/{company}/job/{location}/{title}_{posting_id}
     path_parts = [p for p in parsed.path.split("/") if p and p.lower() != "apply"]
     company = tenant
@@ -77,10 +80,7 @@ def parse_workday_ref(url: str) -> WorkdayJobRef | None:
     posting_id = ""
     if path_parts:
         last = path_parts[-1]
-        if "_" in last:
-            posting_id = last.split("_")[-1]
-        else:
-            posting_id = last
+        posting_id = last.split("_")[-1] if "_" in last else last
 
     if not posting_id:
         posting_id = "job"
@@ -146,12 +146,20 @@ class _WorkdayHTMLParser(HTMLParser):
                 ctrl_type = ControlType.CHECKBOX
             elif input_type == "radio":
                 ctrl_type = ControlType.RADIO
+            elif input_type == "date":
+                ctrl_type = ControlType.DATE
+            elif input_type == "number":
+                ctrl_type = ControlType.NUMBER
+            elif input_type == "hidden":
+                ctrl_type = ControlType.HIDDEN
             elif tag == "textarea":
                 ctrl_type = ControlType.TEXTAREA
 
             key = _map_workday_key(data_auto, name, label, ctrl_type)
-            is_legal = any(p in label.lower() for p in LEGAL_PATTERNS) or "agreement" in data_auto
-            is_auth = any(p in label.lower() for p in AUTH_PATTERNS) or "workauth" in data_auto.lower()
+            canonical = shared_answer_key(label.strip())
+            is_legal = looks_like(label, LEGAL_PATTERNS) or "agreement" in data_auto
+            is_auth = looks_like(label, AUTH_PATTERNS) or "workauth" in data_auto.lower()
+            vault_keys = [key] + ([canonical] if canonical and canonical != key else [])
 
             if key and not any(c.key == key for c in self.controls):
                 self.controls.append(
@@ -162,8 +170,10 @@ class _WorkdayHTMLParser(HTMLParser):
                         required=required,
                         name=name,
                         input_type=input_type,
+                        sensitive=is_auth or is_sensitive_field(label, canonical, False),
                         legal=is_legal,
                         section="authorization" if is_auth else ("legal" if is_legal else "application"),
+                        vault_keys=vault_keys,
                         confidence=0.9 if key in ("first_name", "last_name", "email", "phone", "resume") else 0.7,
                     )
                 )
@@ -178,6 +188,10 @@ class _WorkdayHTMLParser(HTMLParser):
             label = self._select_attrs.get("aria-label") or self._current_label or name
             required = "required" in self._select_attrs or self._select_attrs.get("aria-required") == "true"
             key = _map_workday_key(data_auto, name, label, ControlType.SELECT)
+            canonical = shared_answer_key(label.strip())
+            is_legal = looks_like(label, LEGAL_PATTERNS) or "agreement" in data_auto
+            is_auth = looks_like(label, AUTH_PATTERNS) or "workauth" in data_auto.lower()
+            vault_keys = [key] + ([canonical] if canonical and canonical != key else [])
             if key and not any(c.key == key for c in self.controls):
                 self.controls.append(
                     FormControl(
@@ -187,6 +201,10 @@ class _WorkdayHTMLParser(HTMLParser):
                         required=required,
                         name=name,
                         options=list(self._options),
+                        sensitive=is_auth or is_sensitive_field(label, canonical, False),
+                        legal=is_legal,
+                        section="authorization" if is_auth else ("legal" if is_legal else "application"),
+                        vault_keys=vault_keys,
                     )
                 )
 
@@ -251,7 +269,7 @@ def default_workday_controls() -> list[FormControl]:
 def parse_workday_form(html: str, ref: WorkdayJobRef, title: str = "") -> RealForm:
     parser = _WorkdayHTMLParser()
     parser.feed(html)
-    controls = parser.controls if parser.controls else default_workday_controls()
+    controls = parser.controls or default_workday_controls()
     return RealForm(
         platform="workday",
         source="workday",

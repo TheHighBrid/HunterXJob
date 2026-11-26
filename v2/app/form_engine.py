@@ -8,7 +8,7 @@ from typing import Any
 
 from app import prior_employment
 from app.answer_vault import AnswerVault, FieldRequest, ResolutionStatus
-from app.option_derivation import derive_option
+from app.option_derivation import derive_option, iso_date, single_language_answer
 
 
 class ControlType(str, Enum):
@@ -52,6 +52,12 @@ VOLUNTARY_SECTIONS = frozenset({"eeoc", "demographic"})
 DECLINE_POLICY_KEY = "voluntary_self_identification"
 _DECLINE_OPTION_RE = re.compile(
     r"decline|don.?t wish|do not wish|prefer not|not to (?:say|disclose|answer|respond|self)|choose not|wish not",
+    re.IGNORECASE,
+)
+_REFERRER_NAME_RE = re.compile(
+    r"referr(?:er|al)'?s? (?:full )?name|name of (?:the |your )?(?:referr\w*|employee)|"
+    r"employee'?s? (?:full )?name|who referred you|referred by|"
+    r"referred you.{0,80}\b(?:their |full )?name\b",
     re.IGNORECASE,
 )
 ASSESSMENT_PATTERNS = ("assessment", "hirevue", "codility", "hackerrank", "personality test")
@@ -312,7 +318,7 @@ def _resolve_control(control: FormControl, vault: AnswerVault, request_sensitive
         keys.extend(["race_ethnicity", "race"])
     if "disab" in lbl:
         keys.extend(["disability", "disability_status"])
-    if "how did you hear" in lbl or "hear about" in lbl:
+    if ("how did you hear" in lbl or "hear about" in lbl) and not _REFERRER_NAME_RE.search(lbl):
         keys.extend(["referral_source", "hear_about_us"])
     if "onboard" in lbl and "date" in lbl:
         keys.extend(["start_date", "availability_date"])
@@ -366,6 +372,20 @@ def plan_fill(controls: list[FormControl], vault: AnswerVault) -> FillPlan:
             continue
         if resolved.status is ResolutionStatus.RESOLVED:
             value = resolved.value
+            language = single_language_answer(control, value, resolved.key)
+            if language is not None:
+                if not language:
+                    blockers.append("ambiguous_question")
+                    items.append(FillPlanItem(control, "review", reason="single-language question below professional level"))
+                    continue
+                value = language
+            if control.control_type is ControlType.DATE:
+                date_value = iso_date(value)
+                if date_value is None:
+                    blockers.append("ambiguous_question")
+                    items.append(FillPlanItem(control, "review", value=value, reason="date field needs a concrete calendar date"))
+                    continue
+                value = date_value
             if control.options:
                 matched = _match_option(control, value)
                 if matched is None:
@@ -427,10 +447,9 @@ def phone_values_equivalent(actual: Any, expected: Any) -> bool:
     # European national trunk prefix 0 (e.g. 020... in UK, 01... in France)
     actual_trim = actual_digits.lstrip("0")
     expected_trim = expected_digits.lstrip("0")
-    if min(len(actual_trim), len(expected_trim)) >= 7:
-        if actual_digits.endswith(expected_trim) or expected_digits.endswith(actual_trim):
-            return True
-    return False
+    return min(len(actual_trim), len(expected_trim)) >= 7 and (
+        actual_digits.endswith(expected_trim) or expected_digits.endswith(actual_trim)
+    )
 
 
 def verify_filled(control: FormControl, expected: Any, actual: Any) -> bool:
@@ -440,4 +459,10 @@ def verify_filled(control: FormControl, expected: Any, actual: Any) -> bool:
         return bool(actual) == bool(expected)
     if control.control_type is ControlType.TEL or "phone" in (control.key or "").lower():
         return phone_values_equivalent(actual, expected)
+    if control.control_type is ControlType.DATE:
+        exp_iso = iso_date(expected)
+        act_iso = iso_date(actual)
+        if exp_iso is not None and act_iso is not None:
+            return exp_iso == act_iso
+        return str(actual).strip() == str(expected).strip()
     return str(actual).strip() == str(expected).strip()
