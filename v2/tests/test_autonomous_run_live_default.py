@@ -8,6 +8,7 @@ The runner is replaced by a spy, so nothing runs, launches a browser, or hits th
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import ClassVar
 
 import pytest
 from sqlalchemy import create_engine
@@ -26,7 +27,7 @@ HEADERS = {"X-API-Key": KEY}
 
 
 class _SpyRunner:
-    configs: list = []
+    configs: ClassVar[list] = []
 
     def __init__(self, db, settings, config):
         _SpyRunner.configs.append(config)
