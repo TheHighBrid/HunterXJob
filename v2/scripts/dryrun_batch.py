@@ -178,7 +178,8 @@ def fetch_open_posting(target: dict[str, Any], *, client: Any = None, sleep: Any
 
 def _capture_plans(trace: list[dict[str, Any]]) -> None:
     """Record every fill plan the pipeline makes, with the vault key and raw value behind each answer."""
-    from app import form_engine, pipeline
+    from app import form_engine, pipeline, prior_employment
+    from app.option_derivation import derive_option
 
     original = pipeline.plan_fill
 
@@ -195,10 +196,26 @@ def _capture_plans(trace: list[dict[str, Any]]) -> None:
                 record = vault._records.get(resolved.key)
                 entry.update(resolved_key=resolved.key, resolved_value=resolved.value,
                              resolved_source=getattr(getattr(record, "source", None), "value", None))
+                entry.update(_derivation(control, vault, resolved, item, prior_employment, derive_option))
             trace.append(entry)
         return plan
 
     pipeline.plan_fill = plan_fill
+
+
+def _derivation(control: Any, vault: Any, resolved: Any, item: Any, prior_employment: Any,
+                derive_option: Any) -> dict[str, Any]:
+    """For an answer worked out rather than stored, the rule's own re-run plus what the check needs to
+    verify it independently (batch_checks never trusts the re-run alone)."""
+    if getattr(control, "employer", "") and str(item.reason).startswith("prior employment:"):
+        decision = prior_employment.decide(control, vault)
+        return {"derivation": {"rule": "prior_employment", "employer": control.employer,
+                               "options": list(control.options),
+                               "rerun_value": decision.value if decision and decision.status == "fill" else None}}
+    if control.options and resolved.value is not None and item.value != resolved.value:
+        return {"derivation": {"rule": "option", "options": list(control.options),
+                               "rerun_value": derive_option(control, resolved.value, resolved.key)}}
+    return {}
 
 
 def _allowed_answers(db: Any, application: Any, answers: list[dict[str, Any]]) -> dict[str, list[Any]]:
