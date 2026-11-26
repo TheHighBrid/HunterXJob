@@ -141,11 +141,7 @@ def _check_evidence(items: Any, errors: list[str]) -> list[dict[str, Any]]:
     return valid
 
 
-def validate_record(record: Any) -> tuple[list[str], list[dict[str, Any]]]:
-    """Return (errors, valid evidence items) for one decoded record."""
-    if not isinstance(record, dict):
-        return ["record must be a JSON object"], []
-    errors: list[str] = []
+def _check_fields(record: dict[str, Any], errors: list[str]) -> None:
     keys = set(record)
     personal = sorted(keys & PERSONAL_DATA_FIELDS)
     if personal:
@@ -161,22 +157,49 @@ def validate_record(record: Any) -> tuple[list[str], list[dict[str, Any]]]:
     for name in ("record_id", "source_system", "company", "job_title"):
         if name in record and not _is_text(record[name]):
             errors.append(f"{name} must be a non-empty string")
-    if "job_url" in record:
-        parsed = urlparse(str(record["job_url"]))
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            errors.append("job_url must be an http(s) URL")
-    if "submitted_at" in record:
-        try:
-            stamp = datetime.fromisoformat(str(record["submitted_at"]))
-            if stamp.tzinfo is None:
-                errors.append("submitted_at must include a timezone offset")
-        except ValueError:
-            errors.append("submitted_at must be an ISO 8601 timestamp")
-    if "outcome" in record:
-        try:
-            OutcomeClassification(record["outcome"])
-        except ValueError:
-            errors.append("outcome is not a known outcome classification")
+
+
+def _check_job_url(value: Any) -> list[str]:
+    parsed = urlparse(str(value))
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return ["job_url must be an http(s) URL"]
+    return []
+
+
+def _check_submitted_at(value: Any) -> list[str]:
+    try:
+        stamp = datetime.fromisoformat(str(value))
+    except ValueError:
+        return ["submitted_at must be an ISO 8601 timestamp"]
+    if stamp.tzinfo is None:
+        return ["submitted_at must include a timezone offset"]
+    return []
+
+
+def _check_outcome(value: Any) -> list[str]:
+    try:
+        OutcomeClassification(value)
+    except ValueError:
+        return ["outcome is not a known outcome classification"]
+    return []
+
+
+_VALUE_CHECKS = (
+    ("job_url", _check_job_url),
+    ("submitted_at", _check_submitted_at),
+    ("outcome", _check_outcome),
+)
+
+
+def validate_record(record: Any) -> tuple[list[str], list[dict[str, Any]]]:
+    """Return (errors, valid evidence items) for one decoded record."""
+    if not isinstance(record, dict):
+        return ["record must be a JSON object"], []
+    errors: list[str] = []
+    _check_fields(record, errors)
+    for name, check in _VALUE_CHECKS:
+        if name in record:
+            errors.extend(check(record[name]))
     handoff = record.get("human_handoff", [])
     if not isinstance(handoff, list) or not set(handoff) <= HANDOFF_REASONS:
         errors.append("human_handoff must be a list of: " + ", ".join(sorted(HANDOFF_REASONS)))
