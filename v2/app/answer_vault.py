@@ -48,6 +48,7 @@ SENSITIVE_KEYS = frozenset({
     "pronouns",
     "sexual_orientation",
     "voluntary_self_identification",
+    "marketing_consent",
 })
 
 _KEY_ALIASES = {
@@ -148,6 +149,13 @@ _KEY_ALIASES = {
     "disclaimer_and_consent": "terms_consent",
     "terms_agreement": "terms_consent",
 
+    # Marketing opt-in is distinct from terms/privacy consent.
+    "consent[marketing]": "marketing_consent",
+    "consent_marketing": "marketing_consent",
+    "marketing_opt_in": "marketing_consent",
+    "marketing_opt-in": "marketing_consent",
+    "marketingconsent": "marketing_consent",
+
     # Social & Web Links
     "linkedin": "linkedin_url",
     "social_linkedin": "linkedin_url",
@@ -181,9 +189,49 @@ _KEY_ALIASES = {
 }
 
 
+MARKETING_CONSENT_KEY = "marketing_consent"
+
+_MARKETING_FIELD_MARKERS = (
+    "consent[marketing]",
+    "marketing_consent",
+    "marketing-consent",
+    "marketing consent",
+    "marketing_opt_in",
+    "marketing-opt-in",
+    "marketing opt-in",
+    "marketing opt in",
+    "marketing updates",
+    "company newsletters",
+    "recruiting news",
+    "marketing emails",
+    "marketing email",
+)
+
+
 def _canonical_key(key: str) -> str:
     normalized = key.strip().lower().replace(" ", "_")
     return _KEY_ALIASES.get(normalized, normalized)
+
+
+def is_marketing_consent_field(key: str = "", label: str = "") -> bool:
+    """True when a form field is a marketing opt-in, not general terms consent."""
+    if key and _canonical_key(key) == MARKETING_CONSENT_KEY:
+        return True
+    blob = f"{key} {label}".strip().lower()
+    return any(marker in blob for marker in _MARKETING_FIELD_MARKERS)
+
+
+def _implicit_marketing_default(key: str) -> bool:
+    """True for a concrete marketing form field with no stored answer.
+
+    The bare catalog key ``marketing_consent`` stays unanswered until the user
+    (or policy) stores an explicit value. Aliases such as ``consent[marketing]``
+    still default to No so a generic terms_consent answer cannot fill them.
+    """
+    raw = key.strip().lower()
+    if not raw or raw == MARKETING_CONSENT_KEY:
+        return False
+    return _canonical_key(key) == MARKETING_CONSENT_KEY
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,6 +261,15 @@ class ResolvedAnswer:
     reason: str = ""
 
 
+def _default_marketing_answer(key: str) -> ResolvedAnswer:
+    return ResolvedAnswer(
+        key=key,
+        status=ResolutionStatus.RESOLVED,
+        value="No",
+        reason="marketing opt-in defaults to no without an explicit answer",
+    )
+
+
 class AnswerVault:
     """Resolve application answers while preserving provenance.
 
@@ -232,7 +289,8 @@ class AnswerVault:
         self._records[_canonical_key(record.key)] = record
 
     def has(self, key: str) -> bool:
-        return _canonical_key(key) in self._records
+        canonical = _canonical_key(key)
+        return canonical in self._records or _implicit_marketing_default(key)
 
     def get(self, key: str) -> AnswerRecord | None:
         """Return the raw AnswerRecord for a canonical key, or None."""
@@ -242,6 +300,8 @@ class AnswerVault:
         key = _canonical_key(request.key)
         record = self._records.get(key)
         is_sensitive = request.sensitive if request.sensitive is not None else key in SENSITIVE_KEYS
+        if record is None and _implicit_marketing_default(request.key):
+            return _default_marketing_answer(key)
         if record is None:
             return ResolvedAnswer(
                 key=key,

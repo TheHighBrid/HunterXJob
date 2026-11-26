@@ -20,7 +20,9 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from typing import Any
 
+from app.answer_vault import is_marketing_consent_field
 from app.profile import Fact, VerifiedProfile
 
 _NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)*")
@@ -311,12 +313,12 @@ def check_cover_letter(doc: dict, profile: VerifiedProfile, *, job_description: 
 
 # Credentials that must never be affirmatively claimed unless verified in profile facts.
 UNVERIFIED_CREDENTIAL_PATTERNS = {
-    "cpa": re.compile(r"\b(?:cpa|chartered\s+professional\s+accountant|certified\s+public\s+accountant)\b", re.I),
-    "cfa": re.compile(r"\b(?:cfa|chartered\s+financial\s+analyst)\b", re.I),
-    "pmp": re.compile(r"\b(?:pmp|project\s+management\s+professional)\b", re.I),
-    "p_eng": re.compile(r"\b(?:p\.?eng|professional\s+engineer)\b", re.I),
-    "bar": re.compile(r"\b(?:bar\s+admission|licensed\s+lawyer|licensed\s+attorney)\b", re.I),
-    "security_clearance": re.compile(r"\b(?:security\s+clearance|top\s+secret|secret\s+clearance)\b", re.I),
+    "cpa": re.compile(r"\b(?:cpa|chartered\s+professional\s+accountant|certified\s+public\s+accountant)\b", re.IGNORECASE),
+    "cfa": re.compile(r"\b(?:cfa|chartered\s+financial\s+analyst)\b", re.IGNORECASE),
+    "pmp": re.compile(r"\b(?:pmp|project\s+management\s+professional)\b", re.IGNORECASE),
+    "p_eng": re.compile(r"\b(?:p\.?eng|professional\s+engineer)\b", re.IGNORECASE),
+    "bar": re.compile(r"\b(?:bar\s+admission|licensed\s+lawyer|licensed\s+attorney)\b", re.IGNORECASE),
+    "security_clearance": re.compile(r"\b(?:security\s+clearance|top\s+secret|secret\s+clearance)\b", re.IGNORECASE),
 }
 
 
@@ -440,3 +442,24 @@ def enforce_answer_truthfulness(
                     )
 
     return sanitized, corrections
+
+
+def classify_consent_field(key: str = "", label: str = "") -> str:
+    """Classify a consent field as marketing, terms, or other."""
+    if is_marketing_consent_field(key, label):
+        return "marketing"
+    blob = f"{key} {label}".strip().lower()
+    terms_markers = (
+        "terms_consent",
+        "terms and conditions",
+        "privacy statement",
+        "privacy policy",
+        "privacy notice",
+        "i certify",
+        "i acknowledge",
+        "disclaimer",
+        "applicant declaration",
+    )
+    if any(marker in blob for marker in terms_markers):
+        return "terms"
+    return "other"

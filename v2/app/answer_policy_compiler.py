@@ -15,6 +15,7 @@ from typing import Any
 
 import yaml
 
+from app.answer_vault import is_marketing_consent_field
 from app.question_catalog import normalize_text
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,11 @@ class MasterAnswerPolicy:
         if not normalized:
             return None, 0.0
 
+        if is_marketing_consent_field(question_text, question_text):
+            marketing = self.items_by_key.get("marketing_consent")
+            if marketing is not None:
+                return marketing, 100.0
+
         best_item: PolicyQuestionItem | None = None
         best_score = 0.0
 
@@ -118,7 +124,7 @@ def _compile_pattern_from_phrase(phrase: str) -> re.Pattern[str]:
     escaped = re.escape(phrase.strip("? .!"))
     # Allow whitespace and punctuation flexibility
     pattern_str = r"\b" + re.sub(r"\\\s+", r"\\s+", escaped) + r"\b"
-    return re.compile(pattern_str, re.I)
+    return re.compile(pattern_str, re.IGNORECASE)
 
 
 def load_master_policy(path: Path | str | None = None, *, force_reload: bool = False) -> MasterAnswerPolicy:
@@ -148,7 +154,7 @@ def load_master_policy(path: Path | str | None = None, *, force_reload: bool = F
         for q in raw_questions:
             try:
                 compiled.append(_compile_pattern_from_phrase(q))
-            except Exception as e:
+            except re.error as e:
                 logger.debug("Failed compiling pattern for %r: %s", q, e)
 
         item = PolicyQuestionItem(
