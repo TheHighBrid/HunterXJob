@@ -20,13 +20,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Callable, Coroutine
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Callable, Coroutine
+from typing import Any
 
 from app.captcha_bridge import detect_captcha, is_captcha_challenge_visible
-from app.models import Application, Job, ReviewTask
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +106,7 @@ async def show_intervention_guidance(page: Any, message: str) -> None:
     """Display an unobtrusive banner in the browser informing the user of the required action."""
     try:
         await page.evaluate(BANNER_INJECT_JS, message)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - cosmetic banner; any page error must not abort the handoff
         logger.debug("Failed to inject intervention banner: %s", exc)
 
 
@@ -114,7 +114,7 @@ async def remove_intervention_guidance(page: Any) -> None:
     """Remove the guidance banner once intervention is complete."""
     try:
         await page.evaluate(BANNER_REMOVE_JS)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - cosmetic banner; any page error must not abort the handoff
         logger.debug("Failed to remove intervention banner: %s", exc)
 
 
@@ -159,7 +159,7 @@ async def wait_for_intervention(
                             message="Custom condition satisfied successfully.",
                             completed_at=datetime.now(UTC).isoformat(),
                         )
-                except Exception:
+                except Exception:  # noqa: BLE001, S110 - caller-supplied probe; a failing check keeps waiting # nosec B110
                     pass
 
             # 2. CAPTCHA completion check
@@ -201,7 +201,7 @@ async def wait_for_intervention(
             message="Intervention was cancelled by user or scheduler.",
             completed_at=datetime.now(UTC).isoformat(),
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - any error is reported as InterventionStatus.FAILED, never swallowed
         elapsed = round(time.monotonic() - start_time, 2)
         await remove_intervention_guidance(page)
         return InterventionResult(

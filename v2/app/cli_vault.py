@@ -5,8 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -40,7 +40,7 @@ def _cmd_vault_seed(args: argparse.Namespace) -> int:
     auto_items = [item for item in policy.items_list if item.mode == "auto" and item.answer]
 
     if not args.apply:
-        print(f"=== ANSWER VAULT SEED PREVIEW ===")
+        print("=== ANSWER VAULT SEED PREVIEW ===")
         print(f"Direct user JSON seed records: {len(seed_records)}")
         for rec in seed_records:
             print(f"  [JSON] {rec.get('scope', 'global')}:{rec.get('key')} = {rec.get('value')}")

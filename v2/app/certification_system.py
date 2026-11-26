@@ -10,9 +10,9 @@ import hashlib
 import json
 import logging
 import sqlite3
-import subprocess
+import subprocess  # nosec B404
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -46,15 +46,15 @@ def hash_payload(value: Any) -> str:
 def get_git_commit(cwd: Path | None = None) -> str:
     """Retrieve the current HEAD commit hash."""
     try:
-        res = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
+        res = subprocess.run(  # nosec B603 B607
+            ["git", "rev-parse", "HEAD"],  # noqa: S607 - fixed argv, no shell; git resolved from PATH by design
             cwd=cwd or Path(__file__).parent.parent,
             capture_output=True,
             text=True,
             check=True,
         )
         return res.stdout.strip()
-    except Exception:
+    except Exception:  # noqa: BLE001 - provenance is best-effort; missing git reports "unknown"
         return "unknown"
 
 
@@ -133,7 +133,7 @@ class EvidenceLedger:
                     receipt_text = payload.get("receipt", "")
                     receipt_sha = payload.get("sha256", "")
                     event_time = event_row[1] or updated_at
-                except Exception:
+                except Exception:  # noqa: BLE001, S110 - malformed event payload falls back to row fields # nosec B110
                     pass
 
             # If sha256 was not explicitly in payload, compute from receipt_text
@@ -225,7 +225,7 @@ def evaluate_milestones(
         metadata={
             "credited_submissions": len(concrete_records),
             "distinct_employers": len({r.company for r in concrete_records}),
-            "platforms": sorted(list({r.platform for r in concrete_records})),
+            "platforms": sorted({r.platform for r in concrete_records}),
         },
     )
 
@@ -266,9 +266,9 @@ def build_certification_dossier(
     milestones = evaluate_milestones(records)
 
     git_sha = get_git_commit()
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(UTC).isoformat()
 
-    platforms_seen = sorted(list({r.platform for r in records})) if records else ["ashby", "greenhouse"]
+    platforms_seen = sorted({r.platform for r in records}) if records else ["ashby", "greenhouse"]
 
     evidence_table = [
         {
