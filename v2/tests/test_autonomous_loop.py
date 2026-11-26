@@ -1,32 +1,26 @@
-import hashlib
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import sessionmaker
+from starlette.testclient import TestClient
+
 from app.autonomous_loop import (
     AutonomousConfig,
     AutonomousRunner,
 )
-from app.captcha_bridge import MockCaptchaSolver
 from app.config import Settings
 from app.db import Base
 from app.flags import set_flag
 from app.form_engine import ControlType, FormControl
 from app.greenhouse_form import RealForm
 from app.models import (
-    Application,
     Job,
     PipelineEvent,
     PipelineStage,
-    ProfileFact,
-    ReviewTask,
 )
 from app.submission_engine import SubmissionResult
-import improvement_kernel.storage.models  # noqa: F401
 from improvement_kernel.storage.models import AgentVersion
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session, sessionmaker
-from starlette.testclient import TestClient
 
 
 @pytest.fixture
@@ -230,7 +224,6 @@ def test_autonomous_dedup_blocks_duplicate(test_db, tmp_path, candidate_profile)
 
 def test_autonomous_live_submission_flow(test_db, tmp_path, candidate_profile, monkeypatch):
     from unittest.mock import AsyncMock
-    from app.submission_engine import SubmissionResult
 
     html = """
     <!DOCTYPE html>
@@ -311,12 +304,13 @@ def test_autonomous_live_submission_flow(test_db, tmp_path, candidate_profile, m
 
 
 def test_api_autonomous_endpoints(monkeypatch, tmp_path):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
     from app import main
     from app.config import Settings, get_settings
     from app.db import Base
     from app.main import app, get_db
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
 
     KEY = "k" * 40
     settings = Settings(api_key=KEY, database_file=str(tmp_path / "test.db"))
@@ -550,7 +544,7 @@ def test_api_autonomous_run_respects_live_and_headed_query_params(monkeypatch, t
         assert captured_configs[-1].allow_live_submission is False
         assert captured_configs[-1].headless is False
 
-        # 2. Unlock locally -> ?live=false forces dry-run; omitted defaults to live=True
+        # 2. Unlock locally -> ?live=false forces dry-run; omitted is also a dry run; only live=true is live
         settings.allow_live_submission = True
         with Session() as s:
             set_flag(s, "allow_live_submission", True)
@@ -561,6 +555,11 @@ def test_api_autonomous_run_respects_live_and_headed_query_params(monkeypatch, t
         assert captured_configs[-1].headless is True
 
         resp = client.post("/api/autonomous/run", headers={"X-API-Key": KEY})
+        assert resp.status_code == 200
+        assert captured_configs[-1].allow_live_submission is False
+        assert captured_configs[-1].headless is True
+
+        resp = client.post("/api/autonomous/run?live=true", headers={"X-API-Key": KEY})
         assert resp.status_code == 200
         assert captured_configs[-1].allow_live_submission is True
         assert captured_configs[-1].headless is True
