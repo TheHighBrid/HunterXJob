@@ -27,8 +27,10 @@ def test_rehearsal_passes_with_screenshot_review_ledger_row_and_get_only_traffic
     assert Path(shot["path"]).is_file() and len(shot["sha256"]) == 64
     rows = report["run"]["checks"]["evidence_persisted_in_ledger"]["detail"]["rows"]
     assert [row["kind"] for row in rows] == ["dry_run_review"]
+    # question_64283538 is the posting's single-option "Yes" acknowledgement, auto-resolved as consent.
     assert report["field_mapping"]["planned"] == {"first_name": "Test", "last_name": "Applicant",
-                                                  "email": "test@example.com", "phone": "555-0100"}
+                                                  "email": "test@example.com", "phone": "555-0100",
+                                                  "question_64283538": "Yes"}
     log = report["run"]["fixture_server_log"]
     assert log and all(entry["method"] == "GET" for entry in log)
     # Re-evaluating from the saved observations gives the same verdict with no browser and no network.

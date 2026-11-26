@@ -131,7 +131,6 @@ def profile_answers(profile: VerifiedProfile) -> dict[str, Any]:
     answers.setdefault("disclaimer_and_consent", "Yes")
     answers.setdefault("agreement_consent", "Yes")
     answers.setdefault("general_consent", "Yes")
-    answers.setdefault("salary_expectation", "65,000")
     answers.setdefault("prior_employment", "No")
     answers.setdefault("prior_application", "No")
     answers.setdefault("prior_interview", "No")
@@ -139,7 +138,6 @@ def profile_answers(profile: VerifiedProfile) -> dict[str, Any]:
     answers.setdefault("time_zone", "Eastern Time (US & Canada)")
     answers.setdefault("language_english", "Fluent / Native")
     answers.setdefault("language_french", "Bilingual / Professional working proficiency (Canadian French)")
-    answers.setdefault("financial_experience", "Yes - 9+ years in banking, fraud prevention, and collections")
     for index, fact in enumerate(jobs[:10]):
         answers.update(_history("employment", index, fact.data, {"company": "employer", "title": "title"}))
         answers[f"employment_{index}_current"] = bool(fact.data.get("current"))
