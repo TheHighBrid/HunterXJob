@@ -158,14 +158,28 @@ _TYPES = {
     "SocialLink": ControlType.TEXT,
     "Url": ControlType.TEXT,
 }
-# Field path (system or common custom path) -> canonical vault key.
-_PATH_KEYS = {
+#: Ashby system field path -> canonical profile key. Only these exact ``_systemfield_*`` paths
+#: alias; any other system path (e.g. ``_systemfield_recording_consent``) fails closed to review.
+ASHBY_SYSTEM_FIELD_ALIASES = {
     "_systemfield_name": "full_name",
+    "_systemfield_full_name": "full_name",
+    "_systemfield_first_name": "first_name",
+    "_systemfield_last_name": "last_name",
+    "_systemfield_preferred_name": "preferred_name",
     "_systemfield_email": "email",
     "_systemfield_phone": "phone",
     "_systemfield_resume": "resume",
-    "_systemfield_location": "location",
     "_systemfield_cover_letter": "cover_letter",
+    "_systemfield_location": "location",
+    "_systemfield_linkedin": "linkedin_url",
+    "_systemfield_github": "github_url",
+    "_systemfield_website": "website_url",
+    "_systemfield_portfolio": "website_url",
+    "_systemfield_twitter": "twitter_url",
+}
+# Field path (system alias or common custom path employers reuse) -> canonical vault key.
+_PATH_KEYS = {
+    **ASHBY_SYSTEM_FIELD_ALIASES,
     "currentcompany": "current_company",
     "currentlocation": "location",
     "phone": "phone",
@@ -175,6 +189,46 @@ _PATH_KEYS = {
     "twitter": "twitter_url",
     "additionalinformation": "additional_information",
 }
+_SYSTEM_PREFIX = "_systemfield_"
+_EEOC_PREFIX = "_systemfield_eeoc"
+# Exact (normalized) titles Ashby renders for its system fields when the path is a UUID.
+# Exact matches only, so "Company name" or "Reference name" never alias to the candidate's name.
+_SYSTEM_TITLE_ALIASES = {
+    "name": ("full_name", frozenset({"String"})),
+    "full name": ("full_name", frozenset({"String"})),
+    "first name": ("first_name", frozenset({"String"})),
+    "last name": ("last_name", frozenset({"String"})),
+    "phone": ("phone", frozenset({"Phone", "String"})),
+    "phone number": ("phone", frozenset({"Phone", "String"})),
+    "x": ("twitter_url", frozenset({"String", "SocialLink", "Url"})),
+    "x twitter": ("twitter_url", frozenset({"String", "SocialLink", "Url"})),
+    "x formerly twitter": ("twitter_url", frozenset({"String", "SocialLink", "Url"})),
+    "twitter x": ("twitter_url", frozenset({"String", "SocialLink", "Url"})),
+}
+
+
+def _normalized_title(title: str) -> str:
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", (title or "").casefold()).split())
+
+
+def ashby_system_field_key(path: str, title: str = "", raw_type: str = "") -> str | None:
+    """Canonical profile key for an Ashby system field, or None when it is not one.
+
+    ``_systemfield_*`` paths resolve only through :data:`ASHBY_SYSTEM_FIELD_ALIASES`; an unknown
+    system path returns None regardless of its title. Other paths resolve by a known custom path
+    or an exact system-field title whose Ashby type is compatible.
+    """
+    lowered = (path or "").strip().lower()
+    if lowered.startswith(_SYSTEM_PREFIX):
+        return ASHBY_SYSTEM_FIELD_ALIASES.get(lowered)
+    if lowered in _PATH_KEYS:
+        return _PATH_KEYS[lowered]
+    alias = _SYSTEM_TITLE_ALIASES.get(_normalized_title(title))
+    if alias and raw_type in alias[1]:
+        return alias[0]
+    return None
+
+
 _TYPE_KEYS = {"Email": "email", "Phone": "phone"}
 _VOLUNTARY_RE = re.compile(r"equal employment|eeo|self.?identif|demographic|voluntary", re.IGNORECASE)
 
@@ -201,9 +255,11 @@ def _file_key(title: str) -> str | None:
 def _canonical(path: str, raw_type: str, title: str, *, voluntary: bool, job_location: str) -> str | None:
     if voluntary:
         return demographic_key(title)
-    known = _PATH_KEYS.get(path.lower())
+    known = ashby_system_field_key(path, title, raw_type)
     if known:
         return known
+    if path.lower().startswith(_SYSTEM_PREFIX):
+        return None
     if raw_type in _TYPE_KEYS:
         return _TYPE_KEYS[raw_type]
     if raw_type == "File":
@@ -233,7 +289,7 @@ def _options(raw_type: str, data: dict[str, Any]) -> tuple[list[str], dict[str, 
 def _section(path: str, section_title: str, survey: bool) -> str:
     if survey:
         return "demographic"
-    if path.startswith("_systemfield_eeoc") or _VOLUNTARY_RE.search(section_title):
+    if path.lower().startswith(_EEOC_PREFIX) or _VOLUNTARY_RE.search(section_title):
         return "eeoc"
     return "application"
 
