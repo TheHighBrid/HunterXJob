@@ -66,8 +66,9 @@ def test_single_keyword_synonyms_always_expand():
 
 @pytest.mark.parametrize("index", range(len(FRAUD_SEARCH_POSTINGS)))
 def test_broad_preset_selects_all_fraud_search_postings(index: int):
+    # Role-family selection only: onsite elsewhere in Canada is opted in so location never masks it.
     _family, job = FRAUD_SEARCH_POSTINGS[index]
-    report = evaluate_job(job, _ctx("broad"))
+    report = evaluate_job(job, _ctx("broad", allow_onsite_canada=True))
     assert report.decision is Decision.SHORTLIST, f"{job.title}: {report.reason} {report.review_flags}"
 
 
@@ -89,12 +90,26 @@ def test_core_preset_keeps_only_core_fraud_roles(index: int):
         assert report.vetoes and report.vetoes[0].startswith("role_family_")
 
 
-def test_toronto_onsite_allowed_in_broad_only():
+@pytest.mark.parametrize("preset", ["broad", "core"])
+def test_toronto_onsite_rejected_by_default_in_every_preset(preset: str):
+    # Rest of Canada is remote-only unless the user explicitly opts in.
     job = _job("Fraud Analyst", location="Toronto, Ontario", remote=False)
-    assert evaluate_job(job, _ctx("broad")).decision is Decision.SHORTLIST
-    core = evaluate_job(job, _ctx("core"))
-    assert core.decision is Decision.REJECT
-    assert core.vetoes == ("non_remote_outside_ottawa",)
+    report = evaluate_job(job, _ctx(preset))
+    assert report.decision is Decision.REJECT
+    assert report.vetoes == ("non_remote_outside_ottawa",)
+
+
+def test_toronto_onsite_only_with_explicit_opt_in():
+    job = _job("Fraud Analyst", location="Toronto, Ontario", remote=False)
+    assert evaluate_job(job, _ctx("broad", allow_onsite_canada=True)).decision is Decision.SHORTLIST
+
+
+@pytest.mark.parametrize("preset", ["broad", "core"])
+def test_ottawa_gatineau_onsite_and_hybrid_allowed(preset: str):
+    for location in ("Ottawa, ON", "Gatineau, QC"):
+        report = evaluate_job(_job("Fraud Analyst", location=location, remote=False), _ctx(preset))
+        assert "non_remote_outside_ottawa" not in report.vetoes, location
+        assert report.decision is Decision.SHORTLIST, f"{location}: {report.reason}"
 
 
 @pytest.mark.parametrize("preset", ["broad", "core"])
@@ -256,18 +271,20 @@ def test_explicit_city_target_uses_word_boundaries_and_canada_target_scope():
     assert rep_toronto_core.decision is Decision.REJECT
     assert rep_toronto_core.vetoes == ("non_remote_outside_ottawa",)
 
-    # Ottawa-only target_locations must not allow Toronto onsite even under broad.
+    # Ottawa-only target_locations must not allow Toronto onsite even with the onsite opt-in.
     ctx_ottawa_only = DecisionContext(
         target_locations=("Ottawa",),
         target_keywords=("fraud",),
-        policy=targeting_policy("broad"),
+        policy=targeting_policy("broad", allow_onsite_canada=True),
     )
     rep_ottawa_only = evaluate_job(_job("Fraud Analyst", location="Toronto, Ontario", remote=False), ctx_ottawa_only)
     assert rep_ottawa_only.decision is Decision.REJECT
     assert rep_ottawa_only.vetoes == ("location_not_eligible",)
 
     # When "Canada" is in target_locations and location explicitly includes Canada, location_fit stays 5.0.
-    rep_broad_ca = evaluate_job(_job("Fraud Analyst", location="Toronto, Ontario, Canada", remote=False), _ctx("broad"))
+    rep_broad_ca = evaluate_job(
+        _job("Fraud Analyst", location="Toronto, Ontario, Canada", remote=False), _ctx("broad", allow_onsite_canada=True)
+    )
     assert rep_broad_ca.decision is Decision.SHORTLIST
     loc_dim = next(d for d in rep_broad_ca.dimensions if d.name == "location_fit")
     assert loc_dim.score == 5.0

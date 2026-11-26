@@ -38,7 +38,9 @@ class TargetingPolicy:
     allow_data_science: bool = True
     allow_sales_account_mgmt: bool = True
     allow_adjacent_investigations: bool = True
-    allow_onsite_canada: bool = True
+    # Mohamed's rule: in-person only in Ottawa-Gatineau; rest of Canada is remote-only.
+    # Onsite elsewhere in Canada is an explicit opt-in override, never a preset default.
+    allow_onsite_canada: bool = False
 
 
 TARGETING_PRESETS: dict[str, TargetingPolicy] = {

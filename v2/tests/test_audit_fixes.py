@@ -109,9 +109,11 @@ def test_job_eligibility_vetoes_hybrid_outside_ottawa():
     assert rep_toronto.decision is Decision.REJECT
     assert "non_remote_outside_ottawa" in rep_toronto.vetoes
 
-    # 2b. The default "broad" preset allows in-person work elsewhere in Canada, never abroad.
+    # 2b. The default "broad" preset keeps the rest of Canada remote-only; onsite there is opt-in only.
     broad_ctx = replace(ctx, policy=targeting_policy("broad"))
-    assert "non_remote_outside_ottawa" not in evaluate_job(toronto_hybrid, broad_ctx).vetoes
+    assert "non_remote_outside_ottawa" in evaluate_job(toronto_hybrid, broad_ctx).vetoes
+    opt_in_ctx = replace(ctx, policy=targeting_policy("broad", allow_onsite_canada=True))
+    assert "non_remote_outside_ottawa" not in evaluate_job(toronto_hybrid, opt_in_ctx).vetoes
     assert evaluate_job(cohere_uk, broad_ctx).decision is Decision.REJECT
 
     # 3. Ottawa in-person role -> ACCEPT (not vetoed by location)
