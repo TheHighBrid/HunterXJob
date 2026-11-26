@@ -127,12 +127,12 @@ _DEDUP_SOURCES = (
     PipelineStage.scored, PipelineStage.shortlisted, PipelineStage.approved, PipelineStage.materials_generated,
     PipelineStage.materials_reviewed, PipelineStage.ready_to_apply, PipelineStage.needs_review, PipelineStage.failed,
 )
-_CLOSE_SOURCES = (*_DEDUP_SOURCES, PipelineStage.validated, PipelineStage.duplicate)
+_CLOSE_SOURCES = (*_DEDUP_SOURCES, PipelineStage.validated, PipelineStage.duplicate, PipelineStage.submission_uncertain)
 
 for _stage in _DEDUP_SOURCES:
     ALLOWED[_stage.value] = ALLOWED[_stage.value] | {PipelineStage.duplicate.value}
 for _stage in _CLOSE_SOURCES:
-    ALLOWED[_stage.value] = ALLOWED.get(_stage.value, frozenset()) | {PipelineStage.closed.value}
+    ALLOWED[_stage.value] = ALLOWED.get(_stage.value, frozenset()) | {PipelineStage.closed.value, PipelineStage.withdrawn.value}
 # The owner can unlink a duplicate (re-gated from scratch); a closed posting
 # that a later definitive check finds live again is reopened the same way.
 ALLOWED[PipelineStage.duplicate.value] = ALLOWED[PipelineStage.duplicate.value] | {PipelineStage.discovered.value}

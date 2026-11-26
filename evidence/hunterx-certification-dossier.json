@@ -24,348 +24,36 @@
     }
   },
   "evidence_ledger": {
-    "ledger_digest": "0789931b5792645c20e910bcb8b5e24a22c0bc163684319193e4bb0d7fdf9335",
+    "ledger_digest": "3deb42158d34bc75b5f96e5227d69f5502e5d5f112f78cd17d4bc25e834a98c0",
     "records": [
       {
-        "company": "cohere",
-        "evidence_snapshot_hash": "9919cd3a646242ee9ea5c48f1783beb01811894877d1e20d4bb5804c21a6b7a2",
-        "is_concrete_confirmation": true,
-        "job_id": "4407de6b-a57e-4d94-a4f8-4621d49622e5",
-        "platform": "ashby",
-        "receipt_sha256": "264d446359157e16edfc5c18eb4dac6ec9ebb8cd83def07521945b216c5d7b94",
-        "receipt_snippet": "ce.  Overview Application Success  Your application has been submitted! Thank you for your interest in a career growth o",
-        "submitted_at": "2026-10-22 23:58:02.350185",
-        "title": "Forward Deployed Engineer, Agentic Platform",
-        "url": "https://jobs.ashbyhq.com/cohere/b0bcef37-1d20-414f-aade-c54942d63df9"
-      },
-      {
-        "company": "cohere",
-        "evidence_snapshot_hash": "4f2535ccada131a775d6dc1185d734c55af91608d9c78f92a18137926df3bbab",
-        "is_concrete_confirmation": true,
-        "job_id": "f48554db-074f-44c0-acef-749e4863c21f",
-        "platform": "ashby",
-        "receipt_sha256": "e082a45820065164acd08a8c8298a4ee59a41264529218269ec3b24b279782a2",
-        "receipt_snippet": "ce.  Overview Application Success  Your application has been submitted! Thank you for your interest in a career growth o",
-        "submitted_at": "2026-10-23 15:44:01.849399",
-        "title": "Technical Program Manager, AI Delivery",
-        "url": "https://jobs.ashbyhq.com/cohere/41cb2a12-e33a-4368-a9f8-0ae0d19c023e"
-      },
-      {
-        "company": "wealthsimple",
-        "evidence_snapshot_hash": "8e661d68d18a61c79dc98cf920190334dfb6d3c98c68b7534a2cfc2dfab8ddc0",
-        "is_concrete_confirmation": true,
-        "job_id": "6e0c0bd5-6d33-45d3-a2f9-b4805637cab2",
-        "platform": "ashby",
-        "receipt_sha256": "dbaec69f32d764475d9e772d4e3949840933e0dd952790598301e7fd79e368c0",
-        "receipt_snippet": "posting.  Overview Application Success  Thanks for applying to Wealthsimple \ud83d\ude4c  Powered by\u00a0  Privacy PolicySecurityVulner",
-        "submitted_at": "2026-10-23 12:23:14.613025",
-        "title": "Senior Specialist, Incident Response",
-        "url": "https://jobs.ashbyhq.com/wealthsimple/108e4513-0e74-4e4c-af3c-8e66e4222db8"
-      },
-      {
-        "company": "wealthsimple",
-        "evidence_snapshot_hash": "df8c89a3448b4882c03b387ab2c54020f921811ada2861d804883ceb43e04bbf",
-        "is_concrete_confirmation": true,
-        "job_id": "8acfeb2a-a82e-4063-b573-a2d07ac4348e",
-        "platform": "ashby",
-        "receipt_sha256": "3bab1d56f8049f87a9f4ba714a1756404a56252fb48574f34867f701853c1742",
-        "receipt_snippet": "company.  Overview Application Success  Thanks for applying to Wealthsimple \ud83d\ude4c  Powered by\u00a0  Privacy PolicySecurityVulner",
-        "submitted_at": "2026-10-22 23:54:29.444365",
-        "title": "Team Lead, Disputes",
-        "url": "https://jobs.ashbyhq.com/wealthsimple/e089a81a-9409-4a19-87c8-36f3c0182aa8"
-      },
-      {
-        "company": "wealthsimple",
-        "evidence_snapshot_hash": "c41307f7d4f13dec53474835732c333077c3d29b67382bf21622f698ac80a3c5",
-        "is_concrete_confirmation": true,
-        "job_id": "ecdec848-090c-4755-bc4c-5af1a7ff33dd",
-        "platform": "ashby",
-        "receipt_sha256": "65641aaf51cd287622c6319ac7a65448a8ddcc3e51535f8097cc236fe7c0eafe",
-        "receipt_snippet": "posting.  Overview Application Success  Thanks for applying to Wealthsimple \ud83d\ude4c  Powered by\u00a0  Privacy PolicySecurityVulner",
-        "submitted_at": "2026-10-22 23:59:05.047074",
-        "title": "Associate, Fraud Investigations Cards and Disputes (Fixed Term Contract)",
-        "url": "https://jobs.ashbyhq.com/wealthsimple/4aab1824-583c-4e39-b210-eb766bd49929"
-      },
-      {
-        "company": "1password",
-        "evidence_snapshot_hash": "82b05f9b9e5f311e8750f95ef1a28c1f9df717aa4c8c3dd599b158fb1329f6eb",
-        "is_concrete_confirmation": true,
-        "job_id": "c19dd8e7-d905-4167-a35e-ff7aee65f178",
-        "platform": "ashby",
-        "receipt_sha256": "f278fd054e4d03590dd15ae67b28fe79f5e973c363ecd5a72c7ddf17eae07388",
-        "receipt_snippet": "ank you for your interest in 1Password. We have received your application and are excited that you\u2019ve found your way to",
-        "submitted_at": "2026-10-23 16:19:02.240481",
-        "title": "Manager, Security Incident Response",
-        "url": "https://jobs.ashbyhq.com/1password/423fd747-cf5d-46f6-a439-134d3bef3a5c"
-      },
-      {
-        "company": "jobber",
-        "evidence_snapshot_hash": "9cc8e3353fd7b502a8321d495cdac667490c2b8bdbaacbd56347b27fa312edf0",
-        "is_concrete_confirmation": true,
-        "job_id": "c7c35a74-2e74-4247-887b-136ba09f8ca3",
-        "platform": "ashby",
-        "receipt_sha256": "61e00901e14c6664f674a54177ef944e6cd5bf695fb9910095e2b57d37e2e676",
-        "receipt_snippet": "Success Your application was successfully submitted. We'll contact you if there are next steps.",
-        "submitted_at": "2026-10-23 12:18:04.276755",
-        "title": "Manager, Credit Risk",
-        "url": "https://jobs.ashbyhq.com/jobber/e10af44f-1a6f-4c4d-a63e-d5de27f9a458"
-      },
-      {
         "company": "float",
-        "evidence_snapshot_hash": "373c10b3a534e3db4d4ebf87ba2a3d23a97ad1a48b00c77b850154c35c0cc4d1",
+        "evidence_snapshot_hash": "eac283cd147684154eea88a50bf11f7baaa118372e511c6375e30dfc2be17719",
         "is_concrete_confirmation": true,
-        "job_id": "cbbda9fc-6338-4d6d-bb7f-36e7b07f6718",
+        "job_id": "86175600-90a8-433f-8450-d2bc9eb58b43",
         "platform": "ashby",
-        "receipt_sha256": "a56d4bee197ed1eb4ed2fe053bd9b4f7248b4c8feca3e2112e5684b50fffc692",
+        "receipt_sha256": "0880558bb16093cfe056f41a30cfe5644aa91229bbbafc25830ecbf1af39ae41",
         "receipt_snippet": "plication Success  Your application was successfully submitted!  Powered by\u00a0  Privacy PolicySecurityVulnerability Disclo",
-        "submitted_at": "2026-10-23 00:00:54.992764",
-        "title": "Product Operations Manager, Cards & Spend Management",
-        "url": "https://jobs.ashbyhq.com/float/a0438a03-2952-4e38-9c72-ee132d344437"
-      },
-      {
-        "company": "wealthsimple",
-        "evidence_snapshot_hash": "09ef3d3f51a5db208a39f07af9f97cfecf4492b31c9c45b47fe0bf2205d62143",
-        "is_concrete_confirmation": true,
-        "job_id": "2a242807-ca13-4bfa-91be-bdcaa0286e9a",
-        "platform": "ashby",
-        "receipt_sha256": "1eb3e3f72dc20e43fc849b9e49b986d7d9cf8d4c3cd47e70599e320f1ec14a79",
-        "receipt_snippet": "company.  Overview Application Success  Thanks for applying to Wealthsimple \ud83d\ude4c  Powered by\u00a0  Privacy PolicySecurityVulner",
-        "submitted_at": "2026-10-27 03:47:55.814524",
-        "title": "(Bilingual) Senior Advisor / Lead Advisor, Wealth Management Service (Quebec Clients)",
-        "url": "https://jobs.ashbyhq.com/wealthsimple/d6c5fce8-ce92-40d6-b028-07c91bb4eb03"
-      },
-      {
-        "company": "wealthsimple",
-        "evidence_snapshot_hash": "cc0ec1976008be315b1311d1964400a09672bc1f1e7efe9773a50630a5884829",
-        "is_concrete_confirmation": true,
-        "job_id": "afd9906d-c3a1-445f-8897-04d4967a678d",
-        "platform": "ashby",
-        "receipt_sha256": "828fc300079fe8481908d535b106c971621d3db0e6fb3d637dabe31a5579674f",
-        "receipt_snippet": "company.  Overview Application Success  Thanks for applying to Wealthsimple \ud83d\ude4c  Powered by\u00a0  Privacy PolicySecurityVulner",
-        "submitted_at": "2026-10-27 03:54:13.600164",
-        "title": "Manager, Internal Controls",
-        "url": "https://jobs.ashbyhq.com/wealthsimple/60cebe90-7713-4c80-9f4a-bc3d8fd927ac"
-      },
-      {
-        "company": "wealthsimple",
-        "evidence_snapshot_hash": "4a4c0f592376dfeed1dea482b901a6db8132798796b41c97720513ba243bafef",
-        "is_concrete_confirmation": true,
-        "job_id": "615007cb-fbb3-41e5-acb8-257a43d735a5",
-        "platform": "ashby",
-        "receipt_sha256": "8e4e841ce907491919a1a05be519a98b5f55cbe2b27f1beb3caade549b5e7c55",
-        "receipt_snippet": "company.  Overview Application Success  Thanks for applying to Wealthsimple \ud83d\ude4c  Powered by\u00a0  Privacy PolicySecurityVulner",
-        "submitted_at": "2026-10-28 00:11:46.708416",
-        "title": "Senior Manager, Client Tax",
-        "url": "https://jobs.ashbyhq.com/wealthsimple/3c1c3668-e3bf-4b6b-8394-db47dac6d08e"
-      },
-      {
-        "company": "cohere",
-        "evidence_snapshot_hash": "10569f27fc293b608288de3d3510ab4b6b1a68f57268f6ccad859488c827fd33",
-        "is_concrete_confirmation": true,
-        "job_id": "66d7fe5b-b09d-4b97-a0ba-d26c7f128db3",
-        "platform": "ashby",
-        "receipt_sha256": "75add89c4e93870c595b4dcaa536d8d5191441fe530da670f48824062579426a",
-        "receipt_snippet": "ce.  Overview Application Success  Your application has been submitted! Thank you for your interest in a career growth o",
-        "submitted_at": "2026-10-28 00:12:23.217689",
-        "title": "Office Manager & Security Coordinator",
-        "url": "https://jobs.ashbyhq.com/cohere/65c1f098-97b0-4478-81a6-6f8c9b8c5ef0"
-      },
-      {
-        "company": "1password",
-        "evidence_snapshot_hash": "f909add1b548b591630ed406909a757853f8e427049c9b93bda0864a346000bb",
-        "is_concrete_confirmation": true,
-        "job_id": "0b67d538-2d0b-436a-b695-0d49538aa2e5",
-        "platform": "ashby",
-        "receipt_sha256": "9bc93bc5df5b1c4bb575a7182c2ffda3b9baa50bde9184e0595ca1e6670c3660",
-        "receipt_snippet": "ank you for your interest in 1Password. We have received your application and are excited that you\u2019ve found your way to",
-        "submitted_at": "2026-10-28 00:14:20.343390",
-        "title": "Senior Staff Technical Go-to-Market (GTM) Product Marketing Manager, Portfolio and Expansion",
-        "url": "https://jobs.ashbyhq.com/1password/f56a7052-4fc3-4cc9-adf1-145e3ff83026"
-      },
-      {
-        "company": "wealthsimple",
-        "evidence_snapshot_hash": "77bd9240fc258aafc22f790e276bd9cdebe9f65aadcccd4b5fbcc86a64b85f3d",
-        "is_concrete_confirmation": true,
-        "job_id": "935d863e-4ed6-44f6-a497-574ffeffe7ef",
-        "platform": "ashby",
-        "receipt_sha256": "e57197b77833c36889e28d18fbc4eb02c76b3581a9f998ffa01f9045bef89a90",
-        "receipt_snippet": "company.  Overview Application Success  Thanks for applying to Wealthsimple \ud83d\ude4c  Powered by\u00a0  Privacy PolicySecurityVulner",
-        "submitted_at": "2026-10-28 12:43:17.598319",
-        "title": "Associate Treasury Reporting & Analytics",
-        "url": "https://jobs.ashbyhq.com/wealthsimple/95d17671-6a4a-4543-848d-2bfe1f3e16e0"
-      },
-      {
-        "company": "cohere",
-        "evidence_snapshot_hash": "12044f5000ffeb5ff63311834511de6580d9618fdb898bb626627447d16f24cb",
-        "is_concrete_confirmation": true,
-        "job_id": "727a2ca3-ebf3-4f51-92b8-815771ca22df",
-        "platform": "ashby",
-        "receipt_sha256": "b2848372edb29c89f9665e9f8ce8acbdae0afdab17f927f775d136ea5de0a8dd",
-        "receipt_snippet": "ent  Overview Application Success  Your application has been submitted! Thank you for your interest in a career growth o",
-        "submitted_at": "2026-10-28 12:43:51.447574",
-        "title": "Technical Program Manager, AI Delivery for Public Sector & Defence, UK",
-        "url": "https://jobs.ashbyhq.com/cohere/10306789-4fd5-4f1d-90aa-8132c2df2848"
-      },
-      {
-        "company": "1password",
-        "evidence_snapshot_hash": "0a96b76eb4c28bb216a1dc1fac68948cea44fe529bbd2df0464490cc88c0b0f3",
-        "is_concrete_confirmation": true,
-        "job_id": "d5ddcc7b-c705-4eb8-9728-b33e947514fb",
-        "platform": "ashby",
-        "receipt_sha256": "787a6eb963b76aa02dc1ee729ac6f2d33bd2b25d0fd053c1c1e5129967d8de0f",
-        "receipt_snippet": "ank you for your interest in 1Password. We have received your application and are excited that you\u2019ve found your way to",
-        "submitted_at": "2026-10-28 12:44:38.070652",
-        "title": "Senior Manager, Strategic Operations",
-        "url": "https://jobs.ashbyhq.com/1password/59c03a18-a50d-4ef0-adf5-a0e132024784"
-      },
-      {
-        "company": "wealthsimple",
-        "evidence_snapshot_hash": "90a1dfb80040e825e8fbb3d45b6977ecf9c75429edf610ba8dcd36b2c1159e22",
-        "is_concrete_confirmation": true,
-        "job_id": "e3a2c381-4b23-4be2-bb18-e96feebc514e",
-        "platform": "ashby",
-        "receipt_sha256": "198c06f71d93d1a504f39cdc9555c101f496c68e622d7ef241823620f47e077f",
-        "receipt_snippet": "company.  Overview Application Success  Thanks for applying to Wealthsimple \ud83d\ude4c  Powered by\u00a0  Privacy PolicySecurityVulner",
-        "submitted_at": "2026-10-28 19:56:19.266295",
-        "title": "Senior Lead, Credit Card Growth",
-        "url": "https://jobs.ashbyhq.com/wealthsimple/665ed4e7-72b4-4bb7-8c59-95cdfd381d69"
-      },
-      {
-        "company": "1password",
-        "evidence_snapshot_hash": "e2a356f11c3648363535f58fe7b863c2610b33035a2216fdef68cb86055b1755",
-        "is_concrete_confirmation": true,
-        "job_id": "3e55a63d-0720-43f3-9181-087176e70d68",
-        "platform": "ashby",
-        "receipt_sha256": "a716bc117c094a02befd5cf2a8e3ea7b18f3162a28224c6c3a1758619216e73c",
-        "receipt_snippet": "ank you for your interest in 1Password. We have received your application and are excited that you\u2019ve found your way to",
-        "submitted_at": "2026-10-28 19:58:17.979367",
-        "title": "Sales Engineer (French) SMB",
-        "url": "https://jobs.ashbyhq.com/1password/4ff46f84-a5c9-4232-84b6-1dfa8e737148"
-      },
-      {
-        "company": "cohere",
-        "evidence_snapshot_hash": "ba0bb21982d4626898569ccf5b92f466ec052d7697804406c5e710ab3180a565",
-        "is_concrete_confirmation": true,
-        "job_id": "bf559a3c-c621-48bb-aefc-092a887dfe03",
-        "platform": "ashby",
-        "receipt_sha256": "227f9cd847e072bff423fdda3e49ba411b387c6d317c0489262ac9d1a25912ab",
-        "receipt_snippet": "ce.  Overview Application Success  Your application has been submitted! Thank you for your interest in a career growth o",
-        "submitted_at": "2026-10-28 19:58:54.904199",
-        "title": "Member of Technical Staff, North Modelling (Evals)",
-        "url": "https://jobs.ashbyhq.com/cohere/60de50e9-aba7-4a3a-8cdb-955a456749aa"
-      },
-      {
-        "company": "1password",
-        "evidence_snapshot_hash": "8b72a1682f1eaddaee9d5bce624b71616a46c825563ff4151c9004a2c6a3a206",
-        "is_concrete_confirmation": true,
-        "job_id": "5cde4452-a317-4173-88d8-ce809409476f",
-        "platform": "ashby",
-        "receipt_sha256": "55cbf9b34d3d517f96385fc8b68c66cb81f562f616c25803dee5782f0cddc9f0",
-        "receipt_snippet": "ank you for your interest in 1Password. We have received your application and are excited that you\u2019ve found your way to",
-        "submitted_at": "2026-10-28 22:14:25.109554",
-        "title": "Account Executive - Commercial (Mid-Market), San Francisco/Bay Area",
-        "url": "https://jobs.ashbyhq.com/1password/4c385433-be83-4338-ab0b-11e9fae5402a"
-      },
-      {
-        "company": "geotab",
-        "evidence_snapshot_hash": "9e0db708b96baa398bebf0488541b9a4c1168a327060cbfafa6284dbe0eac26d",
-        "is_concrete_confirmation": true,
-        "job_id": "4cf3a890-2790-4d49-a469-4cb697c68173",
-        "platform": "greenhouse",
-        "receipt_sha256": "467cdc8f1c1d648a8a99b20b49e7fae77d2167a8292c082b83cf48e1a09bce21",
-        "receipt_snippet": "Thank you for applying! Thank you for your interest in working with Geotab and submitting your application! We are alway",
-        "submitted_at": "2026-11-05 00:56:26.904934",
-        "title": "Senior Connectivity Partnership Manager",
-        "url": "https://job-boards.greenhouse.io/geotab/jobs/5400143008"
-      },
-      {
-        "company": "d2l",
-        "evidence_snapshot_hash": "9688bd468216916c4f7ace650d2967f5fbd3b5a11789ab6fa5fa7227b4d307d2",
-        "is_concrete_confirmation": true,
-        "job_id": "0fbc5b7c-09cc-4ecc-b527-5c4fa829c00c",
-        "platform": "greenhouse",
-        "receipt_sha256": "c70f0fe9637bceb7916951240ce000356613b300b381df75b62ecdf7cab4146b",
-        "receipt_snippet": "Thank you for applying!  Our awesome D2L Recruitment team will review your application and let you know if we'll be proc",
-        "submitted_at": "2026-11-05 00:54:30.406334",
-        "title": "Product Support Analyst",
-        "url": "https://www.d2l.com/careers/jobs/?job_id=7696232&gh_jid=7696232"
-      },
-      {
-        "company": "float",
-        "evidence_snapshot_hash": "1bbf2f77077179c0bbe787c4dc7a9ebf49d933dd09a4d68a2141f9915a1750cb",
-        "is_concrete_confirmation": true,
-        "job_id": "5e8350b0-e4a1-4eb2-8822-c86df3748975",
-        "platform": "ashby",
-        "receipt_sha256": "d5fd4299e92e8d3a7c6d261b9f3dd03cc72d81365760eb991e3f73af0df7634e",
-        "receipt_snippet": "plication Success  Your application was successfully submitted!  Powered by\u00a0  Privacy PolicySecurityVulnerability Disclo",
-        "submitted_at": "2026-11-01 11:17:24.488694",
-        "title": "Field Marketing Manager",
-        "url": "https://jobs.ashbyhq.com/Float/bb03e751-a491-4ce0-b461-2e5fdbd49863"
-      },
-      {
-        "company": "float",
-        "evidence_snapshot_hash": "553b7db8908ddafa3fb06dae864570f8a73d0521b19f99ce5856b92758aae682",
-        "is_concrete_confirmation": true,
-        "job_id": "a75209f7-b602-48d3-829c-0ee1804f7178",
-        "platform": "ashby",
-        "receipt_sha256": "a063410a2abfa7da75c313a2d90dc24949f81bebf0d484010604c812f8cb4547",
-        "receipt_snippet": "plication Success  Your application was successfully submitted!  Powered by\u00a0  Privacy PolicySecurityVulnerability Disclo",
-        "submitted_at": "2026-11-01 11:22:16.102869",
-        "title": "Revenue Operations Manager, Acquisition",
-        "url": "https://jobs.ashbyhq.com/Float/de901777-3565-4e23-8bf8-84ce935fbccc"
-      },
-      {
-        "company": "float",
-        "evidence_snapshot_hash": "230e8ae78c5c8abf676618fb1a91bf1e797a312a1a7983f36e0d52c0e039bcc8",
-        "is_concrete_confirmation": true,
-        "job_id": "b3dd584d-afc8-4554-a872-c04f2412166f",
-        "platform": "ashby",
-        "receipt_sha256": "9fad143e7879b8e68873affbdc77ab77e42e0e45520639a049ed70fe346294cb",
-        "receipt_snippet": "plication Success  Your application was successfully submitted!  Powered by\u00a0  Privacy PolicySecurityVulnerability Disclo",
-        "submitted_at": "2026-10-22 23:51:11.275994",
-        "title": "Bilingual Operations Associate, Risk",
-        "url": "https://jobs.ashbyhq.com/Float/8083d9e0-3243-4a4d-925a-7d29beb8f9fb"
-      },
-      {
-        "company": "float",
-        "evidence_snapshot_hash": "7c220d03840b7a0c9888fda7bb11c0d16c91c2d247ea937fd9a1eff15195a2fa",
-        "is_concrete_confirmation": true,
-        "job_id": "d6a99b40-5d94-474c-8a9e-f99a552437e0",
-        "platform": "ashby",
-        "receipt_sha256": "8ebee340edaca892e324424aad425452d03729bfddc0d2a9519efde503dfec49",
-        "receipt_snippet": "plication Success  Your application was successfully submitted!  Powered by\u00a0  Privacy PolicySecurityVulnerability Disclo",
-        "submitted_at": "2026-11-01 11:10:32.447481",
+        "submitted_at": "2026-11-16 06:32:40.372854",
         "title": "Bilingual Product Support Associate",
         "url": "https://jobs.ashbyhq.com/Float/3090cf13-2272-4bfe-b8e6-266761a06105"
       },
       {
         "company": "jobber",
-        "evidence_snapshot_hash": "d20fa5aabe916da2f03d877b97afc154eacb2c4cc2b990f81224123f4bc4b929",
+        "evidence_snapshot_hash": "7a9088d2980dba2984799d756e48919b3f592efb2cc9ae8cbbf8113accabf54b",
         "is_concrete_confirmation": true,
-        "job_id": "04bbd449-db33-4436-b315-a115e0133bab",
+        "job_id": "3b7d7f65-198b-4e55-b050-7c8b32b3c0b8",
         "platform": "ashby",
-        "receipt_sha256": "e40b11e8dde3e6c091f751e2da9693e8190953f0c9aef02a61cf93b495c60871",
+        "receipt_sha256": "c182c4dd19d7a8e5f25369321ffb7ccd3da6fafed51cd24086d290658b4bd622",
         "receipt_snippet": "plication Success  Your application was successfully submitted. We'll contact you if there are next steps.  Powered by",
-        "submitted_at": "2026-10-30 17:57:09.264351",
-        "title": "Staff Data Scientist, Applied ML",
-        "url": "https://jobs.ashbyhq.com/jobber/8f77d17e-203e-46c1-b06a-42b7005b94d2"
-      },
-      {
-        "company": "jobber",
-        "evidence_snapshot_hash": "417635ea68389f7a4d0e3bda611b01bf5e5323832a8407d12580f26761d2fa55",
-        "is_concrete_confirmation": true,
-        "job_id": "22f6d78a-2cc6-4070-9d06-dfdb6e428e0b",
-        "platform": "ashby",
-        "receipt_sha256": "ed6586a360e023cebe8ed02dcad9b020f7036f737c6050ddc65dd13b338316c6",
-        "receipt_snippet": "plication Success  Your application was successfully submitted. We'll contact you if there are next steps.  Powered by",
-        "submitted_at": "2026-11-05 00:55:08.738706",
-        "title": "Key Account Manager",
-        "url": "https://jobs.ashbyhq.com/jobber/b05c0398-039e-49e7-ba52-fc0e7f5521ae"
+        "submitted_at": "2026-11-16 06:34:44.878980",
+        "title": "Senior Manager, Credit Risk",
+        "url": "https://jobs.ashbyhq.com/jobber/8150bf28-1658-4a38-b5fc-3e0770966e60"
       }
     ],
-    "total_verified_submissions": 28
+    "total_verified_submissions": 2
   },
-  "generated_at": "2026-11-12T14:21:07.808083+00:00",
+  "generated_at": "2026-11-21T07:46:26.149761+00:00",
   "milestones": {
     "gate1": {
       "blockers": [],
@@ -387,25 +75,26 @@
       "title": "Gate 1: Form Engine & Knowledge Vault Coverage"
     },
     "gate2": {
-      "blockers": [],
+      "blockers": [
+        "minimum_live_submissions_achieved"
+      ],
       "checks": {
         "all_receipts_have_sha256_digests": true,
         "concrete_confirmation_signals_present": true,
-        "minimum_live_submissions_achieved": true,
+        "minimum_live_submissions_achieved": false,
         "multi_employer_coverage_verified": true,
         "zero_false_positive_submissions": true
       },
       "metadata": {
-        "credited_submissions": 28,
-        "distinct_employers": 7,
+        "credited_submissions": 2,
+        "distinct_employers": 2,
         "platforms": [
-          "ashby",
-          "greenhouse"
+          "ashby"
         ]
       },
       "milestone_id": "gate2_supervised_live_submissions",
-      "passed": true,
-      "score": 100.0,
+      "passed": false,
+      "score": 40.0,
       "title": "Gate 2: Supervised Live Submission Pilot"
     },
     "gate3": {
@@ -427,23 +116,25 @@
       "title": "Gate 3: Autonomous Safety Runtime & Circuit Breakers"
     }
   },
-  "overall_certification_status": "CERTIFIED",
+  "overall_certification_status": "IN_PROGRESS",
   "readiness": {
-    "autonomous_scale_ready": true,
+    "autonomous_scale_ready": false,
     "milestone_1_form_engine_ready": true,
-    "milestone_2_live_submissions_certified": true,
+    "milestone_2_live_submissions_certified": false,
     "milestone_3_safety_runtime_certified": true,
-    "promotion_blockers": []
+    "promotion_blockers": [
+      "minimum_live_submissions_achieved"
+    ]
   },
   "repository": "TheHighBrid/HunterXJob",
   "safety_invariants": {
     "allow_real_application_submit": true,
     "captcha_or_mfa_bypass_attempted": false,
-    "credited_real_submissions": 28,
+    "credited_real_submissions": 2,
     "fail_closed_on_unmatched_required_fields": true,
     "false_submitted_records": 0,
     "uncertain_outcomes_credited_as_submitted": 0
   },
   "schema_version": "hunterx-certification-v2",
-  "source_commit": "29f1d87b6925dfe76739c1c055db769b96be3b37"
+  "source_commit": "d69b2e3ed9d29fda060298a7897cd1fba618bbac"
 }

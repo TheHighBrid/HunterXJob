@@ -51,7 +51,7 @@ SUSPECT, CLOSED = "suspect", "closed"
 QUEUED_STAGES = (
     PipelineStage.review, PipelineStage.scored, PipelineStage.shortlisted, PipelineStage.approved,
     PipelineStage.materials_generated, PipelineStage.materials_reviewed, PipelineStage.ready_to_apply,
-    PipelineStage.needs_review, PipelineStage.validated,
+    PipelineStage.needs_review, PipelineStage.validated, PipelineStage.submission_uncertain,
 )
 
 
@@ -285,7 +285,7 @@ def due_jobs(db: Session, now: datetime, limit: int) -> list[Job]:
     query = (
         select(Job)
         .where(Job.stage.in_(stages), or_(Job.liveness_next_check_at.is_(None), Job.liveness_next_check_at <= now))
-        .order_by(Job.liveness_next_check_at.is_(None).desc(), Job.liveness_next_check_at, Job.discovered_at)
+        .order_by((Job.liveness == SUSPECT).desc(), Job.liveness_next_check_at.is_(None).desc(), Job.liveness_next_check_at, Job.discovered_at)
         .limit(max(limit, 0))
     )
     return list(db.execute(query).scalars())

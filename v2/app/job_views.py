@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.dedup import linked_postings
 from app.job_liveness import recent_checks
 from app.material_store import materials_ready
-from app.models import Application, Job, PipelineEvent, ReviewTask, iso_utc
+from app.models import Application, Job, PipelineEvent, PipelineStage, ReviewTask, iso_utc
 from app.review_actions import task_summary
 
 MAX_PAGE = 500
@@ -62,10 +62,15 @@ def list_jobs(
     offset: int = 0,
     stage: str | None = None,
     q: str | None = None,
+    include_archived: bool = False,
 ) -> list[dict[str, Any]]:
     query = select(Job)
     if stage:
         query = query.where(Job.stage == stage)
+    elif not include_archived:
+        query = query.where(
+            Job.stage.notin_([PipelineStage.closed.value, PipelineStage.withdrawn.value])
+        )
     if q:
         needle = f"%{q.strip()}%"
         query = query.where(or_(Job.title.ilike(needle), Job.company.ilike(needle), Job.location.ilike(needle)))
