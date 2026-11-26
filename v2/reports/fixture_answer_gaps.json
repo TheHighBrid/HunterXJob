@@ -1,7 +1,7 @@
 {
   "totals": {
     "review": 27,
-    "skip": 36
+    "skip": 35
   },
   "by_category": [
     {
@@ -41,9 +41,9 @@
     },
     {
       "name": "legal_consent",
-      "total": 3,
+      "total": 2,
       "review": 2,
-      "skip": 1,
+      "skip": 0,
       "required": 2
     },
     {
@@ -117,13 +117,6 @@
       "review": 2,
       "skip": 1,
       "required": 2
-    },
-    {
-      "name": "checkbox",
-      "total": 1,
-      "review": 0,
-      "skip": 1,
-      "required": 0
     }
   ],
   "controls": [
@@ -422,14 +415,6 @@
       "type": "text",
       "required": false,
       "label": "Other website"
-    },
-    {
-      "form": "ats/lever_apply.html",
-      "status": "skip",
-      "category": "legal_consent",
-      "type": "checkbox",
-      "required": false,
-      "label": "consent[marketing]"
     },
     {
       "form": "ats/lever_apply.html",

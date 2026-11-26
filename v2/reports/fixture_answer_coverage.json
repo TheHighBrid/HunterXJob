@@ -31,10 +31,10 @@
       "name": "ats/lever_apply.html",
       "platform": "lever",
       "controls": 23,
-      "fill": 13,
+      "fill": 14,
       "review": 3,
-      "skip": 7,
-      "planned_pct": 56.5
+      "skip": 6,
+      "planned_pct": 60.9
     },
     {
       "name": "ats/ashby_form_advisor.json",
@@ -58,9 +58,9 @@
   "totals": {
     "forms": 6,
     "controls": 132,
-    "fill": 69,
+    "fill": 70,
     "review": 27,
-    "skip": 36,
-    "planned_pct": 52.3
+    "skip": 35,
+    "planned_pct": 53.0
   }
 }
