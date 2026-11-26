@@ -258,6 +258,11 @@ def _country_scoped(base: str, label: str, job_location: str) -> str | None:
 _WORK_AUTH_RE = re.compile(
     r"(?:legally )?(?:eligible|authori[sz]ed|permitted|entitled) to work|work authori[sz]ation|right to work|work permit"
 )
+# Eligibility phrased as "without (requiring / the need for visa) sponsorship"
+# is work authorization, not a "do you require sponsorship?" question.
+_WITHOUT_SPONSORSHIP_RE = re.compile(
+    r"without(?:\s+(?:requiring|needed|needing|the\s+need\s+for))?(?:\s+(?:a\s+)?(?:visa|work|employment))?\s+sponsorship"
+)
 # "Have you worked for <employer> before?" is employer-specific: never shared.
 _PRIOR_EMPLOYMENT_RE = PRIOR_EMPLOYMENT_RE
 
@@ -362,6 +367,8 @@ def classify_question(label: str, job_location: str = "") -> str | None:
     # answer and are never shared across questions.
     if not text or _CONDITIONAL_RE.search(text):
         return None
+    if _WITHOUT_SPONSORSHIP_RE.search(text) and _WORK_AUTH_RE.search(text):
+        return _country_scoped("work_authorization", text, job_location)
     if "sponsor" in text:
         return _country_scoped("sponsorship", text, job_location)
     if _WORK_AUTH_RE.search(text):
