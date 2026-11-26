@@ -206,7 +206,7 @@ function InteractiveBlockedFieldsCard({
 
   return (
     <Card
-      title="Interactive Question Studio"
+      title="Interactive Question Studio (JobTomatik)"
       accentColor={theme.warning}
       right={
         <Badge
