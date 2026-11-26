@@ -28,6 +28,7 @@ import { confirmAsync, notify } from "@/lib/confirm";
 import { kindLabel, shortHash } from "@/materials";
 import { reviewActionCopy, type ReviewActionName } from "@/safety";
 import { stageColor, useTheme } from "@/theme";
+import { QUESTION_STUDIO_TITLE } from "@/uiCopy";
 import { formatDateTime, formatScore, humanize } from "@/utils/format";
 
 function callReviewAction(name: ReviewActionName, id: string) {
@@ -206,7 +207,7 @@ function InteractiveBlockedFieldsCard({
 
   return (
     <Card
-      title="Interactive Question Studio (JobTomatik)"
+      title={QUESTION_STUDIO_TITLE}
       accentColor={theme.warning}
       right={
         <Badge

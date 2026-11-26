@@ -50,7 +50,7 @@ def get_dashboard_html() -> str:
   <!-- TOP HEADER / NAV -->
   <header class="border-b border-slate-800/80 bg-slate-900/80 backdrop-blur sticky top-0 z-30">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
-      
+
       <!-- Brand & Status -->
       <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center font-black text-white shadow-lg shadow-brand-500/20 text-lg">
@@ -123,7 +123,7 @@ def get_dashboard_html() -> str:
 
     <!-- TAB 1: COMMAND CENTER -->
     <section id="tab-command" class="tab-pane space-y-6">
-      
+
       <!-- HERO METRICS ROW -->
       <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3.5">
         <div class="rounded-xl border border-slate-800/80 bg-slate-900/60 p-4 relative overflow-hidden">
@@ -161,7 +161,7 @@ def get_dashboard_html() -> str:
 
       <!-- RUNTIME CONTROLS & AUTONOMY RUNNER -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
+
         <!-- Controls Panel (Left 1 Col) -->
         <div class="rounded-2xl border border-slate-800 bg-slate-900/50 p-5 space-y-5">
           <div class="flex items-center justify-between">
@@ -525,7 +525,7 @@ def get_dashboard_html() -> str:
               <h3 class="text-sm font-bold text-white flex items-center gap-2">
                 Interactive Answer Simulator & 4-Tier Match Studio
               </h3>
-              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-brand-500/20 text-brand-300 border border-brand-500/30">JOBTOMATIK ENGINE</span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-brand-500/20 text-brand-300 border border-brand-500/30">HUNTERXJOB ENGINE</span>
             </div>
             <p class="text-xs text-slate-400 mt-1">Test real ATS screening questions, evaluate canonical category classifications, and simulate 4-tier option resolution in real time.</p>
           </div>
@@ -703,7 +703,7 @@ def get_dashboard_html() -> str:
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        
+
         <!-- Service Health Card -->
         <div class="rounded-2xl border border-slate-800 bg-slate-900/50 p-5 space-y-4">
           <h3 class="text-sm font-bold text-white">Core Subsystems</h3>
@@ -748,7 +748,7 @@ def get_dashboard_html() -> str:
             <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">5 Supported ATS</span>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
-            
+
             <div class="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
               <div class="flex items-center justify-between">
                 <span class="font-bold text-slate-200">Ashby</span>
@@ -1521,7 +1521,7 @@ def get_dashboard_html() -> str:
           ${task.approve_effect ? `
             <div class="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs space-y-1">
               <div class="font-bold flex items-center gap-1.5">
-                <span>ℹ️ Approve Action Effect:</span>
+                <span>Info — Approve Action Effect:</span>
               </div>
               <p class="text-[11px] text-indigo-200/80">${escapeHtml(task.approve_effect)}</p>
             </div>
