@@ -1,3 +1,4 @@
+import { isExactLiveConfirmation, LIVE_CONFIRMATION_PHRASE } from "@/safety";
 import { getConnection } from "@/store/connection";
 
 import type {
@@ -43,6 +44,47 @@ export class ApiError extends Error {
     this.kind = kind;
     this.status = status;
   }
+}
+
+/** HTTP 429 from the server, with a parsed Retry-After when the header is present. */
+export class RateLimitedError extends ApiError {
+  retryAfterSeconds: number | null;
+
+  constructor(message: string, retryAfterSeconds: number | null) {
+    super(message, "http", 429);
+    this.name = "RateLimitedError";
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
+const LIVE_CONFIRM_REFUSAL = `Live run aborted. Type "${LIVE_CONFIRMATION_PHRASE}" exactly to confirm.`;
+
+export function requireLiveConfirmation(liveConfirmation?: string): void {
+  if (!isExactLiveConfirmation(liveConfirmation)) {
+    throw new ApiError(LIVE_CONFIRM_REFUSAL, "config");
+  }
+}
+
+/** Parse a Retry-After header as a delay in seconds (integer seconds or an HTTP date). */
+export function parseRetryAfter(header: string | null | undefined, nowMs = Date.now()): number | null {
+  if (header == null) return null;
+  const trimmed = header.trim();
+  if (!trimmed) return null;
+  if (/^\d+$/.test(trimmed)) return Number(trimmed);
+  const parsed = Date.parse(trimmed);
+  if (Number.isNaN(parsed)) return null;
+  return Math.max(0, Math.ceil((parsed - nowMs) / 1000));
+}
+
+function retryAfterMessage(seconds: number | null): string {
+  if (seconds == null) return "Too many requests. Try again later.";
+  if (seconds === 1) return "Too many requests. Try again in 1 second.";
+  return `Too many requests. Try again in ${seconds} seconds.`;
+}
+
+export function rateLimitedFromResponse(response: Response, nowMs = Date.now()): RateLimitedError {
+  const retryAfterSeconds = parseRetryAfter(response.headers.get("Retry-After"), nowMs);
+  return new RateLimitedError(retryAfterMessage(retryAfterSeconds), retryAfterSeconds);
 }
 
 export interface ClientConfig {
@@ -116,7 +158,10 @@ export function createClient(getConfig: () => ClientConfig, fetchImpl: FetchLike
         if (response.ok) throw new ApiError(`Received a malformed response from ${path}.`, "parse");
       }
     }
-    if (!response.ok) throw errorForStatus(response.status, path, detailText(body));
+    if (!response.ok) {
+      if (response.status === 429) throw rateLimitedFromResponse(response);
+      throw errorForStatus(response.status, path, detailText(body));
+    }
     return body as T;
   }
 
@@ -198,8 +243,9 @@ export function createClient(getConfig: () => ClientConfig, fetchImpl: FetchLike
     simulateVault: (question: string, options?: string[]) =>
       post<any>("/api/vault/simulate", { question, options }),
 
-    runJobAutonomous: (jobId: string, dryRun = false) =>
-      post<{
+    runJobAutonomous: async (jobId: string, dryRun = true, liveConfirmation?: string) => {
+      if (!dryRun) requireLiveConfirmation(liveConfirmation);
+      return post<{
         job_id: string;
         status: string;
         submitted: boolean;
@@ -207,9 +253,11 @@ export function createClient(getConfig: () => ClientConfig, fetchImpl: FetchLike
         stage?: string;
         evidence_sha256?: string;
         error?: string;
-      }>(`/api/jobs/${encodeURIComponent(jobId)}/run-autonomous?dry_run=${dryRun ? "true" : "false"}`, undefined, 90000),
-    runAutonomousBatch: () =>
-      post<{
+      }>(`/api/jobs/${encodeURIComponent(jobId)}/run-autonomous?dry_run=${dryRun ? "true" : "false"}`, undefined, 90000);
+    },
+    runAutonomousBatch: async (live = false, liveConfirmation?: string) => {
+      if (live) requireLiveConfirmation(liveConfirmation);
+      return post<{
         started_at: string;
         finished_at: string;
         aborted_by_kill_switch: boolean;
@@ -219,17 +267,20 @@ export function createClient(getConfig: () => ClientConfig, fetchImpl: FetchLike
         verified_dry_runs: number;
         skipped_duplicates: number;
         errors: string[];
-      }>("/api/autonomous/run", undefined, 120000),
+      }>(`/api/autonomous/run?live=${live ? "true" : "false"}`, undefined, 120000);
+    },
     approveApplication: (applicationId: string) =>
       post<{ id: string; stage: string; job_stage: string }>(`/api/applications/${encodeURIComponent(applicationId)}/approve`),
-    executeApply: (applicationId: string) =>
-      post<{
+    executeApply: async (applicationId: string, liveConfirmation?: string) => {
+      requireLiveConfirmation(liveConfirmation);
+      return post<{
         status: string;
         reason?: string;
         detail?: string;
         application_id: string;
         submitted?: boolean;
-      }>(`/api/applications/${encodeURIComponent(applicationId)}/apply`, undefined, 60000),
+      }>(`/api/applications/${encodeURIComponent(applicationId)}/apply`, undefined, 60000);
+    },
     jobArtifacts: (jobId: string) =>
       request<{ job_id: string; artifacts: Array<{ name: string; size_bytes: number; url: string }> }>(
         `/api/jobs/${encodeURIComponent(jobId)}/artifacts`

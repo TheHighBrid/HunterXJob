@@ -47,3 +47,11 @@ export function reviewActionCopy(name: ReviewActionName) {
       return REVIEW_ACTION_COPY.resolve;
   }
 }
+
+/** Exact phrase the owner must type before any live submission leaves the phone. */
+export const LIVE_CONFIRMATION_PHRASE = "SUBMIT LIVE";
+
+/** True only when the typed text matches the confirmation phrase exactly (leading/trailing space ignored). */
+export function isExactLiveConfirmation(typed: string | null | undefined): boolean {
+  return (typed ?? "").trim() === LIVE_CONFIRMATION_PHRASE;
+}
