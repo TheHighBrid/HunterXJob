@@ -222,11 +222,9 @@ async def _find_input_in_target(
             "input#country, select#country, input[name='country'], select[name='country'], "
             "input[aria-labelledby='country-label'], input[aria-label*='Country' i], select[aria-label*='Country' i]"
         )
-        try:
+        with contextlib.suppress(PlaywrightError, ValueError, TypeError, AttributeError):
             if await country_candidates.count() > 0 and await country_candidates.first.is_visible():
                 return country_candidates.first, "specialized:phone_country"
-        except Exception:
-            pass
 
     # 0a. Check for button option toggles (e.g. Ashby yes/no buttons)
     if value_hint is not None:
