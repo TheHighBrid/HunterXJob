@@ -135,8 +135,19 @@ def load_targets(path: Path) -> list[dict[str, Any]]:
 
 # --------------------------------------------------------------------------- one GET per posting (parent)
 
+def _board_unavailable(target: dict[str, Any], response: Any, requests: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """A 429 or 5xx says nothing about whether the posting is open, so it is never reported as closed."""
+    if response.status_code == 429:
+        return {**target, "open": False, "rate_limited": True, "retry_after": response.headers.get("Retry-After"),
+                "reason": "board API rate-limited (HTTP 429)", "parent_requests": requests}
+    if response.status_code >= 500:
+        return {**target, "open": False, "probe_error": True,
+                "reason": f"board API unavailable (HTTP {response.status_code})", "parent_requests": requests}
+    return None
+
+
 def fetch_open_posting(target: dict[str, Any], *, client: Any = None, sleep: Any = time.sleep) -> dict[str, Any]:
-    """Confirm the posting is open (one GET; one retry on a transport error or 5xx only)."""
+    """Confirm the posting is open (one GET; one retry on a transport error or 5xx only; a 429 is never retried)."""
     import httpx
 
     url = open_check_url(target)
@@ -162,9 +173,9 @@ def fetch_open_posting(target: dict[str, Any], *, client: Any = None, sleep: Any
     finally:
         if client is None:
             http.close()
-    if response.status_code >= 500:
-        return {**target, "open": False, "probe_error": True,
-                "reason": f"board API unavailable (HTTP {response.status_code})", "parent_requests": requests}
+    unavailable = _board_unavailable(target, response, requests)
+    if unavailable is not None:
+        return unavailable
     payload = response.json() if response.status_code == 200 else None
     posting = parse_open_posting(target, response.status_code, payload)
     if posting is None:
@@ -461,6 +472,13 @@ def _live_posting(deps: BatchDeps, target: dict[str, Any], index: int, out: Path
         reason = (f"run {index} board API unavailable ({posting['reason']}); "
                   "batch stopped rather than treating it as a closed posting")
         return None, failed, reason
+    if posting.get("rate_limited"):
+        limited = {"index": index, "posting": posting, "outcome": "rate_limited", "checks": {},
+                   "error": posting["reason"], "retry_after": posting.get("retry_after")}
+        _save_report(out, index, limited)
+        reason = (f"run {index} board API rate-limited ({posting['reason']}); "
+                  "batch stopped rather than treating it as a closed posting")
+        return None, limited, reason
     if not posting["open"]:
         skipped = {"index": index, "posting": posting, "outcome": "skipped_closed", "checks": {},
                    "error": posting["reason"]}
@@ -530,7 +548,7 @@ def recheck(out: Path, guardrails: list[dict[str, str]] | None = None) -> list[d
         previous = json.loads(path.read_text(encoding="utf-8"))
         run_dir = Path(previous.get("run_dir") or "")
         observations = run_dir / "observations.json"
-        if previous.get("outcome") in {"skipped_closed", "probe_error"} or not observations.is_file():
+        if previous.get("outcome") in {"skipped_closed", "probe_error", "rate_limited"} or not observations.is_file():
             reports.append(previous)
             continue
         data = json.loads(observations.read_text(encoding="utf-8"))
@@ -626,7 +644,7 @@ def main(argv: list[str] | None = None) -> int:
     if stopped:
         print(stopped)
         return 3
-    ok = all(row["safety_ok"] for row in summary["rows"] if row["verdict"] not in {"skipped_closed", "probe_error"})
+    ok = all(row["safety_ok"] for row in summary["rows"] if row["verdict"] not in {"skipped_closed", "probe_error", "rate_limited"})
     return 0 if ok else 1
 
 
