@@ -385,6 +385,7 @@ function ActionsCard({ task, busy, run, runAutonomous }: ActionsProps) {
   if (task.status !== "open") return <Muted>Closed {formatDateTime(task.resolved_at)}.</Muted>;
 
   const isUncertain = task.reason_code === "submission_confirmation_uncertain";
+  const jobId = task.job?.id;
 
   return (
     <Card title="Review Actions" accentColor={isUncertain ? theme.uncertain : theme.primary}>
@@ -407,21 +408,21 @@ function ActionsCard({ task, busy, run, runAutonomous }: ActionsProps) {
         {task.actions.includes("approve") ? (
           <PrimaryButton title="Approve Application" loading={busy === "approve"} disabled={!!busy} onPress={() => void run("approve")} />
         ) : null}
-        {task.job && !isUncertain ? (
+        {jobId && !isUncertain ? (
           <>
             <PrimaryButton
               title="🧪 Run Autonomous Dry-Run"
               variant="primary"
               loading={busy === "autonomous"}
               disabled={!!busy}
-              onPress={() => void runAutonomous(task.job!.id, false)}
+              onPress={() => void runAutonomous(jobId, false)}
             />
             <PrimaryButton
               title="🚀 Submit Live Application"
               variant="danger"
               loading={busy === "autonomous_live"}
               disabled={!!busy}
-              onPress={() => void runAutonomous(task.job!.id, true)}
+              onPress={() => void runAutonomous(jobId, true)}
             />
           </>
         ) : null}
