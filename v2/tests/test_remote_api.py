@@ -424,6 +424,7 @@ MUTATING_ROUTES = {
     ("POST", "/api/jobs/{job_id}/unlink-duplicate"),
     ("POST", "/api/jobs/{job_id}/clear-uncertain-hold"),
     ("POST", "/api/jobs/{job_id}/check-liveness"),
+    ("POST", "/api/jobs/{job_id}/archive"),
     ("POST", "/api/jobs/{job_id}/run-autonomous"),
     ("POST", "/api/autonomous/run"),
     ("POST", "/api/inbox/match"),

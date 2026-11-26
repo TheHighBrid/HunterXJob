@@ -256,8 +256,9 @@ BILINGUAL = "Bilingualism in English and Canadian French is required. Please ind
      {"language_proficiency": [LANGS]}),
     (_derived(["B1: Limited working"], LANGS, "language_proficiency", BILINGUAL, CEFR_OPTIONS),
      {"language_proficiency": [LANGS]}),
-    (_derived("Yes, I am", "Yes", "work_authorization_ca", "Are you legally authorized to work in Canada?",
-              ["Yes, I am", "No, I am not"]), {}),
+    (_derived("Yes, I am authorized to work in Canada", "Yes", "work_authorization_ca",
+              "Are you legally authorized to work in Canada?",
+              ["Yes, I am authorized to work in Canada", "No, I am not"]), {}),
 ])
 def test_derived_options_pass_when_backed_by_the_stored_answer(item, allowed):
     assert checks.planned_answer_problems([item], {**ALLOWED, **allowed}, decline_policy=False) == []
@@ -283,7 +284,8 @@ def test_derived_options_are_verified_independently(item, allowed, fragment):
 
 
 def test_older_traces_without_a_derivation_still_flag_a_changed_value():
-    item = _fill("q_opt", ["B2: Professional working proficiency"], "language_proficiency", label=BILINGUAL,
+    # Without a derivation record the strict matchers on main still apply: C1 is above the stored French B2.
+    item = _fill("q_opt", ["C1: Full professional"], "language_proficiency", label=BILINGUAL,
                  resolved_value=LANGS)
     problems = checks.planned_answer_problems([item], {**ALLOWED, "language_proficiency": [LANGS]}, decline_policy=False)
     assert any("differs from the resolved answer" in problem["problem"] for problem in problems)

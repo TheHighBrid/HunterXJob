@@ -52,12 +52,12 @@ from app.backup import latest_backup_time, list_backups
 from app.config import Settings, get_settings
 from app.cycle import CycleRunner, recent_cycles
 from app.db import get_db
-from app.dedup import unlink
+from app.dedup import deactivate, release_duplicates, unlink
 from app.flags import KILL_SWITCH, FlagChangeRefused, check_api_flag_change, set_flag, snapshot
 from app.greenhouse_form import FormFetchError
 from app.job_liveness import CheckContext, check_job
 from app.job_views import job_detail, list_jobs
-from app.models import Application, FeatureFlag, Job, ReviewTask, iso_utc
+from app.models import Application, FeatureFlag, Job, PipelineStage, ReviewTask, iso_utc
 from app.pipeline import preview_form
 from app.real_forms import LiveFormProvider
 from app.reports import summary
@@ -124,8 +124,9 @@ def jobs(
     offset: Annotated[int, Query(ge=0)] = 0,
     stage: str | None = None,
     q: Annotated[str | None, Query(max_length=100)] = None,
+    include_archived: bool = False,
 ) -> list[dict[str, object]]:
-    return list_jobs(db, limit=limit, offset=offset, stage=stage, q=q)
+    return list_jobs(db, limit=limit, offset=offset, stage=stage, q=q, include_archived=include_archived)
 
 
 @router.get("/api/jobs/{job_id}", response_model=JobDetailOut, tags=["remote"])
@@ -175,6 +176,30 @@ def check_liveness(job_id: str, db: DbSession, current: CurrentSettings) -> dict
     if row is None:
         raise HTTPException(404, "job not found")
     check_job(db, current, row, CheckContext("manual"))
+    return job_detail(db, row)
+
+
+@router.post("/api/jobs/{job_id}/archive", response_model=JobDetailOut, tags=["remote"])
+def archive_job(job_id: str, db: DbSession) -> dict[str, object]:
+    """Manually remove/archive a job (marks closed if liveness is suspect/gone, else withdrawn)."""
+    row = db.get(Job, job_id)
+    if row is None:
+        raise HTTPException(404, "job not found")
+    if row.stage in (PipelineStage.closed.value, PipelineStage.withdrawn.value):
+        return job_detail(db, row)
+    target = (
+        PipelineStage.closed
+        if (row.liveness or "").lower() in ("suspect", "gone", "closed")
+        else PipelineStage.withdrawn
+    )
+    ok = deactivate(db, row, target, f"Manually archived by owner ({target.value})")
+    if not ok:
+        raise HTTPException(409, f"cannot archive job from stage '{row.stage}'")
+    if target == PipelineStage.closed:
+        row.liveness = "closed"
+        row.closed_at = datetime.now(UTC)
+        release_duplicates(db, row, "closed")
+    db.commit()
     return job_detail(db, row)
 
 
