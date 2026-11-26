@@ -939,7 +939,7 @@
       "FollowUpDispatchIn": {
         "properties": {
           "dry_run": {
-            "default": false,
+            "default": true,
             "title": "Dry Run",
             "type": "boolean"
           },

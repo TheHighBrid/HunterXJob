@@ -690,7 +690,8 @@ def run_due_follow_ups(db: DbSession) -> dict[str, object]:
 
 class FollowUpDispatchIn(BaseModel):
     recipient_email: str | None = None
-    dry_run: bool = False
+    # Fail closed: a real send needs an explicit "dry_run": false.
+    dry_run: bool = True
 
 
 @api.post("/api/follow-ups/{task_id}/dispatch")
@@ -713,9 +714,11 @@ def dispatch_follow_up(
             recipient_email=payload.recipient_email,
             dry_run=payload.dry_run,
         )
-        return res
     except ValueError as exc:
-        raise HTTPException(404, str(exc))
+        raise HTTPException(404, str(exc)) from exc
+    if res["status"] == "refused":
+        raise HTTPException(res["http_status"], {"reason": res["reason"], "task_id": task_id, "sent": False})
+    return res
 
 
 @api.get("/api/jobs/{job_id}/artifacts")
