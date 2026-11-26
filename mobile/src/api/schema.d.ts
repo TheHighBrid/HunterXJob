@@ -533,6 +533,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs/{job_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive Job
+         * @description Manually remove/archive a job (marks closed if liveness is suspect/gone, else withdrawn).
+         */
+        post: operations["archive_job_api_jobs__job_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs/{job_id}/artifacts": {
         parameters: {
             query?: never;
@@ -3629,6 +3649,7 @@ export interface operations {
                 offset?: number;
                 stage?: string | null;
                 q?: string | null;
+                include_archived?: boolean;
             };
             header?: never;
             path?: never;
@@ -3657,6 +3678,37 @@ export interface operations {
         };
     };
     job_api_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_job_api_jobs__job_id__archive_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -3946,7 +3998,7 @@ export interface operations {
         parameters: {
             query?: {
                 dry_run?: boolean;
-                headed?: boolean;
+                headed?: boolean | null;
             };
             header?: never;
             path: {
