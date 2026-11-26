@@ -8,15 +8,18 @@ and generates polite, personalized check-in messages grounded in verified profil
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 import logging
+import re
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.materials import JobContext, skill_names
 from app.models import Application, Job, PipelineEvent, PipelineStage, ReviewTask, SubmissionEvidence
 from app.profile import VerifiedProfile
 
@@ -127,7 +130,7 @@ def get_due_follow_ups(
         sub_evidence = db.execute(select(SubmissionEvidence).where(
             SubmissionEvidence.application_id == app.id,
             SubmissionEvidence.kind == "submission",
-            SubmissionEvidence.sufficient == True,
+            SubmissionEvidence.sufficient.is_(True),
         ).order_by(SubmissionEvidence.created_at.desc())).first()
 
         if not sub_evidence or not sub_evidence[0].created_at:
@@ -192,6 +195,122 @@ def schedule_follow_up(db: Session, job_id: str) -> None:
     db.commit()
 
 
+# ---------------------------------------------------------------------------
+# Fail-closed dispatch. ReviewTask has no column for an approval hash, so an
+# approval is recorded as a trailer line on ReviewTask.detail:
+#   "\n\nApproved-Payload-SHA256: <hex>"
+# The hash is sha256 over canonical JSON of (subject, body, recipient). Any edit
+# to the draft or a different recipient after approval no longer matches, and
+# nothing is sent. No trailer, or a status other than "approved", means refuse.
+# ---------------------------------------------------------------------------
+
+APPROVAL_TRAILER = "Approved-Payload-SHA256: "
+_TRAILER_RE = re.compile(r"\n\nApproved-Payload-SHA256: ([0-9a-f]{64})\s*$")
+_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$")
+_PLACEHOLDER_DOMAINS = frozenset({"example.com", "example.org", "example.net", "employer.com", "localhost"})
+_PLACEHOLDER_TLDS = (".example", ".invalid", ".test", ".localhost")
+_NOREPLY_RE = re.compile(r"^(?:no-?reply|do-?not-?reply|donotreply)(?:[+._-].*)?$")
+
+
+class FollowUpRefused(ValueError):
+    """A follow-up send was refused; ``code`` names the blocker, ``http_status`` the API status."""
+
+    def __init__(self, code: str, http_status: int = 409) -> None:
+        super().__init__(code)
+        self.code = code
+        self.http_status = http_status
+
+
+def _split_detail(detail: str | None) -> tuple[str, str, str | None]:
+    """Return (subject, body, approved_hash) from a follow-up ReviewTask.detail."""
+    text = detail or ""
+    match = _TRAILER_RE.search(text)
+    approved = match.group(1) if match else None
+    if match:
+        text = text[:match.start()]
+    parts = text.split("\n\n", 1)
+    subject = parts[0].replace("Subject: ", "", 1).strip()
+    body = parts[1] if len(parts) > 1 else ""
+    return subject, body, approved
+
+
+def follow_up_payload_hash(subject: str, body: str, recipient: str) -> str:
+    canonical = json.dumps(
+        {"body": body, "recipient": recipient.strip().lower(), "subject": subject},
+        sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def recipient_problem(recipient: str | None) -> str | None:
+    """Why this address may not receive a follow-up (None = acceptable)."""
+    address = (recipient or "").strip().lower()
+    if not address:
+        return "recipient_missing"
+    if not _EMAIL_RE.match(address) or ".." in address:
+        return "recipient_invalid"
+    local, domain = address.rsplit("@", 1)
+    if domain in _PLACEHOLDER_DOMAINS or domain.endswith(_PLACEHOLDER_TLDS) or _NOREPLY_RE.match(local):
+        return "recipient_placeholder"
+    if any(domain.endswith("." + d) for d in _PLACEHOLDER_DOMAINS):
+        return "recipient_placeholder"
+    return None
+
+
+def _check_recipient(recipient: str | None) -> None:
+    problem = recipient_problem(recipient)
+    if problem:
+        raise FollowUpRefused(problem, 422)
+
+
+def _check_draft(task: ReviewTask, subject: str, body: str) -> None:
+    if not (task.reason_code or "").startswith("follow_up_"):
+        raise FollowUpRefused("not_a_follow_up_task")
+    if not subject or not body.strip() or "\r" in subject or "\n" in subject:
+        raise FollowUpRefused("draft_invalid", 422)
+
+
+def _check_approval(task: ReviewTask, approved_hash: str | None, current_hash: str) -> None:
+    if task.status != "approved":
+        raise FollowUpRefused("follow_up_not_approved")
+    if not approved_hash:
+        raise FollowUpRefused("approval_hash_missing")
+    if not hmac.compare_digest(approved_hash, current_hash):
+        raise FollowUpRefused("payload_changed_since_approval")
+
+
+def approve_follow_up_task(db: Session, task_id: str, recipient_email: str) -> str:
+    """Approve an open follow-up draft for one recipient; binds and returns the payload hash."""
+    task = db.get(ReviewTask, task_id)
+    if not task:
+        raise ValueError(f"ReviewTask {task_id} not found")
+    if task.status != "open":
+        raise FollowUpRefused(f"review task is already {task.status}")
+    subject, body, _ = _split_detail(task.detail)
+    _check_draft(task, subject, body)
+    _check_recipient(recipient_email)
+    payload_hash = follow_up_payload_hash(subject, body, recipient_email)
+    task.detail = f"Subject: {subject}\n\n{body}\n\n{APPROVAL_TRAILER}{payload_hash}"
+    task.status = "approved"
+    db.commit()
+    return payload_hash
+
+
+def _smtp_send(smtp: dict[str, Any], subject: str, body: str, recipient: str) -> None:
+    import smtplib
+    from email.mime.text import MIMEText
+
+    msg = MIMEText(body)
+    msg["Subject"] = subject
+    msg["From"] = smtp["user"] or "candidate@melato.ca"
+    msg["To"] = recipient
+    with smtplib.SMTP(smtp["host"], smtp["port"], timeout=10.0) as server:
+        server.starttls()
+        if smtp["user"] and smtp["password"]:
+            server.login(smtp["user"], smtp["password"])
+        server.send_message(msg)
+
+
 def dispatch_follow_up_email(
     db: Session,
     task_id: str,
@@ -200,44 +319,44 @@ def dispatch_follow_up_email(
     smtp_user: str | None = None,
     smtp_password: str | None = None,
     recipient_email: str | None = None,
-    dry_run: bool = False,
+    dry_run: bool = True,
 ) -> dict[str, Any]:
-    """Dispatch an approved follow-up email via SMTP or record dry-run delivery."""
+    """Send an approved follow-up, fail closed.
+
+    Refuses (status "refused", nothing sent, task untouched) unless the task is
+    an approved follow-up whose approved payload hash matches the current draft
+    and recipient, and the recipient is a real address. ``dry_run`` defaults to
+    True and only reports that the send would be allowed. The task is resolved
+    only after an SMTP send has actually succeeded.
+    """
     task = db.get(ReviewTask, task_id)
     if not task:
         raise ValueError(f"ReviewTask {task_id} not found")
+    subject, body, approved_hash = _split_detail(task.detail)
+    recipient = (recipient_email or "").strip()
+    result: dict[str, Any] = {"task_id": task_id, "subject": subject, "recipient": recipient or None, "sent": False}
+    try:
+        _check_draft(task, subject, body)
+        _check_recipient(recipient)
+        _check_approval(task, approved_hash, follow_up_payload_hash(subject, body, recipient))
+        if not dry_run and not smtp_host:
+            raise FollowUpRefused("smtp_not_configured")
+    except FollowUpRefused as refusal:
+        # A refused address is never echoed back as if it were the recipient.
+        return {**result, "recipient": None, "status": "refused", "reason": refusal.code,
+                "http_status": refusal.http_status}
+    if dry_run:
+        return {**result, "status": "dry_run"}
 
-    lines = (task.detail or "").split("\n\n", 1)
-    subject = lines[0].replace("Subject: ", "").strip() if len(lines) > 0 else "Application Follow-up"
-    body = lines[1] if len(lines) > 1 else task.detail or ""
-
-    recipient = recipient_email or "hiring-team@employer.com"
-
-    if dry_run or not smtp_host:
-        # Verified simulated delivery
-        status = "dry_run_dispatched"
-    else:
-        import smtplib
-        from email.mime.text import MIMEText
-
-        msg = MIMEText(body)
-        msg["Subject"] = subject
-        msg["From"] = smtp_user or "candidate@melato.ca"
-        msg["To"] = recipient
-
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=10.0) as server:
-            server.starttls()
-            if smtp_user and smtp_password:
-                server.login(smtp_user, smtp_password)
-            server.send_message(msg)
-        status = "dispatched"
-
+    _smtp_send({"host": smtp_host, "port": smtp_port, "user": smtp_user, "password": smtp_password},
+               subject, body, recipient)
     task.status = "resolved"
+    task.resolved_at = datetime.now(UTC)
     db.add(PipelineEvent(
         job_id=task.job_id,
         from_stage=PipelineStage.submitted.value,
         to_stage=PipelineStage.submitted.value,
-        message=f"Follow-up email dispatched ({status}): {subject} to {recipient}",
+        message=f"Follow-up email sent via SMTP: {subject} to {recipient}",
     ))
     db.commit()
-    return {"status": status, "task_id": task_id, "subject": subject, "recipient": recipient}
+    return {**result, "status": "dispatched", "sent": True}
