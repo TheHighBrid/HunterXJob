@@ -20,6 +20,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from typing import Any
 
 from app.profile import Fact, VerifiedProfile
 
@@ -311,12 +312,12 @@ def check_cover_letter(doc: dict, profile: VerifiedProfile, *, job_description: 
 
 # Credentials that must never be affirmatively claimed unless verified in profile facts.
 UNVERIFIED_CREDENTIAL_PATTERNS = {
-    "cpa": re.compile(r"\b(?:cpa|chartered\s+professional\s+accountant|certified\s+public\s+accountant)\b", re.I),
-    "cfa": re.compile(r"\b(?:cfa|chartered\s+financial\s+analyst)\b", re.I),
-    "pmp": re.compile(r"\b(?:pmp|project\s+management\s+professional)\b", re.I),
-    "p_eng": re.compile(r"\b(?:p\.?eng|professional\s+engineer)\b", re.I),
-    "bar": re.compile(r"\b(?:bar\s+admission|licensed\s+lawyer|licensed\s+attorney)\b", re.I),
-    "security_clearance": re.compile(r"\b(?:security\s+clearance|top\s+secret|secret\s+clearance)\b", re.I),
+    "cpa": re.compile(r"\b(?:cpa|chartered\s+professional\s+accountant|certified\s+public\s+accountant)\b", re.IGNORECASE),
+    "cfa": re.compile(r"\b(?:cfa|chartered\s+financial\s+analyst)\b", re.IGNORECASE),
+    "pmp": re.compile(r"\b(?:pmp|project\s+management\s+professional)\b", re.IGNORECASE),
+    "p_eng": re.compile(r"\b(?:p\.?eng|professional\s+engineer)\b", re.IGNORECASE),
+    "bar": re.compile(r"\b(?:bar\s+admission|licensed\s+lawyer|licensed\s+attorney)\b", re.IGNORECASE),
+    "security_clearance": re.compile(r"\b(?:security\s+clearance|top\s+secret|secret\s+clearance)\b", re.IGNORECASE),
 }
 
 
@@ -440,3 +441,16 @@ def enforce_answer_truthfulness(
                     )
 
     return sanitized, corrections
+
+
+def preflight_answer_policy(**kwargs):
+    """Fail-closed answer-policy readiness hook for browser-launch callers.
+
+    Returns the structured report from ``build_answer_policy_readiness``.
+    Callers must not open a browser when ``ready_for_browser_launch`` is
+    false. Wiring into ``browser_filler`` / ``greenhouse_browser`` /
+    submission paths is a handoff: those files are outside this claim.
+    """
+    from app.answer_policy_readiness import build_answer_policy_readiness
+
+    return build_answer_policy_readiness(**kwargs)
