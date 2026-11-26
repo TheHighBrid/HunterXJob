@@ -482,6 +482,9 @@ def _origin_and_path(url: str) -> tuple[str, str, str]:
     return parsed.scheme, parsed.netloc.lower(), parsed.path
 
 
+_BENIGN_WIDGET_SUBMIT_PREFIXES = ("https://www.linkedin.com/talentwidgets/",)
+
+
 def untrusted_session_reasons(network: dict[str, Any], submit_events: list[Any], form_url: str, final_url: str) -> list[str]:
     """Why a read-only session cannot vouch for the form: the page tried to submit or left it.
 
@@ -489,8 +492,15 @@ def untrusted_session_reasons(network: dict[str, Any], submit_events: list[Any],
     describes some other page (a confirmation, an error page), not the form.
     """
     reasons = []
-    if submit_events:
-        reasons.append(f"page attempted {len(submit_events)} form submission(s)")
+    real_submits = [
+        ev for ev in (submit_events or [])
+        if not any(
+            str((ev or {}).get("action", "")).startswith(prefix)
+            for prefix in _BENIGN_WIDGET_SUBMIT_PREFIXES
+        )
+    ]
+    if real_submits:
+        reasons.append(f"page attempted {len(real_submits)} form submission(s)")
     documents = int(network.get("main_frame_document_requests") or 0)
     if documents > 1:
         reasons.append(f"page started {documents - 1} extra main-frame navigation(s)")
@@ -566,7 +576,15 @@ async def _read_page(context: Any, url: str, timeout_ms: int, network: _NetworkL
     page = await context.new_page()
     page.on("framenavigated", lambda frame: network.navigations.append(frame.url[:300]) if frame == page.main_frame else None)
     try:
-        response = await page.goto(url, wait_until="networkidle", timeout=timeout_ms)
+        response = await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+        try:
+            await page.wait_for_load_state("networkidle", timeout=4000)
+        except Exception:
+            pass
+        try:
+            await page.wait_for_selector("form, input, textarea, select", timeout=4000)
+        except Exception:
+            pass
         evidence["main_document_status"] = response.status if response is not None else None
         if response is not None and response.status == 404:
             raise FormFetchError("form_unavailable", "hosted application page returned 404")

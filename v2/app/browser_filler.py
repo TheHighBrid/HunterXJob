@@ -216,6 +216,18 @@ async def _find_input_in_target(
             if await loc_candidates.count() > 0 and await loc_candidates.first.is_visible():
                 return loc_candidates.first, "specialized:location_input"
 
+    # Phone country specialized locator (Greenhouse #country React-Select / select)
+    if key.lower() in ("phone_country", "country_code"):
+        country_candidates = page.locator(
+            "input#country, select#country, input[name='country'], select[name='country'], "
+            "input[aria-labelledby='country-label'], input[aria-label*='Country' i], select[aria-label*='Country' i]"
+        )
+        try:
+            if await country_candidates.count() > 0 and await country_candidates.first.is_visible():
+                return country_candidates.first, "specialized:phone_country"
+        except Exception:
+            pass
+
     # 0a. Check for button option toggles (e.g. Ashby yes/no buttons)
     if value_hint is not None:
         v_str = str(value_hint).strip().lower()
@@ -830,6 +842,13 @@ async def _fill_input_by_heuristics(
                 or (str(read_back).strip() and not any(us in norm_rb for us in ("california", "united states", "usa")))
             ):
                 matched = True
+        elif key.lower() in ("phone_country", "country_code"):
+            rb_str = str(read_back or "").strip()
+            matched = bool(rb_str) and (
+                rb_str.startswith("+")
+                or normalize_text(val_str) in normalize_text(rb_str)
+                or normalize_text(rb_str) in normalize_text(val_str)
+            )
         elif control_type == "tel" or "phone" in key.lower():
             matched = phone_values_equivalent(read_back, val_str)
         else:

@@ -156,6 +156,7 @@ export function createClient(getConfig: () => ClientConfig, fetchImpl: FetchLike
     clearUncertainHold: (id: string, action: "requeue" | "withdraw" = "requeue") =>
       post<JobDetail>(`/api/jobs/${encodeURIComponent(id)}/clear-uncertain-hold`, { action }),
     checkLiveness: (id: string) => post<JobDetail>(`/api/jobs/${encodeURIComponent(id)}/check-liveness`),
+    archiveJob: (id: string) => post<JobDetail>(`/api/jobs/${encodeURIComponent(id)}/archive`),
 
     reviewTasks: (status: "open" | "closed" | "all" = "open") => request<ReviewTask[]>(`/api/review-tasks?status=${status}`),
     reviewTask: (id: string) => request<ReviewTaskDetail>(`/api/review-tasks/${encodeURIComponent(id)}`),

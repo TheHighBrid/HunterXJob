@@ -122,6 +122,9 @@ class AutonomousRunner:
         self.config = config or AutonomousConfig()
         self.captcha_solver = captcha_solver or MockCaptchaSolver()
         self.form_provider = form_provider or LiveFormProvider(self.settings)
+        self._browser_stack: Any | None = None
+        self._shared_playwright: Any | None = None
+        self._shared_browser: Any | None = None
 
     def run(self) -> AutonomousRunSummary:
         """Synchronous wrapper for the autonomous cycle."""
