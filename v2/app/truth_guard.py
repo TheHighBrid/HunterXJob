@@ -284,7 +284,7 @@ def check_resume(doc: dict, profile: VerifiedProfile) -> list[str]:
 def _strip_target(text: str, job_title: str, company: str) -> str:
     """Remove the exact job title / company name (allowed as names, never as claims)."""
     for name in sorted({job_title.strip(), company.strip()} - {""}, key=len, reverse=True):
-        text = re.sub(re.escape(name), " ", text, flags=re.I)
+        text = re.sub(re.escape(name), " ", text, flags=re.IGNORECASE)
     return text
 
 
@@ -312,12 +312,12 @@ def check_cover_letter(doc: dict, profile: VerifiedProfile, *, job_description: 
 
 # Credentials that must never be affirmatively claimed unless verified in profile facts.
 UNVERIFIED_CREDENTIAL_PATTERNS = {
-    "cpa": re.compile(r"\b(?:cpa|chartered\s+professional\s+accountant|certified\s+public\s+accountant)\b", re.I),
-    "cfa": re.compile(r"\b(?:cfa|chartered\s+financial\s+analyst)\b", re.I),
-    "pmp": re.compile(r"\b(?:pmp|project\s+management\s+professional)\b", re.I),
-    "p_eng": re.compile(r"\b(?:p\.?eng|professional\s+engineer)\b", re.I),
-    "bar": re.compile(r"\b(?:bar\s+admission|licensed\s+lawyer|licensed\s+attorney)\b", re.I),
-    "security_clearance": re.compile(r"\b(?:security\s+clearance|top\s+secret|secret\s+clearance)\b", re.I),
+    "cpa": re.compile(r"\b(?:cpa|chartered\s+professional\s+accountant|certified\s+public\s+accountant)\b", re.IGNORECASE),
+    "cfa": re.compile(r"\b(?:cfa|chartered\s+financial\s+analyst)\b", re.IGNORECASE),
+    "pmp": re.compile(r"\b(?:pmp|project\s+management\s+professional)\b", re.IGNORECASE),
+    "p_eng": re.compile(r"\b(?:p\.?eng|professional\s+engineer)\b", re.IGNORECASE),
+    "bar": re.compile(r"\b(?:bar\s+admission|licensed\s+lawyer|licensed\s+attorney)\b", re.IGNORECASE),
+    "security_clearance": re.compile(r"\b(?:security\s+clearance|top\s+secret|secret\s+clearance)\b", re.IGNORECASE),
 }
 
 
