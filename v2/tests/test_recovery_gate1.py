@@ -578,7 +578,7 @@ def test_child_environment_is_dry_run_only_and_ignores_the_developer_shell(monke
 
 
 def test_gate_uses_existing_fixtures_and_fake_identity_only():
-    assert gate.FORM_FIXTURE == FIXTURES / "sample_form.html" and gate.FORM_FIXTURE.is_file()
+    assert gate.FORM_FIXTURE == FIXTURES / "gate1" / "d2l_embed_form.html" and gate.FORM_FIXTURE.is_file()
     assert gate.API_FIXTURE == FIXTURES / "greenhouse" / "d2l_7696196.json" and gate.API_FIXTURE.is_file()
     assert gate.FAKE_ANSWERS["email"].endswith("@example.test")
     for snippet in filter(None, gate.VARIANTS.values()):
