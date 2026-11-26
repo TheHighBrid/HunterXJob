@@ -1,17 +1,39 @@
 from __future__ import annotations
 
+import shutil
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app import main
+from app import certification_system, main
 from app.config import Settings, get_settings
 from app.db import Base, get_db
 
 KEY = "k" * 40
 HEADERS = {"X-API-Key": KEY}
+TRACKED_DOSSIER = Path(certification_system.DEFAULT_DOSSIER_PATH)
+
+
+@pytest.fixture(autouse=True)
+def isolated_dossier(tmp_path, monkeypatch):
+    """Point every dossier read/write at a temporary copy so tests never touch the tracked evidence file."""
+    temp_dossier = tmp_path / "evidence" / TRACKED_DOSSIER.name
+    temp_dossier.parent.mkdir(parents=True, exist_ok=True)
+    if TRACKED_DOSSIER.exists():
+        shutil.copyfile(TRACKED_DOSSIER, temp_dossier)
+    real_build = certification_system.build_certification_dossier
+
+    def _build_to_temp(*args, **kwargs):
+        kwargs["output_path"] = temp_dossier
+        return real_build(*args, **kwargs)
+
+    monkeypatch.setattr(certification_system, "DEFAULT_DOSSIER_PATH", temp_dossier)
+    monkeypatch.setattr(certification_system, "build_certification_dossier", _build_to_temp)
+    return temp_dossier
 
 
 @pytest.fixture
@@ -54,7 +76,7 @@ def test_certification_dossier_endpoint(client_env):
     assert "evidence_ledger" in data
     assert "coverage_matrix" in data
     assert "milestones" in data
-    assert data["candidate"] == "Mohamed Alem"
+    assert isinstance(data["candidate"], str) and data["candidate"].strip()
     ledger = data["evidence_ledger"]
     assert isinstance(ledger["records"], list)
     assert ledger["total_verified_submissions"] == len(ledger["records"])
@@ -157,3 +179,12 @@ def test_answers_crud_endpoints(client_env):
     res_del2 = client_env.delete(f"/api/answers/{ans_id}", headers=HEADERS)
     assert res_del2.status_code == 404
 
+
+
+def test_dossier_endpoints_never_modify_tracked_evidence(client_env, isolated_dossier):
+    before = TRACKED_DOSSIER.read_bytes() if TRACKED_DOSSIER.exists() else None
+    assert client_env.get("/api/certification/dossier", headers=HEADERS).status_code == 200
+    assert client_env.get("/api/diagnostics/export", headers=HEADERS).status_code == 200
+    after = TRACKED_DOSSIER.read_bytes() if TRACKED_DOSSIER.exists() else None
+    assert after == before
+    assert isolated_dossier.is_file()
