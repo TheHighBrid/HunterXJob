@@ -217,7 +217,7 @@ See [docs/ROADMAP_STATUS.md](docs/ROADMAP_STATUS.md) for the complete milestone 
 * **Next Milestones**:
   1. **Live Production Certification Across Remaining ATS Adapters**: Expand live submission verification to Greenhouse, Lever, SmartRecruiters, and Workday postings alongside Ashby.
   2. **Cross-Platform Native Apps**: Google Play Store rollout, iOS TestFlight (Expo), macOS native desktop app, and Windows client.
-  3. **Automated 2Captcha / CapSolver API Integration**: Plug cloud solver providers into the `CaptchaSolver` protocol for fully unattended resolution of interactive reCAPTCHA v2/hCaptcha image challenges.
+  3. **Automated 2Captcha / CapSolver API Integration** *(on hold)*: paid solver services are ruled out by [`docs/RECOVERY_CONTRACT.md`](docs/RECOVERY_CONTRACT.md) and need the owner's explicit approval before any work starts. Until then a CAPTCHA means fail closed or a supervised human hold.
   4. **Outbound Follow-Up Email Dispatch**: Authenticated SMTP/OAuth dispatch of approved 7-day and 14-day check-in drafts.
   5. **Session Continuity & Enterprise Portal Auth**: Persistent browser storage states for multi-step corporate login portals (Workday / iCIMS / Taleo).
 
@@ -232,12 +232,21 @@ See [docs/ROADMAP_STATUS.md](docs/ROADMAP_STATUS.md) for the complete milestone 
 * **Daily Submission Caps**: Enforces `MAX_APPLICATIONS_PER_DAY=10` in `.env` to prevent flood applications.
 * **Quiet Hours**: Suspends automatic cycles during configured off-hours (default: 23:00 to 07:00 local time).
 * **Truth Guard Validation**: Compares every line of generated text and every form answer against candidate facts. Any unverified claim triggers a review task and halts submission.
+* **Remote API Guardrails**: Non-loopback clients (the phone app over the LAN or a tunnel) are capped at `HUNTERX_API_RATE_LIMIT_PER_MINUTE` requests per minute (default 600) and locked out with HTTP 429 after `HUNTERX_API_AUTH_FAILURE_LIMIT` failed API-key attempts (default 20) within `HUNTERX_API_AUTH_FAILURE_WINDOW` seconds (default 300). Direct loopback requests are never throttled. `0` disables a limit.
+
+## Execution Host (Recovery Contract)
+
+[`docs/RECOVERY_CONTRACT.md`](docs/RECOVERY_CONTRACT.md) is locked and takes precedence over any other plan, including this README:
+
+* **Host**: plain Linux at $0, meaning the developer box plus GitHub-hosted Ubuntu runners. No cloud VM, no paid service, no card. `docs/DEPLOY_VM.md` is on hold.
+* **Android**: execution is frozen (no new Termux, PRoot, ADB, native-Chrome or CDP work). The Android app is a client of the v2 API only and runs nothing.
+* **Browser ownership**: Playwright launches and owns the browser (`chromium.launch()`), never `connect_over_cdp` or an externally launched browser.
 
 ---
 
 ## Testing & Verification
 
-Run the full 569-test test suite:
+Run the full test suite:
 ```bash
 cd v2
 ./hunterx test

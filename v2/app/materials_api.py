@@ -49,10 +49,11 @@ from app.profile import (
     store_drafts,
     verified_profile,
 )
+from app.rate_limit import enforce_client_limits
 from app.resume_import import parse_resume_text
 from app.security import require_api_key
 
-router = APIRouter(dependencies=[Depends(require_api_key)])
+router = APIRouter(dependencies=[Depends(enforce_client_limits), Depends(require_api_key)])
 DbSession = Annotated[Session, Depends(get_db)]
 CurrentSettings = Annotated[Settings, Depends(get_settings)]
 
