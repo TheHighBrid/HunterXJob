@@ -15,7 +15,7 @@ import smtplib
 from typing import ClassVar
 
 import pytest
-from test_follow_up_dispatch import follow_up_env as _shared_follow_up_env  # noqa: F401  (registers the shared fixture)
+import test_follow_up_dispatch
 
 from app.follow_up import dispatch_follow_up_email
 from app.main import FollowUpDispatchIn
@@ -24,11 +24,8 @@ from app.models import ReviewTask
 TASK = "task_follow_up_1"
 PLACEHOLDERS = (None, "", "hiring-team@employer.com")
 
-
-@pytest.fixture
-def follow_up_env(request):
-    """Same fixture as test_follow_up_dispatch.follow_up_env, re-exposed under its original name."""
-    return request.getfixturevalue("_shared_follow_up_env")
+# Re-use the shared fixture: binding it at module level registers it for this file.
+follow_up_env = test_follow_up_dispatch.follow_up_env
 
 
 class _RecordingSMTP:
