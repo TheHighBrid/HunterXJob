@@ -48,6 +48,224 @@ except ImportError:  # pragma: no cover - optional [browser] extra
 
     PlaywrightError = _FallbackPlaywrightError  # type: ignore[misc, assignment]
 
+# Bot 04 PR #66 (commit 3b25c0a, stacked on #51) defines CSSOM-compatible id
+# helpers and location option choice on app.greenhouse_form. This branch is
+# based on #58, so those symbols are imported when present and otherwise
+# mirrored locally until #66 merges.
+try:
+    from app.greenhouse_form import (  # type: ignore[attr-defined]
+        choose_location_option,
+        css_escape,
+        css_id_selector,
+        id_attribute_selector,
+        resolve_element_by_id,
+        split_idrefs,
+    )
+except ImportError:  # pragma: no cover - exercised on bases that predate #66
+    import unicodedata
+
+    ELEMENT_BY_ID_JS = "(id) => document.getElementById(id)"
+
+    def _css_escape_char(char: str, index: int, value: str) -> str:
+        code = ord(char)
+        if code == 0:
+            return "\ufffd"
+        if 0x01 <= code <= 0x1F or code == 0x7F:
+            return f"\\{code:x} "
+        if char.isdigit() and char.isascii() and (index == 0 or (index == 1 and value[0] == "-")):
+            return f"\\{code:x} "
+        if code >= 0x80 or char in "-_" or (char.isascii() and char.isalnum()):
+            return char
+        return "\\" + char
+
+    def css_escape(value: str) -> str:
+        """Python mirror of CSSOM ``CSS.escape``."""
+        if value == "-":
+            return "\\-"
+        return "".join(_css_escape_char(char, index, value) for index, char in enumerate(value))
+
+    def css_id_selector(element_id: str) -> str:
+        if not element_id:
+            raise ValueError("an element id is required")
+        return "#" + css_escape(element_id)
+
+    def id_attribute_selector(element_id: str) -> str:
+        escaped = element_id.replace("\\", "\\\\").replace('"', '\\"')
+        return f'[id="{escaped}"]'
+
+    def split_idrefs(value: str | None) -> list[str]:
+        return (value or "").split()
+
+    async def resolve_element_by_id(page: Any, element_id: str) -> Any | None:
+        if not element_id:
+            return None
+        try:
+            handle = await page.evaluate_handle(ELEMENT_BY_ID_JS, element_id)
+            return handle.as_element()
+        except (PlaywrightError, ValueError, TypeError, AttributeError):
+            return None
+
+    _PROVINCES = {
+        "on": "ontario", "qc": "quebec", "bc": "british columbia", "ab": "alberta",
+        "mb": "manitoba", "sk": "saskatchewan", "ns": "nova scotia",
+        "nb": "new brunswick", "nl": "newfoundland and labrador",
+        "pe": "prince edward island", "pei": "prince edward island", "yt": "yukon",
+        "nt": "northwest territories", "nu": "nunavut",
+    }
+
+    def _location_tokens(text: str) -> list[str]:
+        folded = unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode().casefold()
+        tokens: list[str] = []
+        for raw in re.split(r"[^a-z0-9]+", folded):
+            if raw:
+                tokens.extend(_PROVINCES.get(raw, raw).split())
+        return tokens
+
+    def choose_location_option(answer: str, options: list[str]) -> str | None:
+        wanted = _location_tokens(answer)
+        if not wanted:
+            return None
+        ranked: list[tuple[int, str]] = []
+        for option in options:
+            tokens = _location_tokens(option)
+            if tokens == wanted:
+                return option
+            if all(token in tokens for token in wanted):
+                ranked.append((len(tokens) - len(wanted), option))
+        ranked.sort(key=lambda item: item[0])
+        if not ranked or (len(ranked) > 1 and ranked[0][0] == ranked[1][0]):
+            return None
+        return ranked[0][1]
+
+
+_DIAL_CODE_RE = re.compile(r"\+(\d{1,4})")
+_CA_LABELS = frozenset({"ca", "can", "canada", "canadian"})
+_US_LABELS = frozenset({
+    "us", "usa", "united states", "united states of america", "america", "american",
+})
+_COUNTRY_DIAL_CODES = {
+    "ca": "1", "can": "1", "canada": "1", "canadian": "1",
+    "us": "1", "usa": "1", "united states": "1", "united states of america": "1",
+    "america": "1", "american": "1",
+    "gb": "44", "uk": "44", "united kingdom": "44", "great britain": "44", "england": "44",
+    "fr": "33", "france": "33", "de": "49", "germany": "49",
+}
+
+
+def _folded_label(value: str) -> str:
+    return " ".join(str(value or "").casefold().split())
+
+
+def _plus_one_region(value: str | None) -> str | None:
+    folded = _folded_label(value or "")
+    if not folded:
+        return None
+    has_ca = bool(re.search(r"\b(ca|can|canada|canadian)\b", folded)) or "canada" in folded
+    has_us = bool(re.search(r"\b(us|usa|america|american)\b", folded)) or "united states" in folded
+    if has_ca and has_us:
+        return None
+    if has_ca:
+        return "ca"
+    if has_us:
+        return "us"
+    return None
+
+
+def _dial_code_digits(value: str | None) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    match = _DIAL_CODE_RE.search(text)
+    if match:
+        return match.group(1).lstrip("0") or "0"
+    folded = _folded_label(text)
+    if folded in _COUNTRY_DIAL_CODES:
+        return _COUNTRY_DIAL_CODES[folded]
+    for label, code in _COUNTRY_DIAL_CODES.items():
+        if len(label) > 3 and label in folded:
+            return code
+    return None
+
+
+def _country_hint_from_answers(answers: dict[str, Any] | None) -> str | None:
+    if not answers:
+        return None
+    for key in ("phone_country", "country_code", "country"):
+        raw = answers.get(key)
+        if raw is not None and str(raw).strip():
+            return str(raw).strip()
+    return None
+
+
+def phone_dial_code_readback_is_valid(
+    *,
+    read_back: str,
+    expected: str,
+    selected_country: str | None = None,
+    expected_country: str | None = None,
+) -> bool:
+    """Strict dial-code / country read-back. Fail closed when CA vs US is ambiguous."""
+    actual = str(read_back or "").strip()
+    wanted = str(expected or "").strip()
+    if not actual or not wanted:
+        return False
+
+    expected_dial = _dial_code_digits(wanted) or _dial_code_digits(expected_country)
+    actual_dial = _dial_code_digits(actual) or _dial_code_digits(selected_country)
+    if expected_dial and actual_dial and expected_dial != actual_dial:
+        return False
+
+    expected_region = _plus_one_region(wanted) or _plus_one_region(expected_country)
+    actual_region = _plus_one_region(actual) or _plus_one_region(selected_country)
+    if expected_region and actual_region and expected_region != actual_region:
+        return False
+    # +1 is shared by Canada and the US: a bare dial code cannot confirm the country.
+    if expected_region and actual_region is None and (actual_dial == "1" or expected_dial == "1"):
+        return False
+    if expected_dial is None and expected_region is None:
+        return _folded_label(wanted) in _folded_label(actual) or _folded_label(actual) in _folded_label(wanted)
+    return True
+
+
+
+async def _read_selected_phone_country(page: Any) -> str | None:
+    """Visible value of a phone-country / country widget, if one is on the page."""
+    selectors = (
+        "select#country",
+        "select[name='phone_country']",
+        "select[name='country_code']",
+        "select[name='country']",
+        "input#country",
+        "input[name='phone_country']",
+        "input[name='country_code']",
+        "input[name='country']",
+    )
+    for sel in selectors:
+        with contextlib.suppress(PlaywrightError, ValueError, TypeError, AttributeError):
+            loc = page.locator(sel)
+            if await loc.count() == 0:
+                continue
+            text = await loc.first.evaluate(
+                """el => {
+                    if (el.tagName && el.tagName.toLowerCase() === 'select') {
+                        const opt = el.options[el.selectedIndex];
+                        return ((opt && (opt.textContent || opt.value)) || el.value || '').trim();
+                    }
+                    const shell = el.closest('.select__control, .select-shell, [class*="select"]');
+                    const single = shell && shell.querySelector('[class*="single-value"]');
+                    return ((single && single.textContent) || el.value || el.textContent || '').trim();
+                }"""
+            )
+            if str(text or "").strip():
+                return str(text).strip()
+    return None
+
+
+def _id_locator(page: Any, element_id: str) -> Any:
+    """Locator for an exact DOM id, via a CSS-escaped ``[id="..."]`` selector."""
+    return page.locator(id_attribute_selector(element_id))
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -306,29 +524,29 @@ async def _find_input_in_target(
                                 return r, f'{opt_type}:{k}={value_hint}'
                     return elements.first, f'choice:{k}'
 
-    # 1. Exact ID (snake_case and camelCase) using safe [id="..."] selector to support IDs starting with digits/UUIDs
+    # 1. Exact ID (snake_case and camelCase) via CSS-escaped [id="..."] / getElementById
     for k in (key, key_camel):
-        loc = page.locator(f'[id="{k}"]')
+        loc = _id_locator(page, k)
         with contextlib.suppress(PlaywrightError, ValueError, TypeError, AttributeError):
             if await loc.count() > 0 and await loc.first.is_visible():
                 tag = await loc.first.evaluate("el => el.tagName.toLowerCase()")
                 if tag not in ("input", "select", "textarea", "button"):
                     child_input = loc.first.locator('input:not([type="hidden"]), select, textarea, button')
                     if await child_input.count() > 0:
-                        return child_input.first, f'[id="{k}"] {tag}->input'
-                return loc.first, f'[id="{k}"]'
+                        return child_input.first, f'{id_attribute_selector(k)} {tag}->input'
+                return loc.first, id_attribute_selector(k)
 
     for part in key_parts:
         if len(part) >= 4:
-            loc = page.locator(f'[id="{part}"]')
+            loc = _id_locator(page, part)
             with contextlib.suppress(PlaywrightError, ValueError, TypeError, AttributeError):
                 if await loc.count() > 0 and await loc.first.is_visible():
                     tag = await loc.first.evaluate("el => el.tagName.toLowerCase()")
                     if tag not in ("input", "select", "textarea", "button"):
                         child_input = loc.first.locator('input:not([type="hidden"]), select, textarea, button')
                         if await child_input.count() > 0:
-                            return child_input.first, f'[id="{part}"] {tag}->input'
-                    return loc.first, f'[id="{part}"]'
+                            return child_input.first, f'{id_attribute_selector(part)} {tag}->input'
+                    return loc.first, id_attribute_selector(part)
 
     # 2. Exact Name (snake_case and camelCase)
     for k in (key, key_camel):
@@ -423,7 +641,8 @@ async def _find_file_input_in_target(page: Any, key: str, harness: dict[str, Any
 
     # Try direct id / name / data-qa / data-ui
     loc = page.locator(
-        f'input[type="file"][id="{key}"], input[type="file"][name="{key}"], input[type="file"][data-qa*="{key}"], input[type="file"][data-ui*="{key}"]'
+        f'input[type="file"]{id_attribute_selector(key)}, input[type="file"][name="{key}"], '
+        f'input[type="file"][data-qa*="{key}"], input[type="file"][data-ui*="{key}"]'
     )
     with contextlib.suppress(PlaywrightError, ValueError, TypeError, AttributeError):
         if await loc.count() > 0:
@@ -502,6 +721,7 @@ async def _fill_input_by_heuristics(
     value: Any,
     label: str = "",
     harness: dict[str, Any] | None = None,
+    answers: dict[str, Any] | None = None,
 ) -> FieldFillReport:
     """Locate and fill a single form input using active champion selector overrides and heuristics.
 
@@ -685,11 +905,16 @@ async def _fill_input_by_heuristics(
                     opt_loc = None
                     if controls_id:
                         try:
-                            # Use CSS attribute selector to safely handle brackets/colons in ID without DOMException
-                            listbox_loc = page.locator(f'[id="{controls_id}"]')
-                            if await listbox_loc.count() > 0:
-                                opt_loc = listbox_loc.locator('[role="option"]:visible')
-                        except PlaywrightError:
+                            for element_id in split_idrefs(controls_id):
+                                listbox_loc = _id_locator(page, element_id)
+                                if await listbox_loc.count() > 0:
+                                    opt_loc = listbox_loc.locator('[role="option"]:visible')
+                                    break
+                                handle = await resolve_element_by_id(page, element_id)
+                                if handle is not None:
+                                    opt_loc = handle.locator('[role="option"]:visible')
+                                    break
+                        except (PlaywrightError, ValueError, TypeError, AttributeError):
                             opt_loc = None
 
                     if opt_loc is None or await opt_loc.count() == 0:
@@ -721,7 +946,22 @@ async def _fill_input_by_heuristics(
                                         break
 
                     clicked_option = False
-                    if opt_count > 0:
+                    if opt_count > 0 and is_loc:
+                        option_texts: list[str] = []
+                        option_items = []
+                        for o_idx in range(opt_count):
+                            item = opt_loc.nth(o_idx)
+                            raw_text = " ".join((await item.inner_text()).split())
+                            if raw_text:
+                                option_texts.append(raw_text)
+                                option_items.append(item)
+                        chosen = choose_location_option(val_str, option_texts)
+                        if chosen:
+                            item = option_items[option_texts.index(chosen)]
+                            await item.click()
+                            clicked_option = True
+                            selected_combobox_text = chosen
+                    elif opt_count > 0:
                         best_match = None
                         best_match_text = ""
                         best_score = -999.0
@@ -841,14 +1081,21 @@ async def _fill_input_by_heuristics(
             ):
                 matched = True
         elif key.lower() in ("phone_country", "country_code"):
-            rb_str = str(read_back or "").strip()
-            matched = bool(rb_str) and (
-                rb_str.startswith("+")
-                or normalize_text(val_str) in normalize_text(rb_str)
-                or normalize_text(rb_str) in normalize_text(val_str)
+            matched = phone_dial_code_readback_is_valid(
+                read_back=str(read_back or ""),
+                expected=val_str,
+                selected_country=str(read_back or ""),
+                expected_country=val_str,
             )
         elif control_type == "tel" or "phone" in key.lower():
-            matched = phone_values_equivalent(read_back, val_str)
+            expected_country = _country_hint_from_answers(answers)
+            page_country = await _read_selected_phone_country(page)
+            matched = phone_values_equivalent(read_back, val_str) and phone_dial_code_readback_is_valid(
+                read_back=str(read_back or ""),
+                expected=val_str,
+                selected_country=page_country or expected_country,
+                expected_country=expected_country,
+            )
         else:
             rb_str = str(read_back).strip()
             vs_str = str(val_str).strip()
@@ -894,9 +1141,12 @@ async def _fill_single_field(
     value: Any,
     label: str = "",
     harness: dict[str, Any] | None = None,
+    answers: dict[str, Any] | None = None,
 ) -> FieldFillReport:
     """Locate and fill a single form field, delegating to _fill_input_by_heuristics."""
-    return await _fill_input_by_heuristics(page, key, value, label=label, harness=harness)
+    return await _fill_input_by_heuristics(
+        page, key, value, label=label, harness=harness, answers=answers,
+    )
 
 
 async def launch_playwright_browser(playwright: Any, headless: bool = True) -> Any:
@@ -1109,7 +1359,7 @@ async def fill_application_form(
                 if val is None or val == "" or key.lower() in upload_keys:
                     continue
                 label_hint = labels.get(key, "")
-                report = await _fill_single_field(page, key, val, label=label_hint, harness=champion_harness)
+                report = await _fill_single_field(page, key, val, label=label_hint, harness=champion_harness, answers=items_to_fill)
                 # If element wasn't found on the page and required_fields is specified
                 if (
                     not report.matched
