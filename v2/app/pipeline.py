@@ -418,6 +418,33 @@ def browser_ledger_entry(form_summary: dict[str, object]) -> dict[str, object] |
     }
 
 
+NOT_RENDERED_BLOCKER = "field_not_rendered"
+
+
+def _hold_unrendered_fills(plan: FillPlan, form_summary: dict[str, object]) -> list[str]:
+    """Never count a vault value as filled for a field the rendered page did not show.
+
+    A dry run types nothing, so a planned value is only credible for a field the
+    browser actually saw. When the page was DOM-verified and lists a control in
+    ``api_fields_not_rendered``, a planned value for it has nowhere to go: it was
+    neither typed nor read back. Such items go to review (the job stops before
+    ``form_filled``) instead of being reported as filled. Returns the held keys.
+    """
+    metadata = form_summary.get("metadata")
+    if not isinstance(metadata, dict) or not metadata.get("dom_verified"):
+        return []
+    not_rendered = set(metadata.get("api_fields_not_rendered") or [])
+    held: list[str] = []
+    for item in plan.items:
+        if item.status == "fill" and item.control.key in not_rendered:
+            item.status = "review"
+            item.reason = "value resolved from the vault for a field the rendered page never showed; not typed"
+            held.append(item.control.key)
+    if held and NOT_RENDERED_BLOCKER not in plan.blockers:
+        plan.blockers.append(NOT_RENDERED_BLOCKER)
+    return held
+
+
 def _complete_dry_run(db: Session, application: Application, job: Job, plan: FillPlan, form_summary: dict[str, object],
                       platform: str) -> tuple[list[str], dict[str, object]]:
     filled = {item.control.key: item.value for item in plan.items if item.status == "fill"}
@@ -514,6 +541,7 @@ def execute_apply(
         return _form_unavailable(db, application, job, exc)
 
     plan = plan_fill(form.controls, form.vault)
+    _hold_unrendered_fills(plan, form.summary)
     application.last_error = None
     application.validation_json = json.dumps({"ok": False, "form": form.summary}, default=str)
     transition(db, job, PipelineStage.applying, f"dry-run apply started on {platform} ({form.summary['source']})")
