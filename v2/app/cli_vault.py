@@ -5,8 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -40,7 +40,7 @@ def _cmd_vault_seed(args: argparse.Namespace) -> int:
     auto_items = [item for item in policy.items_list if item.mode == "auto" and item.answer]
 
     if not args.apply:
-        print(f"=== ANSWER VAULT SEED PREVIEW ===")
+        print("=== ANSWER VAULT SEED PREVIEW ===")
         print(f"Direct user JSON seed records: {len(seed_records)}")
         for rec in seed_records:
             print(f"  [JSON] {rec.get('scope', 'global')}:{rec.get('key')} = {rec.get('value')}")
@@ -131,7 +131,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     v_sub = vault_parser.add_subparsers(dest="vault_subcommand", required=True)
 
     # vault seed
-    p_seed = v_sub.add_parser("seed", help="preview or apply seed answers from JobTomatik vault docs")
+    p_seed = v_sub.add_parser("seed", help="preview or apply seed answers from HunterXJob vault docs")
     p_seed.add_argument("--apply", action="store_true", help="write seed answers into the active database")
     p_seed.add_argument("--force", action="store_true", help="overwrite existing answers with same key/scope")
     p_seed.add_argument("--json-only", action="store_true", help="seed only user JSON file, skip master YAML")
