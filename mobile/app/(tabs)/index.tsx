@@ -7,6 +7,7 @@ import type { Cycle } from "@/api/types";
 import { Badge } from "@/components/Badge";
 import { Banner } from "@/components/Banner";
 import { Card, Muted, Row } from "@/components/Card";
+import { useLiveConfirm } from "@/components/LiveConfirmModal";
 import { LockBanner } from "@/components/LockBanner";
 import { PlanBadge } from "@/components/PlanBadge";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -15,6 +16,7 @@ import { StatCard } from "@/components/StatCard";
 import { ErrorView, LoadingView } from "@/components/StatusViews";
 import { useApiResource } from "@/hooks/useApiResource";
 import { confirmAsync, notify } from "@/lib/confirm";
+import { isExactLiveConfirmation, LIVE_CONFIRMATION_PHRASE } from "@/safety";
 import { killSwitchRequest } from "@/safety";
 import { cycleColor, useTheme } from "@/theme";
 import { formatDateTime, formatRelativeToNow, humanize } from "@/utils/format";
@@ -45,6 +47,7 @@ export default function DashboardScreen() {
   const router = useRouter();
   const { data, loading, refreshing, error, refresh, reload } = useApiResource(loadDashboard, [], 15000);
   const [busy, setBusy] = useState<string | null>(null);
+  const liveConfirm = useLiveConfirm();
 
   async function act(name: string, action: () => Promise<unknown>, done?: string) {
     setBusy(name);
@@ -77,13 +80,22 @@ export default function DashboardScreen() {
     }, "Cycle started. Pull to refresh for results.");
   }
 
-  async function runAutonomousBatchNow() {
+  async function runAutonomousBatchNow(live: boolean) {
+    let liveConfirmation: string | undefined;
+    if (live) {
+      const phrase = await liveConfirm.requestLiveConfirm();
+      if (!isExactLiveConfirmation(phrase)) {
+        notify("Live run cancelled", `Type "${LIVE_CONFIRMATION_PHRASE}" exactly to confirm a live application. Nothing was sent.`);
+        return;
+      }
+      liveConfirmation = LIVE_CONFIRMATION_PHRASE;
+    }
     await act(
-      "auto_batch",
+      live ? "auto_batch_live" : "auto_batch",
       async () => {
-        const res = await api.runAutonomousBatch();
+        const res = await api.runAutonomousBatch(live, liveConfirmation);
         notify(
-          "Autonomous Batch Complete",
+          live ? "Live Autonomous Batch Complete" : "Autonomous Dry-Run Batch Complete",
           `Considered ${res.candidates_considered} · Dry-runs verified: ${res.verified_dry_runs} · Submitted live: ${res.submitted_live}`
         );
       }
@@ -133,6 +145,7 @@ export default function DashboardScreen() {
 
   return (
     <ScreenContainer>
+      {liveConfirm.modal}
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.primary} />}
@@ -150,11 +163,18 @@ export default function DashboardScreen() {
             Execute autonomous browser applications, auto-resolve review questions with your Answer Vault, or inspect synchronized pipeline states below.
           </Muted>
           <PrimaryButton
-            title="🚀 Run Autonomous Application Batch Now"
+            title="🧪 Run Autonomous Dry-Run Batch"
             variant="primary"
             loading={busy === "auto_batch"}
             disabled={status.kill_switch || !!busy}
-            onPress={() => void runAutonomousBatchNow()}
+            onPress={() => void runAutonomousBatchNow(false)}
+          />
+          <PrimaryButton
+            title="🚀 Run Live Application Batch"
+            variant="danger"
+            loading={busy === "auto_batch_live"}
+            disabled={status.kill_switch || !!busy}
+            onPress={() => void runAutonomousBatchNow(true)}
           />
           <View style={styles.buttons}>
             <View style={{ flex: 1 }}>

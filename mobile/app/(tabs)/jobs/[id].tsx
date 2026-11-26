@@ -8,12 +8,14 @@ import { Badge } from "@/components/Badge";
 import { Banner } from "@/components/Banner";
 import { Card, Muted, Row } from "@/components/Card";
 import { LinkedPostingsCard, LivenessBadge, LivenessCard } from "@/components/DiscoveryCards";
+import { useLiveConfirm } from "@/components/LiveConfirmModal";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { ErrorView, LoadingView } from "@/components/StatusViews";
 import { linkedLabel, livenessBadgeStatus, sourceLabel } from "@/discovery";
 import { useApiResource } from "@/hooks/useApiResource";
 import { confirmAsync, notify } from "@/lib/confirm";
+import { isExactLiveConfirmation, LIVE_CONFIRMATION_PHRASE } from "@/safety";
 import { useSubscription, MAX_DAILY_FREE_APPLICATIONS } from "@/store/subscription";
 import { matchScoreColor, stageColor, useTheme } from "@/theme";
 import { formatDateTime, formatScore, humanize } from "@/utils/format";
@@ -132,6 +134,7 @@ function ExecutionCommandCard({
 }) {
   const theme = useTheme();
   const router = useRouter();
+  const liveConfirm = useLiveConfirm();
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [execBanner, setExecBanner] = useState<{ tone: "info" | "warning" | "danger"; text: string } | null>(null);
 
@@ -150,10 +153,19 @@ function ExecutionCommandCard({
     job.form_status.state === "blocked";
 
   async function handleRunAutonomous(dryRun: boolean) {
+    let liveConfirmation: string | undefined;
+    if (!dryRun) {
+      const phrase = await liveConfirm.requestLiveConfirm();
+      if (!isExactLiveConfirmation(phrase)) {
+        notify("Live run cancelled", `Type "${LIVE_CONFIRMATION_PHRASE}" exactly to confirm a live application. Nothing was sent.`);
+        return;
+      }
+      liveConfirmation = LIVE_CONFIRMATION_PHRASE;
+    }
     setBusyAction(dryRun ? "dry_run" : "submit_live");
     setExecBanner(null);
     try {
-      const res = await api.runJobAutonomous(job.id, dryRun);
+      const res = await api.runJobAutonomous(job.id, dryRun, liveConfirmation);
       await refresh();
       if (res.submitted) {
         setExecBanner({
@@ -254,6 +266,8 @@ function ExecutionCommandCard({
         : theme.primary;
 
   return (
+    <>
+    {liveConfirm.modal}
     <Card
       title="Application Execution & Command Deck"
       accentColor={accent}
@@ -370,6 +384,7 @@ function ExecutionCommandCard({
         />
       ) : null}
     </Card>
+    </>
   );
 }
 

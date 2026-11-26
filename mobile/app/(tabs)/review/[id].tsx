@@ -19,12 +19,14 @@ import { Badge } from "@/components/Badge";
 import { Banner } from "@/components/Banner";
 import { Card, Muted, Row } from "@/components/Card";
 import { Chip } from "@/components/Chip";
+import { useLiveConfirm } from "@/components/LiveConfirmModal";
 import { LockBanner } from "@/components/LockBanner";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { ErrorView, LoadingView } from "@/components/StatusViews";
 import { useApiResource } from "@/hooks/useApiResource";
 import { confirmAsync, notify } from "@/lib/confirm";
+import { isExactLiveConfirmation, LIVE_CONFIRMATION_PHRASE } from "@/safety";
 import { kindLabel, shortHash } from "@/materials";
 import { reviewActionCopy, type ReviewActionName } from "@/safety";
 import { stageColor, useTheme } from "@/theme";
@@ -45,6 +47,7 @@ function useReviewActions(refresh: () => Promise<void>, task?: ReviewTaskDetail)
   const [busy, setBusy] = useState<string>();
   const [result, setResult] = useState<ReviewAction>();
   const [actionError, setActionError] = useState<string>();
+  const liveConfirm = useLiveConfirm();
 
   async function run(name: ReviewActionName) {
     if (!task) return;
@@ -63,12 +66,24 @@ function useReviewActions(refresh: () => Promise<void>, task?: ReviewTaskDetail)
     }
   }
 
-  async function runAutonomous(jobId: string) {
-    setBusy("autonomous");
+  async function runAutonomous(jobId: string, live = false) {
+    let liveConfirmation: string | undefined;
+    if (live) {
+      const phrase = await liveConfirm.requestLiveConfirm();
+      if (!isExactLiveConfirmation(phrase)) {
+        notify("Live run cancelled", `Type "${LIVE_CONFIRMATION_PHRASE}" exactly to confirm a live application. Nothing was sent.`);
+        return;
+      }
+      liveConfirmation = LIVE_CONFIRMATION_PHRASE;
+    }
+    setBusy(live ? "autonomous_live" : "autonomous");
     setActionError(undefined);
     try {
-      const res = await api.runJobAutonomous(jobId);
-      notify("Autonomous Run Completed", `Status: ${res.status}. Submitted: ${res.submitted ? "YES" : "NO"}`);
+      const res = await api.runJobAutonomous(jobId, !live, liveConfirmation);
+      notify(
+        live ? "Live Autonomous Run Completed" : "Autonomous Dry-Run Completed",
+        `Status: ${res.status}. Submitted: ${res.submitted ? "YES" : "NO"}`
+      );
       await refresh();
     } catch (err) {
       setActionError(describeError(err));
@@ -77,7 +92,7 @@ function useReviewActions(refresh: () => Promise<void>, task?: ReviewTaskDetail)
     }
   }
 
-  return { busy, result, actionError, run, runAutonomous };
+  return { busy, result, actionError, run, runAutonomous, liveConfirmModal: liveConfirm.modal };
 }
 
 function TaskHeader({ task }: { task: ReviewTaskDetail }) {
@@ -393,13 +408,22 @@ function ActionsCard({ task, busy, run, runAutonomous }: ActionsProps) {
           <PrimaryButton title="Approve Application" loading={busy === "approve"} disabled={!!busy} onPress={() => void run("approve")} />
         ) : null}
         {task.job && !isUncertain ? (
-          <PrimaryButton
-            title="⚡ Run Autonomous Apply Now"
-            variant="primary"
-            loading={busy === "autonomous"}
-            disabled={!!busy}
-            onPress={() => void runAutonomous(task.job!.id)}
-          />
+          <>
+            <PrimaryButton
+              title="🧪 Run Autonomous Dry-Run"
+              variant="primary"
+              loading={busy === "autonomous"}
+              disabled={!!busy}
+              onPress={() => void runAutonomous(task.job!.id, false)}
+            />
+            <PrimaryButton
+              title="🚀 Submit Live Application"
+              variant="danger"
+              loading={busy === "autonomous_live"}
+              disabled={!!busy}
+              onPress={() => void runAutonomous(task.job!.id, true)}
+            />
+          </>
         ) : null}
         {task.actions.includes("reject") ? (
           <PrimaryButton title="Reject Application" variant="danger" loading={busy === "reject"} disabled={!!busy} onPress={() => void run("reject")} />
@@ -416,13 +440,14 @@ export default function ReviewTaskScreen() {
   const theme = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: task, loading, refreshing, error, refresh, reload } = useApiResource(() => api.reviewTask(String(id)), [id]);
-  const { busy, result, actionError, run, runAutonomous } = useReviewActions(refresh, task ?? undefined);
+  const { busy, result, actionError, run, runAutonomous, liveConfirmModal } = useReviewActions(refresh, task ?? undefined);
 
   if (loading && !task) return <ScreenContainer><LoadingView /></ScreenContainer>;
   if (!task) return <ScreenContainer><ErrorView message={error ?? "Task not found."} onRetry={reload} /></ScreenContainer>;
 
   return (
     <ScreenContainer>
+      {liveConfirmModal}
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.primary} />}
