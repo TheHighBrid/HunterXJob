@@ -6,6 +6,7 @@ into a Playwright-owned headless Chromium; nothing is fetched and nothing is sub
 from __future__ import annotations
 
 import asyncio
+import itertools
 
 import pytest
 from conftest import load_ats_json
@@ -310,10 +311,12 @@ def _with_page(html, body):
 
 def test_raw_hash_selector_breaks_but_bypass_resolves_special_ids_in_chromium():
     async def body(page):
+        from playwright.async_api import Error as PlaywrightError
+
         raw_error = None
         try:
             await page.query_selector("#question_77[]")
-        except Exception as exc:  # Playwright surfaces the DOMException as an Error
+        except PlaywrightError as exc:  # Playwright surfaces the DOMException as an Error
             raw_error = str(exc)
         escaped = await page.query_selector(css_id_selector("question_77[]"))
         by_attr = await page.query_selector(id_attribute_selector("react-select-question_77[]-listbox"))
@@ -342,7 +345,7 @@ def test_delayed_location_autocomplete_in_chromium():
     assert (result.status, result.selected) == ("filled", "Ottawa, ON, Canada")
     assert value == "Ottawa, ON, Canada"
     assert len(key_times) == len("Ottawa, Ontario, Canada")  # one keydown per character, not pasted
-    gaps = sorted(b - a for a, b in zip(key_times, key_times[1:]))
+    gaps = sorted(b - a for a, b in itertools.pairwise(key_times))
     assert gaps[len(gaps) // 2] >= 15  # median inter-key gap reflects the 25ms per-key delay
 
 

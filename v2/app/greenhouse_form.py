@@ -19,6 +19,7 @@ Safety contract:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import re
 import unicodedata
 from collections.abc import Awaitable, Callable, Iterable
@@ -817,10 +818,9 @@ class LocationFillResult:
 
 
 async def _type_location_query(combobox: Any, query: str, key_delay_ms: int) -> None:
-    try:
+    # Focus is best effort; typing below still targets the element.
+    with contextlib.suppress(Exception):
         await combobox.click()
-    except Exception:  # noqa: BLE001 - focus is best effort; typing below still targets the element
-        pass
     await combobox.fill("")
     typer = getattr(combobox, "press_sequentially", None) or combobox.type
     await typer(query, delay=key_delay_ms)
