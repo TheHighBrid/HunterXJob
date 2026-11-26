@@ -12,9 +12,8 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 from enum import Enum
-from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -34,35 +33,35 @@ class EmailIntent(str, Enum):
 
 
 CONFIRMATION_PATTERNS = [
-    re.compile(r"thank\s+you\s+for\s+applying", re.I),
-    re.compile(r"thanks\s+for\s+applying", re.I),
-    re.compile(r"application\s+(?:has\s+been\s+)?received", re.I),
-    re.compile(r"received\s+your\s+application", re.I),
-    re.compile(r"application\s+submitted\s+successfully", re.I),
+    re.compile(r"thank\s+you\s+for\s+applying", re.IGNORECASE),
+    re.compile(r"thanks\s+for\s+applying", re.IGNORECASE),
+    re.compile(r"application\s+(?:has\s+been\s+)?received", re.IGNORECASE),
+    re.compile(r"received\s+your\s+application", re.IGNORECASE),
+    re.compile(r"application\s+submitted\s+successfully", re.IGNORECASE),
 ]
 
 INTERVIEW_PATTERNS = [
-    re.compile(r"invite\s+you\s+to\s+interview", re.I),
-    re.compile(r"like\s+to\s+schedule\s+a\s+(?:call|phone\s+screen|chat|meeting|interview)", re.I),
-    re.compile(r"invitation\s+to\s+interview", re.I),
-    re.compile(r"next\s+step\s+in\s+our\s+interview\s+process", re.I),
-    re.compile(r"calendly\.com|goodtime\.io|chilipiper\.com", re.I),
+    re.compile(r"invite\s+you\s+to\s+interview", re.IGNORECASE),
+    re.compile(r"like\s+to\s+schedule\s+a\s+(?:call|phone\s+screen|chat|meeting|interview)", re.IGNORECASE),
+    re.compile(r"invitation\s+to\s+interview", re.IGNORECASE),
+    re.compile(r"next\s+step\s+in\s+our\s+interview\s+process", re.IGNORECASE),
+    re.compile(r"calendly\.com|goodtime\.io|chilipiper\.com", re.IGNORECASE),
 ]
 
 REJECTION_PATTERNS = [
-    re.compile(r"not\s+moving\s+forward", re.I),
-    re.compile(r"pursue\s+other\s+candidates", re.I),
-    re.compile(r"decided\s+to\s+move\s+forward\s+with\s+other", re.I),
-    re.compile(r"unfortunately.*(?:cannot|not|unable)", re.I),
-    re.compile(r"will\s+not\s+be\s+moving\s+forward", re.I),
+    re.compile(r"not\s+moving\s+forward", re.IGNORECASE),
+    re.compile(r"pursue\s+other\s+candidates", re.IGNORECASE),
+    re.compile(r"decided\s+to\s+move\s+forward\s+with\s+other", re.IGNORECASE),
+    re.compile(r"unfortunately.*(?:cannot|not|unable)", re.IGNORECASE),
+    re.compile(r"will\s+not\s+be\s+moving\s+forward", re.IGNORECASE),
 ]
 
 ASSESSMENT_PATTERNS = [
-    re.compile(r"complete\s+the\s+following\s+.*assessment", re.I),
-    re.compile(r"online\s+assessment|technical\s+assessment|coding\s+assessment", re.I),
-    re.compile(r"coding\s+challenge", re.I),
-    re.compile(r"take-home\s+(?:exercise|project|assignment|assessment|challenge)", re.I),
-    re.compile(r"hackerrank\.com|codesignal\.com|codility\.com", re.I),
+    re.compile(r"complete\s+the\s+following\s+.*assessment", re.IGNORECASE),
+    re.compile(r"online\s+assessment|technical\s+assessment|coding\s+assessment", re.IGNORECASE),
+    re.compile(r"coding\s+challenge", re.IGNORECASE),
+    re.compile(r"take-home\s+(?:exercise|project|assignment|assessment|challenge)", re.IGNORECASE),
+    re.compile(r"hackerrank\.com|codesignal\.com|codility\.com", re.IGNORECASE),
 ]
 
 URL_PATTERN = re.compile(r"https?://[^\s<>\"']+")
@@ -162,8 +161,8 @@ def match_email_to_application(db: Session, email: EmailMessage) -> EmailMatchRe
                 if cid and cid.lower() in content:
                     score += 0.50
                     matched_ref = cid
-            except Exception:
-                pass
+            except (ValueError, TypeError, AttributeError):
+                logger.debug("Ignoring unreadable confirmation_json on application %s", app.id)
 
         # 4. ATS domain match (Greenhouse, Lever, Ashby, etc.)
         if job.platform and job.platform in email.sender.lower():
@@ -269,3 +268,119 @@ def process_inbox_email(db: Session, email: EmailMessage) -> EmailMatchResult:
         db.commit()
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Offline inbound-message intent classifier (Wave 3).
+#
+# Deterministic and rule-based: regex rules only, no LLM call, no network and
+# no new dependency. Weak intents (auto_ack, info_request) give way to a single
+# strong intent; two or more strong intents are ambiguous and go to review as
+# ``unknown`` instead of guessing.
+# ---------------------------------------------------------------------------
+
+
+class InboundIntent(str, Enum):
+    REJECTION = "rejection"
+    INTERVIEW_REQUEST = "interview_request"
+    ASSESSMENT = "assessment"
+    OFFER = "offer"
+    INFO_REQUEST = "info_request"
+    AUTO_ACK = "auto_ack"
+    UNKNOWN = "unknown"
+
+
+def _rx(*patterns: str) -> tuple[re.Pattern[str], ...]:
+    return tuple(re.compile(p, re.IGNORECASE) for p in patterns)
+
+
+_INBOUND_RULES: tuple[tuple[InboundIntent, tuple[re.Pattern[str], ...]], ...] = (
+    (InboundIntent.REJECTION, _rx(
+        r"\bnot\s+(?:to\s+)?(?:be\s+)?mov(?:e|ing)\s+forward\b",
+        r"\bpursu(?:e|ing)\s+other\s+candidates\b",
+        r"\bmove\s+forward\s+with\s+other\s+(?:candidates|applicants)\b",
+        r"\bposition\s+has\s+been\s+filled\b",
+        r"\bnot\s+(?:been\s+)?selected\b",
+        r"\bunable\s+to\s+offer\s+you\b",
+    )),
+    (InboundIntent.INTERVIEW_REQUEST, _rx(
+        r"\b(?:schedule|book|arrange|set\s+up)\s+(?:an?\s+|your\s+)?(?:interview|phone\s+screen|call|chat)\b",
+        r"\binvite\s+you\s+to\s+(?:an?\s+)?interview\b",
+        r"\binterview\s+invitation\b|\binvitation\s+to\s+interview\b",
+        r"\bavailability\s+for\s+an?\s+(?:interview|call|\d+\s*(?:-\s*)?min)",
+        r"calendly\.com|goodtime\.io|chilipiper\.com",
+    )),
+    (InboundIntent.ASSESSMENT, _rx(
+        r"\b(?:online|technical|coding|skills?)\s+(?:assessment|test)\b",
+        r"\bcoding\s+(?:challenge|exercise)\b",
+        r"\btake[-\s]home\s+(?:exercise|project|assignment|assessment|challenge)\b",
+        r"hackerrank\.com|codesignal\.com|codility\.com|testgorilla\.com",
+    )),
+    (InboundIntent.OFFER, _rx(
+        r"\boffer\s+of\s+employment\b",
+        r"\boffer\s+letter\b",
+        r"\b(?:extend|make|making|extending)\s+(?:you\s+)?an?\s+(?:formal\s+|verbal\s+)?offer\b",
+        r"\bpleased\s+to\s+offer\s+you\b",
+    )),
+    (InboundIntent.INFO_REQUEST, _rx(
+        r"\bcould\s+you\s+(?:please\s+)?(?:send|provide|share|confirm|clarify)\b",
+        r"\bplease\s+(?:send|provide|confirm|clarify)\b",
+        r"\b(?:need|require)\s+(?:some\s+)?(?:additional|more|further)\s+information\b",
+    )),
+    (InboundIntent.AUTO_ACK, _rx(
+        r"\bthank(?:s|\s+you)\s+for\s+(?:applying|your\s+application)\b",
+        r"\b(?:have\s+)?received\s+your\s+application\b",
+        r"\bapplication\s+(?:has\s+been\s+)?received\b",
+        r"\bautomated\s+(?:message|response|email|reply)\b",
+        r"\b(?:do\s+not|don't)\s+reply\b",
+    )),
+)
+
+_WEAK_INTENTS = frozenset({InboundIntent.INFO_REQUEST, InboundIntent.AUTO_ACK})
+_NEGATED_OFFER = re.compile(r"\bnot\s+(?:an?\s+|a\s+formal\s+)?offer\b", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class InboundClassification:
+    intent: InboundIntent
+    needs_review: bool
+    matched_intents: tuple[str, ...] = ()
+    reason: str = ""
+
+
+def _matched_inbound_intents(content: str) -> list[InboundIntent]:
+    hits = [intent for intent, patterns in _INBOUND_RULES if any(p.search(content) for p in patterns)]
+    if InboundIntent.OFFER in hits and _NEGATED_OFFER.search(content):
+        hits.remove(InboundIntent.OFFER)
+    return hits
+
+
+def _resolve_inbound_intent(hits: list[InboundIntent]) -> tuple[InboundIntent, bool, str]:
+    if not hits:
+        return InboundIntent.UNKNOWN, True, "no rule matched"
+    strong = [h for h in hits if h not in _WEAK_INTENTS]
+    if len(strong) > 1:
+        return InboundIntent.UNKNOWN, True, "ambiguous: conflicting intents " + ", ".join(h.value for h in strong)
+    if strong:
+        return strong[0], False, f"rule match: {strong[0].value}"
+    if len(hits) > 1:
+        # info_request takes priority over a templated acknowledgment footer.
+        return InboundIntent.INFO_REQUEST, False, "rule match: info_request over auto_ack"
+    return hits[0], False, f"rule match: {hits[0].value}"
+
+
+def classify_inbound_message(subject: str, body: str) -> InboundClassification:
+    """Classify an inbound recruiter message offline and deterministically.
+
+    Never calls a model or the network. Ambiguous or unmatched messages come
+    back as ``unknown`` with ``needs_review=True`` for a human to triage.
+    """
+    content = f"{subject or ''}\n{body or ''}"
+    hits = _matched_inbound_intents(content)
+    intent, needs_review, reason = _resolve_inbound_intent(hits)
+    return InboundClassification(
+        intent=intent,
+        needs_review=needs_review,
+        matched_intents=tuple(h.value for h in hits),
+        reason=reason,
+    )
